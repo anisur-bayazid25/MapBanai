@@ -68,3 +68,25 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 **STATUS C: CODE COMPLETE** — step 12 (bump 2.1.0 + tag + push) next.
 
 ## Step 12 — version bump + full pipeline proof
+
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| D1 | bump | pubspec `version: 2.1.0+1` | OK |
+| D2 | commit | `git commit -m "Add GitHub-release-based update checker...; bump to 2.1.0"` | 6dad626 |
+| D3 | push main | `git push origin main` | `03c01e2..6dad626` OK |
+| D4 | tag | `git tag v2.1.0; git push origin v2.1.0` | OK |
+| D5 | CI build | poll `GET /actions/runs` | **completed / success** (~6 min) |
+| D6 | release | `GET /releases/tags/v2.1.0` | **Release "v2.1.0" with app-release.apk (109 MB, uploaded)** — full loop proven: tag push → Actions build → Release with APK → app update checker can detect it |
+
+---
+
+## FINAL STATUS
+
+- **Part A (push): DONE** — repo live at https://github.com/anisur-bayazid25/MapBanai, main = 6dad626.
+- **Part B (release pipeline): DONE** — `.github/workflows/release.yml`; verified twice (v2.0.1-test, v2.1.0). Test tag deleted locally+remote; **the orphaned v2.0.1-test release page needs manual deletion on the web UI** (no PAT/gh CLI on this machine — API delete returned 401).
+- **Part C (update checker): CODE DONE, automated checks green** (120 tests, analyze at baseline, debug APK builds). Two manual device checkpoints remain for the user:
+  1. Install the APK, place a test APK at the download path, confirm OpenFile launches the installer prompt.
+  2. Publish a newer release (e.g. tag v2.2.0 after a future bump) and confirm Settings tap + Home silent snackbar detect it, and Download & Install triggers the Android installer.
+- **Environment notes:**
+  - Windows Developer Mode is OFF → `flutter pub add`/`flutter pub get` fail at the plugin-symlink step. Worked around with `dart pub get` + hand-syncing `.flutter-plugins-dependencies`/`.flutter-plugins` (Android builds don't need symlinks; the tool skips the step when the plugin list is unchanged). **Recommended fix: enable Developer Mode** (start ms-settings:developers) so future `flutter pub get` runs clean.
+  - package_info_plus pinned to 8.0.2: 9.x requires AGP 8.12/Gradle 8.13+, the project (and CI) uses AGP 8.1/Gradle 8.3.
