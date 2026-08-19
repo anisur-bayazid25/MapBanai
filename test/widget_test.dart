@@ -36,7 +36,12 @@ void main() {
   testWidgets('MapBanai home screen shows mode options and project actions', (tester) async {
     await tester.pumpWidget(const MapBanaiApp());
 
-    expect(find.text('MapBanai'), findsAtLeastNWidgets(1));
+    // The home header shows the logo image and the tagline.
+    expect(find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString() == 'Image' &&
+          widget.toStringDeep().contains('AssetImage'),
+    ), findsAtLeastNWidgets(1));
+    expect(find.text('Offline field data collection'), findsOneWidget);
     expect(find.text('Survey Mode'), findsOneWidget);
     expect(find.text('GIS Mode'), findsOneWidget);
     expect(find.text('Open'), findsOneWidget);

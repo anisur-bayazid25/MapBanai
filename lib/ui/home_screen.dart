@@ -139,16 +139,11 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 12),
-                Text(
-                  'MapBanai',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF2C3E50),
-                    letterSpacing: 0.5,
-                  ),
+                Image.asset(
+                  'assets/logo/MapBanai_logo.png',
+                  width: 260,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   'Offline field data collection',
                   textAlign: TextAlign.center,

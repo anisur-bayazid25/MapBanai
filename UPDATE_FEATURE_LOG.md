@@ -80,9 +80,36 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 
 ---
 
-## FINAL STATUS
+## Part E — v2.1.1: logo, version-bump system, GPS Save-Point CSV, reset safeguard, About links
 
-- **Part A (push): DONE** — repo live at https://github.com/anisur-bayazid25/MapBanai, main = 6dad626.
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| E1 | logo | n/a (converted `logo_start.pptx` art) | MapBanai logo PNG (2935x1077, 240KB) + SVG + ICO exported from the official slide; 5 Android launcher mipmaps generated from the PNG; `assets/` added to pubspec |
+| E2 | in-app logo | n/a (edited files) | Settings About card: logo image 200px + tagline + version + description (kept theme-aware colors). Home header: logo image 160px replacing the "MapBanai" text |
+| E3 | bump system | n/a (wrote `tool/bump_version.dart` + `.github/workflows/bump-version.yml`) | Script: parses pubspec `version: X.Y.Z+N`, one arg (major/minor/patch) → write new version, create annotated `v<new>` tag pointing at the pre-bump commit (no extra commit), force-push the tag (works on branch-protected repos); dry-run mode `--dry-run`. Workflow: `workflow_dispatch` input `bump` → run script → push tag to trigger the existing release pipeline |
+| E4 | GPS Save-Point → CSV | n/a (edited `lib/ui/gps_mode_screen.dart`) | `_pickWaypointLog` refactored: waypoint CSV still appended to `<project>_waypoints.csv`; `_createPointLog` now also appends GPS points (lat, lon, datetime, label) to `<project>_points.csv` in the same external-storage `Export` folder — via the same safe `_writeAppendCsv` helper (encodes labels with commas/newlines/quotes) |
+| E5 | reset safeguard | n/a (edited `lib/ui/common/confirm_dialog.dart` + `lib/ui/settings_screen.dart`) | Reset now needs TWO confirmations: classic dialog → second `showTypeToConfirmDialog` (edited copy of the transfer dialog) requiring the user to type the exact owner name before the DB is wiped; `_resetData` changed accordingly |
+| E6 | About links | n/a (edited `lib/ui/settings_screen.dart` + pubspec) | `dart pub add url_launcher` → pinned by resolution (^6.3.3); GitHub repo ListTile (opens https://github.com/anisur-bayazid25/MapBanai) + email ListTile (mailto:comlesconstructionus@gmail.com); `_launchUrl` guards `launchMode: LaunchMode.externalApplication`, enforces https/mailto, try/catch → SnackBar fallback |
+| E7 | plugin files | n/a (hand-sync) | `.flutter-plugins`/`.flutter-plugins-dependencies`/`macos/Flutter/GeneratedPluginRegistrant.swift` updated for url_launcher (symlink workaround per C2); CI is unaffected |
+| E8 | analyzer trap | `dart analyze` | A bulk PowerShell edit wrongly added `const` before `EdgeInsets.zero` — but `EdgeInsets.zero` is a static const GETTER, not a constructor, so `const EdgeInsets.zero` is illegal ("Expected to find '('"; "The class 'EdgeInsets' doesn't have a constant constructor 'zero'"). Fixed with correct `const` placements (`const ListTile(...)`, `const Center(...)`; no `const` on `EdgeInsets.zero`) |
+| E9 | test fix | `flutter test` | Widget test asserted `find.text('MapBanai')` on Home — broken by replacing the text with the logo image → new predicate finds the logo `Image`/`AssetImage` widget + the tagline instead. **120/120 passed** |
+| E10 | analyze | `flutter analyze` | 0 errors; only pre-existing baseline warnings/infos (49 total) |
+| E11 | build | `flutter build apk --debug` | OK — APK contains the 5 new launcher mipmaps + url_launcher registered (registrant compiled into dex; the plugin needs no manifest entries) |
+| E12 | commit | `git add -A` | logo_start.pptx reverted first (Office churn 34.6→36.5 KB, untouched by me); macos GeneratedPluginRegistrant.swift (+2 url_launcher lines) kept |
+
+## Step 13 — bump 2.1.1 via the new script + full pipeline proof
+
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| F1 | bump | `dart run tool/bump_version.dart patch` | pubspec → `2.1.1+2` |
+| F2 | commit | `git commit -m "MapBanai v2.1.1: logo, GPS save-point CSV, reset safeguard, About links"` | TBD |
+| F3 | push main + tag | `git push origin main` + `git tag v2.1.1 && git push origin v2.1.1` | TBD |
+| F4 | CI build | poll `GET /actions/runs` | TBD |
+| F5 | release | `GET /releases/tags/v2.1.1` | TBD — Release with app-release.apk |
+
+---
+
+## FINAL STATUS
 - **Part B (release pipeline): DONE** — `.github/workflows/release.yml`; verified twice (v2.0.1-test, v2.1.0). Test tag deleted locally+remote; **the orphaned v2.0.1-test release page needs manual deletion on the web UI** (no PAT/gh CLI on this machine — API delete returned 401).
 - **Part C (update checker): CODE DONE, automated checks green** (120 tests, analyze at baseline, debug APK builds). Two manual device checkpoints remain for the user:
   1. Install the APK, place a test APK at the download path, confirm OpenFile launches the installer prompt.

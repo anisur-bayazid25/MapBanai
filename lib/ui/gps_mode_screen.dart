@@ -215,8 +215,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<int?> _pickWaypointLog() async {
     final logs = await _database.getGpsLogs();
     if (logs.isEmpty) {
-      _showSnack('Create a GPS log first, then save a point');
-      return null;
+      return _createPointLog();
     }
     if (!mounted) return null;
     return showDialog<int>(
@@ -224,6 +223,21 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       builder: (context) => SimpleDialog(
         title: const Text('Save point to…'),
         children: [
+          SimpleDialogOption(
+            onPressed: () => _createPointLog().then((id) {
+              if (id != null && context.mounted) {
+                Navigator.pop(context, id);
+              }
+            }),
+            child: const Row(
+              children: [
+                Icon(Icons.add_circle_outline, color: Colors.teal),
+                SizedBox(width: 12),
+                Text('New log (new CSV)…',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
           for (final log in logs)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(context, log.id),
@@ -235,6 +249,30 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         ],
       ),
     );
+  }
+
+  /// Creates a new GPS log (with its CSV file) that Save Point can write
+  /// into. Returns the new log id, or null when the user cancels.
+  Future<int?> _createPointLog() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _LogNameDialog(title: 'New point log'),
+    );
+    if (name == null) return null;
+
+    final defaultName = 'Point Log ${_logs.length + 1}';
+    final logId = await _database.insertGpsLog(
+      GpsLogsCompanion(
+        name: drift.Value(name.trim().isEmpty ? defaultName : name.trim()),
+        surveyor: drift.Value(_surveyor),
+      ),
+    );
+    await _store.createLogFile(logId);
+    await _loadLogs();
+    _showSnack(
+      '"${name.trim().isEmpty ? defaultName : name.trim()}" created',
+    );
+    return logId;
   }
 
   Future<void> _createLog() async {

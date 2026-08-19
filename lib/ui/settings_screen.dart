@@ -7,6 +7,7 @@ import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/common/section_header.dart';
 import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppDatabase database;
@@ -100,14 +101,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _resetData() async {
-    final confirmed = await showConfirmDialog(
+    final userName = (await widget.database.getSetting(_userNameKey)) ?? '';
+    if (userName.trim().isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Set a user name in Settings first â€” it is required to confirm '
+            'a data reset.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showTypeToConfirmDialog(
       context,
-      title: 'Reset all data?',
-      message: 'All projects, survey responses, stored forms and GPS logs will '
-          'be permanently deleted. Your user name is kept. Photos on disk are '
-          'not removed. This cannot be undone.',
+      title: 'Final confirmation',
+      message: 'This permanently deletes all projects, survey responses, '
+          'stored forms and GPS logs. Type your user name exactly as shown '
+          'to confirm:',
+      typeToConfirm: userName.trim(),
       confirmText: 'Reset data',
-      destructive: true,
     );
     if (!confirmed || !mounted) return;
 
@@ -247,41 +262,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: AppInfo.tagline,
                 ),
                 const SizedBox(height: 12),
-                const Card(
+                Card(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline),
-                            SizedBox(width: 8),
-                            Text(
-                              AppInfo.name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
+                        Center(
+                          child: Image.asset(
+                            'assets/logo/MapBanai_logo.png',
+                            width: 220,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Center(
+                          child: Text(
+                            'Version ${AppInfo.version}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
+                          ),
                         ),
-                        SizedBox(height: 10),
-                        Text('Version ${AppInfo.version}'),
-                        SizedBox(height: 6),
-                        Text(AppInfo.description),
-                        SizedBox(height: 10),
-                        Divider(),
+                        const SizedBox(height: 8),
                         Text(
-                          '(c) ${AppInfo.creator}',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                          AppInfo.description,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 10),
+                        const Divider(),
+                        const ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(Icons.person_outline, size: 20),
+                          title: Text(
+                            AppInfo.creator,
+                            style: TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: const Icon(Icons.code, size: 20),
+                          title: const Text(
+                            'GitHub repository',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            AppInfo.githubUrl,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          onTap: () =>
+                              _launchUrl(Uri.parse(AppInfo.githubUrl)),
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: const Icon(Icons.mail_outline, size: 20),
+                          title: const Text(
+                            'Email',
+                            style: TextStyle(fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            AppInfo.email,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          onTap: () => _launchUrl(
+                            Uri(
+                              scheme: 'mailto',
+                              path: AppInfo.email,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
                         Text(
                           AppInfo.updatesNote,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -291,5 +357,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
     );
+  }
+
+  Future<void> _launchUrl(Uri uri) async {
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link')),
+        );
+      }
+    }
   }
 }

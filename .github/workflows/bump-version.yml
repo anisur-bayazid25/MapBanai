@@ -1,0 +1,43 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: 'Part to bump: major, minor or patch'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.3'
+          channel: stable
+
+      - name: Bump version
+        run: dart run tool/bump_version.dart "${{ github.event.inputs.part }}"
+
+      - name: Commit and tag
+        run: |
+          VERSION=$(sed -n 's/^version: \([0-9.]*\).*/\1/p' pubspec.yaml | head -1)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml lib/models/app_info.dart
+          git commit -m "Bump version to $VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags
