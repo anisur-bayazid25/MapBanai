@@ -101,19 +101,23 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 
 | # | Step | Command | Result |
 |---|------|---------|--------|
-| F1 | bump | `dart run tool/bump_version.dart patch` | pubspec → `2.1.1+2` |
-| F2 | commit | `git commit -m "MapBanai v2.1.1: logo, GPS save-point CSV, reset safeguard, About links"` | TBD |
-| F3 | push main + tag | `git push origin main` + `git tag v2.1.1 && git push origin v2.1.1` | TBD |
-| F4 | CI build | poll `GET /actions/runs` | TBD |
-| F5 | release | `GET /releases/tags/v2.1.1` | TBD — Release with app-release.apk |
+| F1 | bump | `dart run tool/bump_version.dart patch` | OK — pubspec + AppInfo.version → `2.1.1+2` |
+| F2 | commit | `git commit -m "Bump version to 2.1.1+2"` | 1cfd799d (after the v2.1.1 feature commit bc3b4d2) |
+| F3 | push main + tag | `git push origin main` + `git tag v2.1.1 && git push origin v2.1.1` | OK — main and v2.1.1 both at 1cfd799d |
+| F4 | CI build | poll `GET /actions/runs` | **completed / success** (~7 min, run on 1cfd799d) |
+| F5 | release | `GET /releases/tags/v2.1.1` | **OK — Release "v2.1.1" published 2026-08-19T08:44:10Z with app-release.apk (109.2 MB)** |
+
+**STATUS F: COMPLETE** — bump script tested for real (2.1.0+1 → 2.1.1+2), tag v2.1.1 pushed, CI rebuilt the shippable APK and attached it to the Release without any manual build step.
 
 ---
 
 ## FINAL STATUS
-- **Part B (release pipeline): DONE** — `.github/workflows/release.yml`; verified twice (v2.0.1-test, v2.1.0). Test tag deleted locally+remote; **the orphaned v2.0.1-test release page needs manual deletion on the web UI** (no PAT/gh CLI on this machine — API delete returned 401).
-- **Part C (update checker): CODE DONE, automated checks green** (120 tests, analyze at baseline, debug APK builds). Two manual device checkpoints remain for the user:
+- **v2.1.1 SHIPPED** — repo live at https://github.com/anisur-bayazid25/MapBanai (main = 1cfd799d), Release v2.1.1 with app-release.apk (109.2 MB).
+- **Part E (v2.1.1 features): DONE, verified** — logo everywhere (launcher + About + Home), version-bump system (script + Actions workflow), GPS Save-Point → `<project>_points.csv`, type-to-confirm reset safeguard, About GitHub/email links via url_launcher. 120/120 tests, analyze at baseline (0 errors), debug APK built with icon + url_launcher registered.
+- **Part B (release pipeline): DONE** — verified three times (v2.0.1-test, v2.1.0, v2.1.1). Test tag deleted locally+remote; **the orphaned v2.0.1-test release page still needs manual deletion on the web UI** (no PAT/gh CLI on this machine — API delete returned 401).
+- **Part C (update checker): CODE DONE, verified end-to-end with v2.1.1** — the Home silent check + Settings manual check will now detect 2.1.1 properly; remaining manual device checkpoints:
   1. Install the APK, place a test APK at the download path, confirm OpenFile launches the installer prompt.
-  2. Publish a newer release (e.g. tag v2.2.0 after a future bump) and confirm Settings tap + Home silent snackbar detect it, and Download & Install triggers the Android installer.
+  2. Confirm the About GitHub/email taps open the browser/email app, and the reset pop-up requires the typed owner name.
 - **Environment notes:**
   - Windows Developer Mode is OFF → `flutter pub add`/`flutter pub get` fail at the plugin-symlink step. Worked around with `dart pub get` + hand-syncing `.flutter-plugins-dependencies`/`.flutter-plugins` (Android builds don't need symlinks; the tool skips the step when the plugin list is unchanged). **Recommended fix: enable Developer Mode** (start ms-settings:developers) so future `flutter pub get` runs clean.
   - package_info_plus pinned to 8.0.2: 9.x requires AGP 8.12/Gradle 8.13+, the project (and CI) uses AGP 8.1/Gradle 8.3.
