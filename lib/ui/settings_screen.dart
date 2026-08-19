@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/app_info.dart';
+import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/common/section_header.dart';
+import 'package:mapbanai/ui/common/update_dialog.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatefulWidget {
   final AppDatabase database;
@@ -27,6 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _nameController = TextEditingController();
   bool _loading = true;
   String _language = 'system';
+  String _appVersion = '';
+  bool _checkingUpdates = false;
 
   @override
   void initState() {
@@ -40,10 +45,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!_languages.any((l) => l.code == language)) {
       language = 'system';
     }
+    var appVersion = '';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      appVersion = packageInfo.version;
+    } catch (_) {
+      // Package info is unavailable in some test environments.
+    }
     if (!mounted) return;
     setState(() {
       _nameController.text = name ?? '';
       _language = language;
+      _appVersion = appVersion;
       _loading = false;
     });
   }
@@ -64,6 +77,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Settings saved')),
     );
+  }
+
+  Future<void> _checkForUpdates() async {
+    setState(() => _checkingUpdates = true);
+    try {
+      final update = await UpdateChecker.checkForUpdate();
+      if (!mounted) return;
+      if (update == null) {
+        await showUpToDateDialog(context);
+      } else {
+        await showUpdateDialog(context, update);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not check for updates')),
+      );
+    } finally {
+      if (mounted) setState(() => _checkingUpdates = false);
+    }
   }
 
   Future<void> _resetData() async {
@@ -182,6 +215,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: _resetData,
                   icon: const Icon(Icons.delete_forever_outlined),
                   label: const Text('Reset data'),
+                ),
+                const Divider(height: 32),
+                const SectionHeader(
+                  title: 'Updates',
+                  subtitle:
+                      'Checks the GitHub releases feed for a newer version.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _checkingUpdates ? null : _checkForUpdates,
+                  icon: _checkingUpdates
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        )
+                      : const Icon(Icons.update),
+                  label: Text(
+                    _appVersion.isEmpty
+                        ? 'Check for updates'
+                        : 'Check for updates \u2014 v$_appVersion installed',
+                  ),
                 ),
                 const Divider(height: 32),
                 const SectionHeader(

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/state/project_state.dart';
+import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
+import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
 import 'package:mapbanai/ui/gps_mode_screen.dart';
 import 'package:mapbanai/ui/project_setup_screen.dart';
@@ -28,7 +30,28 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _database = AppDatabase();
     _loadProjects();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _promptUserNameOnce());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _promptUserNameOnce();
+      _checkForUpdatesSilently();
+    });
+  }
+
+  /// Non-intrusive background update check: never blocks startup, never
+  /// auto-downloads. If a newer version exists a snackbar with a View action
+  /// is shown.
+  Future<void> _checkForUpdatesSilently() async {
+    final update = await UpdateChecker.checkForUpdate();
+    if (update == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Update v${update.version} is available'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => showUpdateDialog(context, update),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadProjects() async {

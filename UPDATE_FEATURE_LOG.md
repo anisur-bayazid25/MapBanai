@@ -52,4 +52,19 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 
 ## Part C — In-app update checker
 
-(waiting on Part A)
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| C1 | deps | `flutter pub add http package_info_plus open_file` | pubspec+lock updated (http ^1.6.0, package_info_plus 9.0.1, open_file ^3.5.11) but tool failed at the Windows plugin-symlink step (`Building with plugins requires symlink support` — Developer Mode off, no admin) |
+| C2 | workaround | `dart pub get --offline` + hand-synced `.flutter-plugins-dependencies`/`.flutter-plugins` | OK — plain `dart pub get` skips Flutter's symlink step; symlinks are only needed for linux/windows desktop builds, not Android; `flutter analyze`/`test`/`build apk` all run with no symlink step afterwards (verified: tool skips it when plugin list JSON is unchanged) |
+| C3 | AGP conflict | `flutter build apk --debug` | FAIL: package_info_plus 9.0.1 pins AGP 8.12.1 + needs `flutter` gradle extension — incompatible with project AGP 8.1/Gradle 8.3 (committed config also used by CI) |
+| C4 | fix | pubspec pinned `package_info_plus: 8.0.2` (8.x era matches Flutter 3.24/AGP 8.1) + `dart pub get` + hand-synced plugin lists | OK — `flutter build apk --debug` **built** (39s), manifest merged with new FileProvider + REQUEST_INSTALL_PACKAGES, no authority conflicts (open_file_android uses its own authority) |
+| C5 | code | n/a (wrote files) | `lib/services/update_checker.dart` (GET /releases/latest, strip leading v, .apk asset URL, int[] semver comparator, UpdateInfo? — all errors → null), `lib/services/update_downloader.dart` (stream download to external storage or temp with progress, then OpenFile.open), `lib/ui/common/update_dialog.dart` (shared dialog: notes + progress + Download & Install; up-to-date variant) |
+| C6 | manifest | n/a (edited files) | REQUEST_INSTALL_PACKAGES added; INTERNET already present (confirmed); FileProvider `${applicationId}.fileprovider` + `res/xml/file_paths.xml` (external-path + cache-path) |
+| C7 | UI | n/a (edited files) | Settings: "Check for updates — vX.Y.Z installed" row (PackageInfo) → update/up-to-date dialog. Home: silent background check on init → snackbar with View action; never auto-downloads |
+| C8 | tests | `flutter test` | **120/120 passed** (incl. 5 new version-comparator tests in test/update_checker_test.dart) |
+| C9 | analyze | `flutter analyze` | 0 issues in new/changed files; total unchanged at pre-existing baseline (48 infos/warnings, 0 errors) |
+| C10 | build | `flutter build apk --debug` | OK — APK built with new plugins |
+
+**STATUS C: CODE COMPLETE** — step 12 (bump 2.1.0 + tag + push) next.
+
+## Step 12 — version bump + full pipeline proof
