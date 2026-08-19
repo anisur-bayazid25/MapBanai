@@ -1,0 +1,432 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+part 'app_database.g.dart';
+
+class Projects extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  BoolColumn get archived => boolean().withDefault(const Constant(false))();
+  RealColumn get gpsThresholdM => real().withDefault(const Constant(10))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  BoolColumn get isActive => boolean().withDefault(const Constant(false))();
+}
+
+class SurveySessions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get projectId => integer().references(Projects, #id)();
+  TextColumn get title => text()();
+  TextColumn get status => text().withDefault(const Constant('draft'))();
+  TextColumn get responses => text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class StoredForms extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get projectId => integer().nullable().references(Projects, #id)();
+  TextColumn get name => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  TextColumn get json => text()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+class GpsLogs extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get surveyor => text().withDefault(const Constant(''))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// User-defined attribute fields attached to a project. These show up in the
+/// GIS data-collection sheet so each captured feature can carry the project's
+/// custom attributes (e.g. material, condition).
+class ProjectFields extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get projectId => integer().references(Projects, #id)();
+  TextColumn get name => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+@DriftDatabase(tables: [
+  Projects,
+  SurveySessions,
+  StoredForms,
+  AppSettings,
+  GpsLogs,
+  ProjectFields,
+])
+class AppDatabase extends _$AppDatabase {
+  /// Test hook: use a same-isolate file connection instead of opening the
+  /// database on a background isolate. Background-isolate responses are not
+  /// delivered reliably inside widget tests' FakeAsync zone, so screens
+  /// constructed in tests can share the on-disk database only with this on.
+  static bool useInProcessFileForTesting = false;
+
+  AppDatabase()
+      : super(useInProcessFileForTesting
+            ? _openInProcessConnection()
+            : _openConnection());
+
+  @visibleForTesting
+  AppDatabase.forTesting() : super(NativeDatabase.memory());
+
+  @override
+  int get schemaVersion => 7;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(surveySessions, surveySessions.responses);
+      }
+      if (from < 3) {
+        await migrator.createTable(storedForms);
+      }
+      if (from < 4) {
+        await customStatement('DROP TABLE IF EXISTS field_tasks');
+        await migrator.createTable(appSettings);
+        await migrator.createTable(gpsLogs);
+      }
+      if (from < 5) {
+        await migrator.addColumn(projects, projects.description);
+        await migrator.addColumn(projects, projects.archived);
+        await migrator.addColumn(projects, projects.gpsThresholdM);
+      }
+      if (from < 6) {
+        await migrator.createTable(projectFields);
+      }
+      if (from < 7) {
+        await migrator.addColumn(storedForms, storedForms.projectId);
+        // Attach legacy (globally shared) forms to the active project so
+        // every project becomes independent going forward.
+        await customStatement(
+          'UPDATE stored_forms SET project_id = '
+          '(SELECT id FROM projects WHERE is_active = 1 LIMIT 1) '
+          'WHERE project_id IS NULL;'
+          'UPDATE stored_forms SET project_id = '
+          '(SELECT id FROM projects ORDER BY id LIMIT 1) '
+          'WHERE project_id IS NULL;',
+        );
+      }
+    },
+  );
+
+  Future<List<Project>> getProjects({bool includeArchived = false}) {
+    final query = select(projects)
+      ..orderBy([(project) => OrderingTerm.asc(project.name)]);
+    if (!includeArchived) {
+      query.where((row) => row.archived.equals(false));
+    }
+    return query.get();
+  }
+
+  Future<Project?> getProjectByName(String name) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) return null;
+    return (select(projects)
+          ..where((row) => row.name.equals(cleanName)))
+        .getSingleOrNull();
+  }
+
+  Future<bool> projectExists(String name) async {
+    return await getProjectByName(name.trim()) != null;
+  }
+
+  Future<int> insertProject(ProjectsCompanion entry) => into(projects).insert(entry);
+
+  Future<int> insertSurveySession(SurveySessionsCompanion entry) =>
+      into(surveySessions).insert(entry);
+
+  Future<List<SurveySession>> getSurveySessions() {
+    return (select(surveySessions)
+          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
+        .get();
+  }
+
+  Future<List<SurveySession>> getSurveySessionsByProject(int projectId) {
+    return (select(surveySessions)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
+        .get();
+  }
+
+  Future<SurveySession?> getSurveySession(int id) async {
+    return (select(surveySessions)..where((row) => row.id.equals(id)))
+        .getSingleOrNull();
+  }
+
+  Future<void> updateSurveySession(
+    int id, {
+    String? title,
+    String? status,
+    String? responses,
+  }) async {
+    await (update(surveySessions)..where((row) => row.id.equals(id))).write(
+      SurveySessionsCompanion(
+        title: title == null ? const Value.absent() : Value(title),
+        status: status == null ? const Value.absent() : Value(status),
+        responses: responses == null
+            ? const Value.absent()
+            : Value(responses),
+      ),
+    );
+  }
+
+  Future<void> deleteSurveySession(int id) =>
+      (delete(surveySessions)..where((row) => row.id.equals(id))).go();
+
+  /// Deletes a project together with all its survey sessions/features,
+  /// attribute fields and stored forms.
+  Future<void> deleteProject(int id) async {
+    await (delete(surveySessions)..where((row) => row.projectId.equals(id))).go();
+    await (delete(projectFields)..where((row) => row.projectId.equals(id))).go();
+    await (delete(storedForms)..where((row) => row.projectId.equals(id))).go();
+    await (delete(projects)..where((row) => row.id.equals(id))).go();
+  }
+
+  Future<List<String>> getProjectNames({bool includeArchived = false}) async {
+    final items = await getProjects(includeArchived: includeArchived);
+    return items.map((project) => project.name).toList();
+  }
+
+  Future<int?> getProjectIdByName(String name) async {
+    final project = await getProjectByName(name);
+    return project?.id;
+  }
+
+  Future<void> createProject(
+    String name, {
+    String description = '',
+    double gpsThresholdM = 10,
+  }) async {
+    if (name.trim().isEmpty) return;
+
+    final project = ProjectsCompanion(
+      name: Value(name.trim()),
+      description: Value(description.trim()),
+      gpsThresholdM: Value(gpsThresholdM),
+      isActive: const Value(true),
+    );
+
+    await insertProject(project);
+  }
+
+  Future<void> updateProject(
+    int id, {
+    String? name,
+    String? description,
+    double? gpsThresholdM,
+    bool? archived,
+  }) async {
+    await (update(projects)..where((row) => row.id.equals(id))).write(
+      ProjectsCompanion(
+        name: name == null ? const Value.absent() : Value(name.trim()),
+        description: description == null
+            ? const Value.absent()
+            : Value(description.trim()),
+        gpsThresholdM: gpsThresholdM == null
+            ? const Value.absent()
+            : Value(gpsThresholdM),
+        archived: archived == null ? const Value.absent() : Value(archived),
+      ),
+    );
+  }
+
+  Future<void> archiveProject(int id, {required bool archived}) =>
+      updateProject(id, archived: archived);
+
+  Future<int> surveySessionCountForProject(int projectId) async {
+    final count = surveySessions.id.count();
+    final query = selectOnly(surveySessions)
+      ..addColumns([count])
+      ..where(surveySessions.projectId.equals(projectId));
+    final row = await query.getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  /// Counts of collected data for a project: (survey responses, GIS features).
+  /// A session counts as a GIS feature when its responses JSON contains a
+  /// `feature_type` key.
+  Future<({int survey, int gis})> responseCountsForProject(int projectId) async {
+    final count = surveySessions.id.count();
+    final totalQuery = selectOnly(surveySessions)
+      ..addColumns([count])
+      ..where(surveySessions.projectId.equals(projectId));
+    final total = (await totalQuery.getSingle()).read(count) ?? 0;
+
+    final gisQuery = selectOnly(surveySessions)
+      ..addColumns([count])
+      ..where(
+        surveySessions.projectId.equals(projectId) &
+            surveySessions.responses.like('%feature_type%'),
+      );
+    final gis = (await gisQuery.getSingle()).read(count) ?? 0;
+
+    return (survey: total - gis, gis: gis);
+  }
+
+  // ── Stored survey forms ──────────────────────────────────────
+
+  Future<int> insertStoredForm(StoredFormsCompanion entry) =>
+      into(storedForms).insert(entry);
+
+  Future<List<StoredForm>> getStoredForms() {
+    return (select(storedForms)
+          ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+        .get();
+  }
+
+  /// Forms that belong to a single project. Each project has its own forms;
+  /// created forms are never shared between projects.
+  Future<List<StoredForm>> getStoredFormsForProject(int projectId) {
+    return (select(storedForms)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+        .get();
+  }
+
+  Future<StoredForm?> getStoredFormByName(String name, {int? projectId}) async {
+    final projectFilter = projectId;
+    if (projectFilter != null) {
+      return (select(storedForms)
+            ..where(
+              (row) =>
+                  row.name.equals(name) & row.projectId.equals(projectFilter),
+            ))
+          .getSingleOrNull();
+    }
+    return (select(storedForms)
+          ..where((row) => row.name.equals(name)))
+        .getSingleOrNull();
+  }
+
+  Future<void> deleteStoredForm(int id) =>
+      (delete(storedForms)..where((row) => row.id.equals(id))).go();
+
+  Future<void> updateStoredForm(
+    int id, {
+    String? name,
+    String? description,
+    String? json,
+    int? version,
+  }) async {
+    await (update(storedForms)..where((row) => row.id.equals(id))).write(
+      StoredFormsCompanion(
+        name: name == null ? const Value.absent() : Value(name),
+        description: description == null
+            ? const Value.absent()
+            : Value(description),
+        json: json == null ? const Value.absent() : Value(json),
+        version: version == null ? const Value.absent() : Value(version),
+      ),
+    );
+  }
+
+  // ── App settings (key/value) ─────────────────────────────────
+
+  Future<String?> getSetting(String key) async {
+    final row = await (select(appSettings)
+          ..where((t) => t.key.equals(key)))
+        .getSingleOrNull();
+    return row?.value;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    await (into(appSettings).insert(
+      AppSettingsCompanion.insert(key: key, value: value),
+      onConflict: DoUpdate(
+        (_) => AppSettingsCompanion(value: Value(value)),
+        target: [appSettings.key],
+      ),
+    ));
+  }
+
+  // ── GPS logs ─────────────────────────────────────────────────
+
+  Future<int> insertGpsLog(GpsLogsCompanion entry) => into(gpsLogs).insert(entry);
+
+  Future<List<GpsLog>> getGpsLogs() {
+    return (select(gpsLogs)
+          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
+        .get();
+  }
+
+  Future<void> renameGpsLog(int id, String name) async {
+    await (update(gpsLogs)..where((row) => row.id.equals(id))).write(
+      GpsLogsCompanion(name: Value(name)),
+    );
+  }
+
+  Future<void> deleteGpsLog(int id) =>
+      (delete(gpsLogs)..where((row) => row.id.equals(id))).go();
+
+  // ── Project attribute fields ─────────────────────────────────
+
+  Future<List<ProjectField>> getProjectFields(int projectId) {
+    return (select(projectFields)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+        .get();
+  }
+
+  Future<int> insertProjectField(int projectId, String name) =>
+      into(projectFields).insert(
+        ProjectFieldsCompanion(
+          projectId: Value(projectId),
+          name: Value(name.trim()),
+        ),
+      );
+
+  Future<void> renameProjectField(int id, String name) async {
+    await (update(projectFields)..where((row) => row.id.equals(id))).write(
+      ProjectFieldsCompanion(name: Value(name.trim())),
+    );
+  }
+
+  Future<void> deleteProjectField(int id) =>
+      (delete(projectFields)..where((row) => row.id.equals(id))).go();
+
+  // ── Reset / maintenance ──────────────────────────────────────
+
+  /// Deletes all user-generated data (projects, sessions, stored forms and
+  /// GPS logs). The `user_name` setting is preserved so the current user
+  /// survives a reset. Photo files on disk are left untouched.
+  Future<void> resetAllData() async {
+    await delete(surveySessions).go();
+    await delete(projects).go();
+    await delete(storedForms).go();
+    await delete(gpsLogs).go();
+    await delete(projectFields).go();
+  }
+}
+
+LazyDatabase _openConnection() {
+  return LazyDatabase(() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dbFolder.path, 'mapbanai.db'));
+    return NativeDatabase.createInBackground(file, logStatements: false);
+  });
+}
+
+LazyDatabase _openInProcessConnection() {
+  return LazyDatabase(() async {
+    final dbFolder = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dbFolder.path, 'mapbanai.db'));
+    return NativeDatabase(file, logStatements: false);
+  });
+}
