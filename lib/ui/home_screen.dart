@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/state/project_state.dart';
+import 'package:mapbanai/services/background_gps_recorder.dart';
 import 'package:mapbanai/services/backup_service.dart';
 import 'package:mapbanai/services/intent_handler.dart';
 import 'package:mapbanai/services/project_links.dart';
@@ -39,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _database = AppDatabase();
     _backup = BackupService(_database);
+    BackgroundGps.instance.addListener(_onBackgroundGpsChanged);
     _loadProjects();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _handleStartupChecks();
@@ -327,8 +329,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _onBackgroundGpsChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    BackgroundGps.instance.removeListener(_onBackgroundGpsChanged);
     _backupTimer?.cancel();
     _database.close();
     super.dispose();
@@ -363,6 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
+                _buildGpsRecordingBanner(context),
                 _buildProjectSelector(context, projectState, selected),
                 const SizedBox(height: 16),
                 _ModeCard(
@@ -482,7 +490,74 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProjectSelector(
+  Widget _buildGpsRecordingBanner(BuildContext context) {
+  final bg = BackgroundGps.instance;
+  if (!bg.isRecording) return const SizedBox.shrink();
+  return Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.red.shade50,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.red.shade300),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.fiber_manual_record, color: Colors.red.shade700),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'GPS recording active — "${bg.activeLogName}"',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Logging continues with the screen off. Leave GPS Mode any time; '
+          'come back here to stop.',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                ),
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GpsModeScreen()),
+                  );
+                  _loadProjects();
+                },
+                child: const Text('Open GPS Mode'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () async {
+                  await BackgroundGps.instance.stop();
+                },
+                child: const Text('Stop'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildProjectSelector(
     BuildContext context,
     ProjectState projectState,
     String selected,

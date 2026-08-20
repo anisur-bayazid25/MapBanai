@@ -73,6 +73,37 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
     }
   }
 
+  Future<void> _saveDraftResponse(Map<String, dynamic> answers) async {
+    try {
+      final projectId = await _database.getProjectIdByName(widget.projectName);
+      if (projectId == null) {
+        _showSnack('Project not found: ${widget.projectName}');
+        return;
+      }
+
+      await _database.insertSurveySession(
+        SurveySessionsCompanion(
+          projectId: drift.Value(projectId),
+          title: drift.Value(
+            'Draft survey — ${answers['site_name']?.toString() ?? _form.name}',
+          ),
+          status: const drift.Value('draft'),
+          responses: drift.Value(jsonEncode({
+            'form_id': _form.id,
+            'form_name': _form.name,
+            'user_name': await _database.getSetting('user_name'),
+            'answers': answers,
+          })),
+        ),
+      );
+
+      if (!mounted) return;
+      _showSnack('Draft saved — resume it from History later');
+    } catch (e) {
+      _showSnack('Failed to save draft: $e');
+    }
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -171,6 +202,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
                     body: SurveyFormRenderer(
                       form: _form,
                       onSave: _saveResponse,
+                      onSaveDraft: _saveDraftResponse,
                       onComplete: () => Navigator.pop(context),
                     ),
                   ),

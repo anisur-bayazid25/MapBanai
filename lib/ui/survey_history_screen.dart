@@ -1,7 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/models/survey_form.dart';
+import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
+import 'package:mapbanai/ui/gis_mode_screen.dart';
 import 'package:mapbanai/ui/photo_gallery_screen.dart';
+import 'package:mapbanai/ui/survey_form_renderer.dart';
 import 'package:mapbanai/ui/survey_session_detail_screen.dart';
 
 class SurveyHistoryScreen extends StatefulWidget {
@@ -14,6 +20,7 @@ class SurveyHistoryScreen extends StatefulWidget {
 class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   final AppDatabase _database = AppDatabase();
   List<SurveySession> _sessions = [];
+  List<SurveySession> _drafts = [];
   bool _loading = true;
   Map<int, String> _projectNames = {};
 
@@ -27,10 +34,12 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     final projects = await _database.getProjects(includeArchived: true);
     final names = {for (final p in projects) p.id: p.name};
     final sessions = await _database.getSurveySessions();
+    final drafts = await _database.getDraftSurveySessions();
     if (!mounted) return;
     setState(() {
       _projectNames = names;
       _sessions = sessions;
+      _drafts = drafts;
       _loading = false;
     });
   }
@@ -64,6 +73,160 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     await _load();
   }
 
+  // ── draft actions ────────────────────────────────────────────
+
+  bool _isGisDraft(SurveySession draft) {
+    try {
+      final responses =
+          jsonDecode(draft.responses) as Map<String, dynamic>;
+      return responses['feature_type'] != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _openDraft(SurveySession draft) async {
+    if (_isGisDraft(draft)) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => GisModeScreen(
+            projectName: _projectName(draft.projectId),
+            resumeDraftId: draft.id,
+          ),
+        ),
+      );
+    } else {
+      await _resumeSurveyDraft(draft);
+    }
+    await _load();
+  }
+
+  Future<void> _resumeSurveyDraft(SurveySession draft) async {
+    Map<String, dynamic> responses;
+    try {
+      responses = jsonDecode(draft.responses) as Map<String, dynamic>;
+    } catch (_) {
+      _showSnack('Could not read this draft');
+      return;
+    }
+    final answers =
+        (responses['answers'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    final project = await _database.getProjectById(draft.projectId);
+    if (project == null || !mounted) {
+      _showSnack('Project not found for this draft');
+      return;
+    }
+
+    final forms = await _database.getStoredFormsForProject(project.id);
+    StoredForm? stored;
+    final formId = int.tryParse('${responses['form_id'] ?? ''}');
+    if (formId != null) {
+      for (final f in forms) {
+        if (f.id == formId) {
+          stored = f;
+          break;
+        }
+      }
+    }
+    if (stored == null) {
+      final formName = responses['form_name']?.toString();
+      if (formName != null) {
+        for (final f in forms) {
+          if (f.name == formName) {
+            stored = f;
+            break;
+          }
+        }
+      }
+    }
+    if (stored == null || !mounted) {
+      _showSnack('Survey form not found for this draft');
+      return;
+    }
+
+    final form = SurveyForm.fromJson(
+      jsonDecode(stored.json) as Map<String, dynamic>,
+    );
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Resume survey draft')),
+          body: SurveyFormRenderer(
+            form: form,
+            initialAnswers: answers,
+            onSave: (answers) async {
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              final title = answers['site_name']?.toString() ?? form.name;
+              final updated = <String, dynamic>{
+                'form_id': form.id,
+                'form_name': form.name,
+                'user_name': await _database.getSetting('user_name'),
+                'answers': answers,
+              };
+              await _database.updateSurveySession(
+                draft.id,
+                title: title,
+                status: 'saved',
+                responses: jsonEncode(updated),
+              );
+              if (messenger.mounted) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Saved response for ${project.name}')),
+                );
+              }
+              if (navigator.mounted) navigator.pop();
+            },
+            onSaveDraft: (answers) async {
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              final updated = <String, dynamic>{
+                'form_id': form.id,
+                'form_name': form.name,
+                'user_name': await _database.getSetting('user_name'),
+                'answers': answers,
+              };
+              await _database.updateSurveySession(
+                draft.id,
+                title: answers['site_name']?.toString() ??
+                    'Draft survey — ${form.name}',
+                status: 'draft',
+                responses: jsonEncode(updated),
+              );
+              if (messenger.mounted) {
+                messenger.showSnackBar(const SnackBar(content: Text('Draft updated')));
+              }
+              if (navigator.mounted) navigator.pop();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteDraft(SurveySession draft) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete draft',
+      message: 'Delete this draft? The unfinished data will be lost.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    );
+    if (!confirmed) return;
+    await _database.deleteSurveySession(draft.id);
+    await _load();
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,7 +246,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
       ),
       body: _loading
           ? const AppLoadingIndicator()
-          : _sessions.isEmpty
+          : _sessions.isEmpty && _drafts.isEmpty
               ? _buildEmpty(context)
               : _buildGrouped(context),
     );
@@ -97,14 +260,14 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
           const SizedBox(height: 16),
           Text(
-            'No survey responses yet',
+            'No saved responses or drafts yet',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Responses you collect will appear here',
+            'Saved responses appear here; unfinished work is kept as drafts',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey.shade500,
             ),
@@ -115,9 +278,13 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   }
 
   Widget _buildGrouped(BuildContext context) {
+    final saved = _sessions
+        .where((session) => session.status != 'draft')
+        .toList();
+
     // Group sessions by project name (sorted), then by date (descending).
     final projects = <String, List<SurveySession>>{};
-    for (final session in _sessions) {
+    for (final session in saved) {
       projects
           .putIfAbsent(_projectName(session.projectId), () => [])
           .add(session);
@@ -127,15 +294,35 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        for (final projectName in sortedProjects) ...[
+        if (_drafts.isNotEmpty) ...[
           _sectionHeader(
-            icon: Icons.folder_outlined,
-            title: projectName,
-            color: Colors.blue.shade700,
+            icon: Icons.edit_note,
+            title: 'Drafts (${_drafts.length})',
+            color: Colors.orange.shade800,
           ),
-          ..._buildDates(projects[projectName]!),
+          for (final draft in _drafts) _draftCard(draft),
           const SizedBox(height: 12),
         ],
+        if (projects.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 48),
+            child: Center(
+              child: Text(
+                'No saved responses yet',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ),
+          )
+        else
+          for (final projectName in sortedProjects) ...[
+            _sectionHeader(
+              icon: Icons.folder_outlined,
+              title: projectName,
+              color: Colors.blue.shade700,
+            ),
+            ..._buildDates(projects[projectName]!),
+            const SizedBox(height: 12),
+          ],
       ],
     );
   }
@@ -200,6 +387,53 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     );
   }
 
+  Widget _draftCard(SurveySession draft) {
+    final isGis = _isGisDraft(draft);
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.orange.shade200),
+      ),
+      child: ListTile(
+        leading: Icon(
+          isGis ? Icons.edit_location_alt_outlined : Icons.assignment_outlined,
+          color: Colors.orange.shade800,
+        ),
+        title: Text(
+          draft.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          '${_projectName(draft.projectId)}  •  ${_timeLabel(draft.createdAt)}  •  draft',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () => _openDraft(draft),
+              child: const Text('Resume'),
+            ),
+            IconButton(
+              tooltip: 'Delete draft',
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: Colors.red,
+              ),
+              onPressed: () => _deleteDraft(draft),
+            ),
+          ],
+        ),
+        onTap: () => _openDraft(draft),
+      ),
+    );
+  }
+
   Widget _sessionCard(SurveySession session) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -217,7 +451,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Text(
-          '${_timeLabel(session.createdAt)}  •  ${session.status}',
+          _timeLabel(session.createdAt),
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.grey),

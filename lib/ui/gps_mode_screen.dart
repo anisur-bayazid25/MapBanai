@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/services/background_gps_recorder.dart';
 import 'package:mapbanai/services/coordinate_utils.dart';
 import 'package:mapbanai/services/gnss_service.dart';
 import 'package:mapbanai/services/gps_log_store.dart';
@@ -40,12 +41,13 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Map<int, int> _counts = {};
   Map<int, DateTime?> _lastReadings = {};
   int? _recordingLogId;
-  DateTime? _lastAppend;
   String _surveyor = '';
+  DateTime? _lastCountsRefresh;
 
   @override
   void initState() {
     super.initState();
+    BackgroundGps.instance.addListener(_onBackgroundChange);
     _loadSettings();
     _loadLogs();
     _startListening();
@@ -90,14 +92,36 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   }
 
   Future<void> _startListening() async {
+    final bg = BackgroundGps.instance;
+
+    // A background recording is active (e.g. started earlier and still
+    // running, or the user just returned to this screen): mirror its state
+    // instead of opening a second GPS stream.
+    if (bg.isRecording) {
+      await _subscription?.cancel();
+      _subscription = null;
+      if (!mounted) return;
+      setState(() {
+        _permissionGranted = true;
+        _recordingLogId = bg.activeLogId;
+        _latest = bg.latest;
+        if (bg.latest != null) _groundRefAltitude ??= bg.latest!.altitude;
+        _streamError = false;
+      });
+      return;
+    }
+
     final granted = await _locationService.ensurePermission();
     if (!mounted) return;
     setState(() {
       _permissionGranted = granted;
     });
     if (!granted) return;
+    if (_subscription != null) return;
 
-    await _subscription?.cancel();
+    // Read-only preview stream: fixes drive the live readout but are never
+    // appended. Recording is owned by BackgroundGps so it survives leaving
+    // this screen.
     _subscription = Geolocator.getPositionStream(
       locationSettings: AndroidSettings(
         accuracy: LocationAccuracy.high,
@@ -107,14 +131,12 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     ).listen(
       (position) {
         if (!mounted) return;
+        if (BackgroundGps.instance.isRecording) return;
         setState(() {
           _latest = position;
           _groundRefAltitude ??= position.altitude;
           _streamError = false;
         });
-        if (!_streamPaused) {
-          _appendToRecording(position);
-        }
       },
       onError: (Object error) {
         if (!mounted) return;
@@ -126,32 +148,34 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     );
   }
 
-  Future<void> _appendToRecording(Position position) async {
-    final logId = _recordingLogId;
-    if (logId == null) return;
+  void _onBackgroundChange() {
+    if (!mounted) return;
+    final bg = BackgroundGps.instance;
+    setState(() {
+      if (bg.isRecording) {
+        _recordingLogId = bg.activeLogId;
+        _latest = bg.latest;
+        if (bg.latest != null) _groundRefAltitude ??= bg.latest!.altitude;
+        _streamError = false;
+      }
+    });
+    _refreshCountsThrottled();
+  }
 
+  Future<void> _refreshCountsThrottled() async {
     final now = DateTime.now();
-    final last = _lastAppend;
-    if (last != null && now.difference(last) < const Duration(seconds: 1)) {
+    final last = _lastCountsRefresh;
+    if (last != null &&
+        now.difference(last) < const Duration(seconds: 3)) {
       return;
     }
-    _lastAppend = now;
-
-    final reading = await _store.appendReading(
-      logId: logId,
-      surveyor: _surveyor,
-      position: position,
-      timestamp: now,
-    );
-    if (!mounted) return;
-    setState(() {
-      _counts[logId] = reading.id;
-      _lastReadings[logId] = reading.timestamp;
-    });
+    _lastCountsRefresh = now;
+    await _loadLogs();
   }
 
   @override
   void dispose() {
+    BackgroundGps.instance.removeListener(_onBackgroundChange);
     _subscription?.cancel();
     _gnssTimer?.cancel();
     _database.close();
@@ -161,9 +185,13 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   // ── actions ──────────────────────────────────────────────────
 
   void _togglePause() {
+    final bg = BackgroundGps.instance;
     setState(() {
       _streamPaused = !_streamPaused;
     });
+    if (bg.isRecording) {
+      bg.setPaused(_streamPaused);
+    }
   }
 
   Future<void> _copyCoordinates() async {
@@ -291,24 +319,50 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     );
     await _store.createLogFile(logId);
     await _loadLogs();
-    setState(() {
-      _recordingLogId = logId;
-    });
+    final log = (await _database.getGpsLogs())
+        .firstWhere((l) => l.id == logId, orElse: () => _logs.firstWhere((l) => l.id == logId));
     _showSnack(
-      '"${name.trim().isEmpty ? defaultName : name.trim()}" created '
-      '- recording started',
+      '"${name.trim().isEmpty ? defaultName : name.trim()}" created',
     );
+    await _startRecording(log);
+  }
+
+  Future<void> _startRecording(GpsLog log) async {
+    await _subscription?.cancel();
+    _subscription = null;
+    final ok = await BackgroundGps.instance.start(
+      logId: log.id,
+      logName: log.name,
+      surveyor: _surveyor,
+    );
+    if (!ok) {
+      _showSnack('Location permission not granted');
+      await _loadLogs();
+      _startListening();
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _recordingLogId = log.id;
+    });
+    await _loadLogs();
+    _showSnack('Recording to "${log.name}"');
   }
 
   Future<void> _toggleRecording(GpsLog log) async {
-    setState(() {
-      _recordingLogId = _recordingLogId == log.id ? null : log.id;
-    });
-    _showSnack(
-      _recordingLogId == log.id
-          ? 'Recording to "${log.name}"'
-          : 'Recording stopped',
-    );
+    final bg = BackgroundGps.instance;
+    if (bg.isRecording && bg.activeLogId == log.id) {
+      await bg.stop();
+      if (!mounted) return;
+      setState(() {
+        _recordingLogId = null;
+      });
+      _showSnack('Recording stopped');
+      await _loadLogs();
+      _startListening();
+      return;
+    }
+    await _startRecording(log);
   }
 
   Future<void> _renameLog(GpsLog log) async {
@@ -342,8 +396,14 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     );
     if (!confirmed) return;
 
-    if (_recordingLogId == log.id) {
-      _recordingLogId = null;
+    if (BackgroundGps.instance.isRecording &&
+        BackgroundGps.instance.activeLogId == log.id) {
+      await BackgroundGps.instance.stop();
+      if (!mounted) return;
+      setState(() {
+        _recordingLogId = null;
+      });
+      _startListening();
     }
     await _store.deleteFile(log.id);
     await _database.deleteGpsLog(log.id);

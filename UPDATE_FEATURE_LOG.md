@@ -121,3 +121,33 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 - **Environment notes:**
   - Windows Developer Mode is OFF → `flutter pub add`/`flutter pub get` fail at the plugin-symlink step. Worked around with `dart pub get` + hand-syncing `.flutter-plugins-dependencies`/`.flutter-plugins` (Android builds don't need symlinks; the tool skips the step when the plugin list is unchanged). **Recommended fix: enable Developer Mode** (start ms-settings:developers) so future `flutter pub get` runs clean.
   - package_info_plus pinned to 8.0.2: 9.x requires AGP 8.12/Gradle 8.13+, the project (and CI) uses AGP 8.1/Gradle 8.3.
+
+---
+
+## Part G — v2.1.2: background GPS continuity + draft system
+
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| G1 | background recorder | n/a (wrote `lib/services/background_gps_recorder.dart`) | `BackgroundGps.instance` singleton ChangeNotifier owns the live geolocator stream while a GPS track records. fg notification via geolocator 12 `AndroidSettings.foregroundNotificationConfig` (channel `MapBanai GPS recording`, `enableWakeLock`, `setOngoing`) → survives GPS-screen Back (no PopScope) AND screen-off. `GpsLogStore.appendReading` still writes `<log>.csv`; appends throttled 1/s; `setPaused` skips appends but keeps stream+notification; `stop()` cancels sub + releases fg service. Manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `WAKE_LOCK`. No `ACCESS_BACKGROUND_LOCATION` (fg-service + while-in-use) |
+| G2 | GPS screen rework | n/a (edited `lib/ui/gps_mode_screen.dart`) | Recording delegated to BackgroundGps; local stream is read-only preview (never appends). `_startListening` mirrors bg state when recording active; one live stream (Start cancels preview sub, Stop reopens). `_createLog`/`_toggleRecording` → `BackgroundGps.start/stop`; `_deleteLog` stops bg first for the active log; pause routes to `setPaused` |
+| G3 | GIS continuity + drafts | n/a (edited `lib/ui/gis_mode_screen.dart`, `lib/services/track_recorder.dart`) | `_startLocationStream({bool? foreground})`: fg notification ONLY while `_recorder.running` (Begin→fg, `_cancelDraft`/finish→plain). `TrackRecorder.serialize()/restore()` round-trip vertices+timing (config NOT serialized — restore inherits constructing screen's thresholds). GIS `_saveDraft` (`{draft:true, feature_type, recorder|fix}` + point draggable marker restore); `_saveFeature` on Finish **updates** the same row to saved when resuming a draft (`updateSurveySession`) |
+| G4 | survey drafts | n/a (edited `lib/ui/survey_form_renderer.dart`, `lib/ui/survey_form_detail_screen.dart`, `lib/data/app_database.dart`) | `onSaveDraft` + "Save as draft" button (skips required/constraint validation); `_saveDraftResponse` inserts `status:'draft'` row. DB: `getDraftSurveySessions()`; `responseCountsForProject`/`surveySessionCountForProject` exclude drafts via `status.equals('draft').not()` (drift has no notEquals on GeneratedColumn) — no migration, no codegen |
+| G5 | history drafts UI | n/a (edited `lib/ui/survey_history_screen.dart`) | Full rewrite: Drafts section at top (Resume inline + Delete with confirm). Survey draft resume → prefilled renderer (`initialAnswers`, form re-located by form_id/form_name), Save promotes to saved / draft updates row. GIS draft resume → `GisModeScreen(projectName, resumeDraftId)`. Saved groups exclude drafts |
+| G6 | home banner | n/a (edited `lib/ui/home_screen.dart`) | Persistent red banner while `BackgroundGps.instance.isRecording` (Open GPS Mode / Stop); init/dispose attach/detach listener |
+| G7 | tests | `flutter test` | New `test/background_gps_recorder_test.dart` (start/stop state, CSV streaming via `GpsLogStore.defaultLogsDir()`, pause-skips-appends, notifications), `test/drafts_history_test.dart` (count exclusion, form Save-as-draft, history drafts/delete/resume→saved), track serialize/restore round-trip. Fixed: restored recorder must match thresholds (default minIntervalS:2 rejected instant add). **178/178 passed** |
+| G8 | analyze | `flutter analyze` | 0 errors; only pre-existing baseline warnings in `test/gis_map_controller_test.dart` (3 unused locals) |
+| G9 | docs | n/a (edited `CHANGELOG.md`, `AI_CHANGELOG.md`, `README.md`, this log) | v2.1.2 entries written |
+
+---
+
+## Part H — bump 2.1.2 + full pipeline proof
+
+| # | Step | Command | Result |
+|---|------|---------|--------|
+| H1 | bump | `dart run tool/bump_version.dart patch` | pubspec + AppInfo.version → `2.1.2+3` |
+| H2 | commit | `git commit -m "..."` | (filled on execution) |
+| H3 | push main + tag | `git push origin main` + `git tag v2.1.2 && git push origin v2.1.2` | (filled on execution) |
+| H4 | CI build | poll `GET /actions/runs` | (filled on execution) |
+| H5 | release | `GET /releases/tags/v2.1.2` | (filled on execution) |
+
+## FINAL STATUS (v2.1.2)

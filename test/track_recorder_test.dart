@@ -187,5 +187,42 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 1100));
       expect(recorder.elapsed.inMilliseconds > p1.inMilliseconds, isTrue);
     });
+
+    test('serialize/restore round-trips vertices and running state', () {
+      final source = TrackRecorder(
+        minIntervalS: 0,
+        minDistanceM: 0,
+      )..start();
+      source.add(_pos(0, 0));
+      source.add(_pos(0, 0.01));
+      source.add(_pos(0, 0.02));
+      expect(source.vertices, hasLength(3));
+
+      final restored = TrackRecorder(minIntervalS: 0, minDistanceM: 0);
+      restored.restore(source.serialize());
+
+      expect(restored.running, isTrue);
+      expect(restored.paused, isFalse);
+      expect(restored.vertices, hasLength(3));
+      expect(restored.vertices[1].longitude, closeTo(0.01, 1e-9));
+      expect(restored.vertices[2].latitude, closeTo(0.0, 1e-9));
+      expect(restored.totalDistanceM, closeTo(source.totalDistanceM, 1e-6));
+      // Undo/append continues cleanly after restore.
+      restored.add(_pos(0, 0.03));
+      expect(restored.vertices, hasLength(4));
+    });
+
+    test('serialize/restore preserves a paused recording', () {
+      final source = TrackRecorder(minIntervalS: 0, minDistanceM: 0)..start();
+      source.add(_pos(0, 0));
+      source.pause();
+
+      final restored = TrackRecorder(minIntervalS: 0, minDistanceM: 0);
+      restored.restore(source.serialize());
+
+      expect(restored.running, isTrue);
+      expect(restored.paused, isTrue);
+      expect(restored.vertices, hasLength(1));
+    });
   });
 }

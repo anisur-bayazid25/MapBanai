@@ -53,6 +53,94 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.1.2] — background GPS continuity + drafts
+
+### Background GPS recorder (screen-off + Back-button continuity)
+
+- **`lib/services/background_gps_recorder.dart`** — app-wide singleton
+  `BackgroundGps.instance` (extends `ChangeNotifier`). While a GPS track is
+  recording it owns the live geolocator stream; the GPS screen merely
+  previews fixes. Uses geolocator 12 `AndroidSettings.foregroundNotificationConfig`
+  (channel `MapBanai GPS recording`, `enableWakeLock`, `setOngoing`) →
+  recording survives leaving GPS Mode (Back = default pop; **no PopScope**)
+  and screen-off (process stays foreground, stream keeps delivering).
+  `GpsLogStore.appendReading` still writes `<log>.csv`; appends throttled to
+  1/s. `setPaused` skips appends but keeps stream + notification alive.
+  `stop()` cancels sub + releases the fg service.
+- **Manifest** (`android/app/src/main/AndroidManifest.xml`): added
+  `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `WAKE_LOCK`. No
+  `ACCESS_BACKGROUND_LOCATION` required (fg-service + while-in-use suffices).
+  Foreground service type `location` comes from the planted plugin
+  `geolocator_android` `.GeolocatorLocationService` declaration.
+- **Home**: `_buildGpsRecordingBanner` — persistent red banner while
+  `bg.isRecording`, with Open GPS Mode + Stop; `initState`/`dispose` attach/
+  detach the listener.
+- **GpsModeScreen** rework: recording delegated to BackgroundGps; local
+  stream is read-only (never appends). `_startListening` mirrors bg state
+  when a recording is already active; one live stream at a time (Start
+  cancels the preview sub, Stop reopens it). `_createLog`/`_toggleRecording`
+  call `BackgroundGps.start/stop`; `_deleteLog` stops bg first if deleting
+  the active log; pause button routes to `setPaused` while recording.
+
+### GIS screen-off continuity
+
+- `_startLocationStream({bool? foreground})` re-opens the stream with the fg
+  notification ONLY while `_recorder.running` (Begin Recording → fg;
+  `_cancelDraft`/Finish → downgraded back to plain). Back in GIS still stops
+  logging (documented product decision). Discovery: `ForegroundNotificationConfig`
+  is exported by `package:geolocator/geolocator.dart` (re-exported from
+  geolocator_android); `AndroidSettings` is NOT const → drop `const` around
+  it (analyzer const_with_non_const).
+
+### Drafts (no migration, no codegen — reuse `status='draft'` column)
+
+- Survey: `SurveyFormRenderer` gains `onSaveDraft` + "Save as draft" button
+  (skips required/constraint validation); `SurveyFormDetailScreen._saveDraftResponse`
+  inserts a `status:'draft'` row `{form_id, form_name, user_name, answers}`.
+- GIS: `_saveDraft` stashes `{draft:true, feature_type, recorder:
+  TrackRecorder.serialize()}` (line/polygon) or the point fix `{latitude,
+  longitude, accuracy_m}` into a draft row; button in the draft banner
+  (`_canSaveDraft` gates it). `TrackRecorder.serialize()/restore()` round-trip
+  vertices + timing (`running`, `paused`, `started_at`, `last_resume_at`,
+  `paused_total_ms`, `last_vertex_time`). NOTE: filter config is NOT
+  serialized — a restored recorder inherits the constructing screen's
+  `minDistanceM/minIntervalS/maxAccuracyM`.
+- Resume (GIS): `GisModeScreen(projectName, resumeDraftId:)` restores the
+  recorder/fix, re-adds draft annotations on `_onStyleLoaded` (+ a point
+  marker), and `_saveFeature` **updates the same row** on Finish
+  (`updateSurveySession(..., status:'saved')`) instead of inserting.
+  `_addSurveyAnnotations` skips `status == 'draft'`.
+- Resume (survey): History pushes a renderer prefilled with the draft
+  `answers` (form re-located by `form_id`/`form_name` within the project's
+  stored forms); "Save responses" promotes the row to saved, "Save as draft"
+  updates it.
+- History: `getDraftSurveySessions()` (new DB query); Drafts section at top
+  with Resume/Delete (+ confirm dialog); saved grouping excludes drafts.
+  Counters exclude drafts: `responseCountsForProject`,
+  `surveySessionCountForProject` (project detail "responses" count), and GIS
+  annotations.
+
+### Tests (178 total, all green; analyze 0 errors)
+
+- `test/track_recorder_test.dart` + round-trip serialize/restore (running +
+  paused variants). Gotcha that bit the first attempt: restored recorder had
+  DEFAULT `minIntervalS:2` so an immediate `add()` was rejected — construct
+  restored recorder with matching thresholds.
+- `test/background_gps_recorder_test.dart`: start/stop state, CSV streaming,
+  pause-skips-appends-but-stream-alive, listener notifications. Reads counts
+  via `GpsLogStore.defaultLogsDir()` (the recorder writes under
+  documents/gps_logs).
+- `test/drafts_history_test.dart`: count exclusion (draft survey/gis never
+  counted, promoted on `status:'saved'`), form-detail "Save as draft" →
+  resumable row, history lists drafts + group separation + delete + survey
+  draft resume → promoted to saved. GIS-draft delete located via the card's
+  title text (draft order not guaranteed — same-ms `currentDateAndTime`).
+- `test/database_integration_test.dart`: `surveySessionCountForProject(b.id)`
+  expectation changed 1 → 0 because a seeded `status:'draft'` row now
+  correctly does not count as collected.
+
+---
+
 ## [2.1.1] — project sharing subsystem
 
 Intended to deliver (in progress per this session): the **project

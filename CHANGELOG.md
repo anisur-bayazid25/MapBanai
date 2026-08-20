@@ -4,6 +4,30 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.1.2] - 2026-08-20
+
+### Added
+- **GPS recording continues after leaving GPS Mode and with the screen off**:
+  - Track recording runs as a **background recorder** with a foreground
+    notification + wake lock — start a track, press Back, switch modes, even
+    lock the screen, and fixes keep flowing into the log CSV
+  - A live red banner on the Home screen appears while a recording is active
+    (Open GPS Mode / Stop)
+- **Drafts** — save unfinished work and resume it later:
+  - Survey mode: **Save as draft** keeps a partially filled form (no
+    required/validation blocking); resume it from History
+  - GIS mode: **Save draft** while drawing a point/line/polygon, then resume
+    the exact shape later from History
+  - New **Drafts** section at the top of Survey History with **Resume** /
+    **Delete** actions
+  - Drafts never count as collected data (map annotations, exports, project
+    statistics skip them)
+
+### Changed
+- GIS line/polygon recording also uses a foreground notification + wake lock,
+  so drawing continues with the screen off
+- History groups saved responses as before; drafts live in their own section
+
 ## [2.1.1] - 2026-08-19
 
 ### Added

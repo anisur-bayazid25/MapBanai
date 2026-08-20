@@ -110,7 +110,8 @@ void main() {
       );
 
       expect(await db.surveySessionCountForProject(a.id), 3);
-      expect(await db.surveySessionCountForProject(b.id), 1);
+      // Drafts are in-progress work, not collected responses.
+      expect(await db.surveySessionCountForProject(b.id), 0);
       expect(await db.getSurveySessions(), hasLength(4));
     });
 

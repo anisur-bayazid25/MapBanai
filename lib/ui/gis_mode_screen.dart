@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' show Point;
 
 import 'package:drift/drift.dart' as drift;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -34,7 +35,16 @@ class _InfoFeature {
 class GisModeScreen extends StatefulWidget {
   final String projectName;
 
-  const GisModeScreen({required this.projectName, super.key});
+  /// When set, the screen restores an in-progress (draft) feature for this
+  /// session id instead of starting fresh. The draft keeps saving to that
+  /// same session until the user finishes (which promotes it to saved).
+  final int? resumeDraftId;
+
+  const GisModeScreen({
+    required this.projectName,
+    this.resumeDraftId,
+    super.key,
+  });
 
   @override
   State<GisModeScreen> createState() => _GisModeScreenState();
@@ -62,6 +72,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
   List<Project> _projects = [];
   int? _selectedProjectId;
   String? _selectedProjectName;
+
+  int? _resumeDraftSessionId;
 
   _DraftType _draftType = _DraftType.none;
   Circle? _draftPoint;
@@ -100,15 +112,94 @@ class _GisModeScreenState extends State<GisModeScreen> {
       (p) => p.name == widget.projectName,
     );
     if (current.isNotEmpty) {
-      _selectProject(current.first.id, current.first.name);
+      await _selectProject(current.first.id, current.first.name);
     } else if (projects.isNotEmpty) {
-      _selectProject(projects.first.id, projects.first.name);
+      await _selectProject(projects.first.id, projects.first.name);
     } else {
       setState(() {
         _selectedProjectId = null;
         _selectedProjectName = null;
       });
     }
+    await _loadResumeDraft();
+  }
+
+  /// Restores an in-progress feature (line/polygon recorder state or point
+  /// fix) so the user can continue recording and finish it later.
+  Future<void> _loadResumeDraft() async {
+    final id = widget.resumeDraftId;
+    if (id == null) return;
+    final row = await _database.getSurveySession(id);
+    if (row == null || !mounted) return;
+
+    Map<String, dynamic> responses;
+    try {
+      responses = jsonDecode(row.responses) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    final featureType = responses['feature_type'];
+    if (featureType == null) return;
+
+    _resumeDraftSessionId = row.id;
+
+    setState(() {
+      if (featureType == 'point') {
+        _draftType = _DraftType.point;
+        final lat = responses['latitude'];
+        final lon = responses['longitude'];
+        if (lat is num && lon is num) {
+          _draftPointFix = (
+            lat: lat.toDouble(),
+            lon: lon.toDouble(),
+            accuracy: (responses['accuracy_m'] as num?)?.toDouble() ?? 0,
+          );
+        }
+      } else if (featureType == 'line' || featureType == 'polygon') {
+        _draftType = featureType == 'line'
+            ? _DraftType.line
+            : _DraftType.polygon;
+        final raw = responses['recorder'];
+        if (raw is Map<String, dynamic>) {
+          _recorder.restore(raw);
+        }
+      }
+    });
+
+    _showSnack('Draft restored — continue, finish, or save it again');
+    _refreshDraftGeometry();
+
+    if (_draftType == _DraftType.point) {
+      await _restorePointDraftMarker();
+    }
+    if (_recorder.running) {
+      _restartTicker();
+      _startLocationStream(foreground: true);
+    }
+  }
+
+  /// Renders the circular draggable marker for a restored point draft.
+  Future<void> _restorePointDraftMarker() async {
+    final controller = _controller;
+    final fix = _draftPointFix;
+    if (!_styleReady || controller == null || fix == null) return;
+    if (_draftPoint != null) {
+      await controller.removeCircle(_draftPoint!);
+    }
+    final circle = await controller.addCircle(
+      CircleOptions(
+        geometry: LatLng(fix.lat, fix.lon),
+        circleRadius: 10,
+        circleColor: '#E53935',
+        circleStrokeWidth: 3,
+        circleStrokeColor: '#FFFFFF',
+        draggable: true,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _draftPoint = circle;
+    });
   }
 
   Future<void> _selectProject(int id, String name) async {
@@ -132,7 +223,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     });
   }
 
-  Future<void> _startLocationStream() async {
+  Future<void> _startLocationStream({bool? foreground}) async {
     final granted = await _locationService.ensurePermission();
     if (!mounted) return;
     setState(() {
@@ -143,11 +234,37 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (!granted) return;
 
     await _subscription?.cancel();
-    _subscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
+
+    final recording =
+        foreground ??
+        ((_draftType == _DraftType.line ||
+                _draftType == _DraftType.polygon) &&
+            _recorder.running);
+
+    // While recording a line/polygon the stream runs with a foreground
+    // notification + wake lock so fixes keep arriving with the screen off.
+    final LocationSettings settings;
+    if (recording && defaultTargetPlatform == TargetPlatform.android) {
+      settings = AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 0,
-      ),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'MapBanai — GIS recording',
+          notificationText: 'Feature recording continues with the screen off',
+          notificationChannelName: 'MapBanai GIS recording',
+          enableWakeLock: true,
+          setOngoing: true,
+        ),
+      );
+    } else {
+      settings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+      );
+    }
+
+    _subscription = Geolocator.getPositionStream(
+      locationSettings: settings,
     ).listen(
       (position) {
         if (!mounted) return;
@@ -211,6 +328,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
   void _onStyleLoaded() {
     _styleReady = true;
     _addSurveyAnnotations();
+    if (_draftActive) {
+      _refreshDraftGeometry();
+      if (_draftType == _DraftType.point) {
+        _restorePointDraftMarker();
+      }
+    }
   }
 
   Map? _annotationData(Annotation? annotation) {
@@ -360,6 +483,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
         .toList();
 
     for (final session in sessions) {
+      if (session.status == 'draft') continue;
       final data = <String, dynamic>{
         'session_id': session.id,
         'title': session.title,
@@ -580,6 +704,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       _refreshDraftGeometry();
     }
     _restartTicker();
+    _startLocationStream(foreground: true);
   }
 
   void _refreshDraftGeometry() {
@@ -755,14 +880,27 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
     if (result.name.isNotEmpty) title = '$title — ${result.name}';
 
-    final sessionId = await _database.insertSurveySession(
-      SurveySessionsCompanion(
-        projectId: drift.Value(projectId),
-        title: drift.Value(title),
-        status: const drift.Value('saved'),
-        responses: drift.Value(jsonEncode(responses)),
-      ),
-    );
+    final resumeDraftId = _resumeDraftSessionId;
+    final int sessionId;
+    if (resumeDraftId != null) {
+      await _database.updateSurveySession(
+        resumeDraftId,
+        title: title,
+        status: 'saved',
+        responses: jsonEncode(responses),
+      );
+      sessionId = resumeDraftId;
+      _resumeDraftSessionId = null;
+    } else {
+      sessionId = await _database.insertSurveySession(
+        SurveySessionsCompanion(
+          projectId: drift.Value(projectId),
+          title: drift.Value(title),
+          status: const drift.Value('saved'),
+          responses: drift.Value(jsonEncode(responses)),
+        ),
+      );
+    }
     if (!mounted) return;
     _showSnack('$featureType saved');
     final controller = _controller;
@@ -784,6 +922,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   void _cancelDraft() {
+    final wasRecording =
+        (_draftType == _DraftType.line || _draftType == _DraftType.polygon) &&
+            _recorder.running;
     _recorder.reset();
     _ticker?.cancel();
     if (mounted) {
@@ -798,6 +939,92 @@ class _GisModeScreenState extends State<GisModeScreen> {
       });
     }
     _removeDraftAnnotations();
+    if (wasRecording) {
+      _startLocationStream();
+    }
+  }
+
+  String get _draftTypeName {
+    switch (_draftType) {
+      case _DraftType.point:
+        return 'point';
+      case _DraftType.line:
+        return 'line';
+      case _DraftType.polygon:
+        return 'polygon';
+      case _DraftType.none:
+        return '';
+    }
+  }
+
+  bool get _canSaveDraft {
+    if (!_draftActive) return false;
+    if (_draftType == _DraftType.point) return _draftPointFix != null;
+    return _recorder.vertices.isNotEmpty;
+  }
+
+  /// Stores the in-progress feature as a draft session so it can be resumed
+  /// later from the History screen (for the selected project).
+  Future<void> _saveDraft() async {
+    final projectId = _selectedProjectId;
+    if (projectId == null) {
+      _showSnack('No project selected');
+      return;
+    }
+    if (!_canSaveDraft) return;
+
+    final responses = <String, dynamic>{
+      'draft': true,
+      'feature_type': _draftTypeName,
+      'user_name': await _database.getSetting('user_name'),
+      'saved_at': DateTime.now().toIso8601String(),
+    };
+
+    String title;
+    if (_draftType == _DraftType.point) {
+      final fix = _draftPointFix;
+      if (fix == null) {
+        _showSnack('Waiting for a GPS fix before saving the draft');
+        return;
+      }
+      responses['latitude'] = fix.lat;
+      responses['longitude'] = fix.lon;
+      responses['accuracy_m'] = fix.accuracy;
+      title = 'Draft point';
+    } else {
+      responses['recorder'] = _recorder.serialize();
+      final pts = [
+        for (final p in _recorder.vertices)
+          (lat: p.latitude, lon: p.longitude),
+      ];
+      title = _draftType == _DraftType.line
+          ? 'Draft line'
+          : 'Draft polygon';
+      if (pts.length >= 1) {
+        title = '$title • ${pts.length} pts';
+      }
+    }
+
+    final targetId = _resumeDraftSessionId;
+    if (targetId != null) {
+      await _database.updateSurveySession(
+        targetId,
+        title: title,
+        status: 'draft',
+        responses: jsonEncode(responses),
+      );
+    } else {
+      await _database.insertSurveySession(
+        SurveySessionsCompanion(
+          projectId: drift.Value(projectId),
+          title: drift.Value(title),
+          status: const drift.Value('draft'),
+          responses: drift.Value(jsonEncode(responses)),
+        ),
+      );
+    }
+    if (!mounted) return;
+    _showSnack('Draft saved — resume it from History later');
   }
 
   // ── measurement tools ────────────────────────────────────────
@@ -1393,6 +1620,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ),
             const SizedBox(height: 4),
             _buildDraftMetrics(points),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _canSaveDraft ? _saveDraft : null,
+                icon: const Icon(Icons.edit_note, size: 18),
+                label: const Text('Save draft'),
+              ),
+            ),
             const SizedBox(height: 4),
             _buildDraftActions(recording),
           ],

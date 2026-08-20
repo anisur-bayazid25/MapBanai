@@ -216,6 +216,15 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Draft sessions (in-progress surveys / features) across all projects,
+  /// newest first.
+  Future<List<SurveySession>> getDraftSurveySessions() {
+    return (select(surveySessions)
+          ..where((row) => row.status.equals('draft'))
+          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
+        .get();
+  }
+
   Future<SurveySession?> getSurveySession(int id) async {
     return (select(surveySessions)..where((row) => row.id.equals(id)))
         .getSingleOrNull();
@@ -331,25 +340,32 @@ class AppDatabase extends _$AppDatabase {
     final count = surveySessions.id.count();
     final query = selectOnly(surveySessions)
       ..addColumns([count])
-      ..where(surveySessions.projectId.equals(projectId));
+      ..where(
+        surveySessions.projectId.equals(projectId) &
+            surveySessions.status.equals('draft').not(),
+      );
     final row = await query.getSingle();
     return row.read(count) ?? 0;
   }
 
   /// Counts of collected data for a project: (survey responses, GIS features).
   /// A session counts as a GIS feature when its responses JSON contains a
-  /// `feature_type` key.
+  /// `feature_type` key. Drafts are not collected data.
   Future<({int survey, int gis})> responseCountsForProject(int projectId) async {
     final count = surveySessions.id.count();
     final totalQuery = selectOnly(surveySessions)
       ..addColumns([count])
-      ..where(surveySessions.projectId.equals(projectId));
+      ..where(
+        surveySessions.projectId.equals(projectId) &
+            surveySessions.status.equals('draft').not(),
+      );
     final total = (await totalQuery.getSingle()).read(count) ?? 0;
 
     final gisQuery = selectOnly(surveySessions)
       ..addColumns([count])
       ..where(
         surveySessions.projectId.equals(projectId) &
+            surveySessions.status.equals('draft').not() &
             surveySessions.responses.like('%feature_type%'),
       );
     final gis = (await gisQuery.getSingle()).read(count) ?? 0;

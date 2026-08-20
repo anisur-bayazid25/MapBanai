@@ -12,12 +12,14 @@ class SurveyFormRenderer extends StatefulWidget {
   final SurveyForm form;
   final VoidCallback? onComplete;
   final void Function(Map<String, dynamic> answers)? onSave;
+  final void Function(Map<String, dynamic> answers)? onSaveDraft;
   final Map<String, dynamic>? initialAnswers;
 
   const SurveyFormRenderer({
     required this.form,
     this.onComplete,
     this.onSave,
+    this.onSaveDraft,
     this.initialAnswers,
     super.key,
   });
@@ -138,6 +140,17 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
               label: const Text('Save responses'),
             ),
           ),
+          if (widget.onSaveDraft != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _saveDraft,
+                icon: const Icon(Icons.edit_note),
+                label: const Text('Save as draft'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -197,6 +210,13 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     }
 
     widget.onSave?.call(_answers);
+    widget.onComplete?.call();
+  }
+
+  /// Saves whatever has been filled in so far without applying required /
+  /// constraint validation, so interrupted surveys can be resumed later.
+  void _saveDraft() {
+    widget.onSaveDraft?.call(Map<String, dynamic>.from(_answers));
     widget.onComplete?.call();
   }
 }

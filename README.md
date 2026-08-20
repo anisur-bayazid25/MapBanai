@@ -28,7 +28,8 @@ No account, no registration, no internet needed.
 
 - **Open** — create, rename, archive or delete projects; open the selected
   project.
-- **History** — past survey sessions and captured features.
+- **History** — past survey sessions, captured features and **drafts**
+  (unfinished forms / drawings you can resume).
 - **Export** — export collected data (CSV / GeoJSON).
 - **Settings** — language, user name, About, update checks, **danger zone**
   (reset data requires typing your name to confirm).
@@ -45,18 +46,34 @@ No account, no registration, no internet needed.
 
 ## GPS mode
 
-- **Tracks**: start/stop a live track, GPS accuracy monitor built in.
+- **Tracks**: start/stop a live track. Recording keeps going in the
+  **background** — press Back, open another mode, even lock the screen, and
+  fixes keep flowing into the log (foreground notification + wake lock). The
+  Home screen shows a red banner while a recording is active.
 - **Waypoints**: quick manual points with a label (saved to CSV).
 - **Save Point**: capture a precise point from the live position (saved to
   CSV). Track and point CSVs land in the device's `Export/<project>/`
   folder, shareable from the app.
+
+## Drafts (v2.1.2+)
+
+- **Survey mode**: the form has a **Save as draft** button — a partially
+  filled answer set is kept without running required/validation checks.
+- **GIS mode**: you can **Save draft** while drawing a point, line or
+  polygon, and resume the exact shape later.
+- Everything unfinished lives in the **Drafts** section at the top of
+  **History** with **Resume** / **Delete**. Drafts are never counted as
+  collected data (map annotations, exports, project statistics skip them),
+  and saving a resumed draft promotes it to a normal saved entry.
 
 ## GIS mode
 
 - Live map with 5 built-in basemaps (OSM, OSM Humanitarian, CartoDB
   Light/Dark, Esri Satellite).
 - Capture **points, lines and polygons** directly on the map, with
-  project-defined attribute fields and GPS accuracy filtering.
+  project-defined attribute fields and GPS accuracy filtering. While a line
+  or polygon is being drawn, recording also runs in the background with a
+  foreground notification so it survives screen-off.
 - Browse and delete captured features via the list/legend panel.
 
 ## Data export

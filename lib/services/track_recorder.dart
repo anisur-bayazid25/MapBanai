@@ -108,5 +108,59 @@ class TrackRecorder {
     return '$minutes:$seconds';
   }
 
+  /// Captures the full recorder state (vertices + timing) so an in-progress
+  /// recording can be stashed in a draft and resumed later via [restore].
+  Map<String, dynamic> serialize() => {
+        'running': running,
+        'paused': paused,
+        'started_at': _startedAt?.toIso8601String(),
+        'last_resume_at': _lastResumeAt?.toIso8601String(),
+        'paused_total_ms': _pausedTotal.inMilliseconds,
+        'last_vertex_time': _lastVertexTime?.toIso8601String(),
+        'vertices': [
+          for (final p in vertices)
+            {
+              'latitude': p.latitude,
+              'longitude': p.longitude,
+              'altitude': p.altitude,
+              'accuracy': p.accuracy,
+              'timestamp': p.timestamp.toIso8601String(),
+            },
+        ],
+      };
+
+  /// Replaces the current state with a previously [serialize]d recording.
+  void restore(Map<String, dynamic> json) {
+    reset();
+    running = json['running'] == true;
+    paused = json['paused'] == true;
+    _startedAt = DateTime.tryParse(json['started_at'] ?? '');
+    _lastResumeAt = DateTime.tryParse(json['last_resume_at'] ?? '');
+    _pausedTotal = Duration(
+      milliseconds: (json['paused_total_ms'] as num?)?.toInt() ?? 0,
+    );
+    _lastVertexTime = DateTime.tryParse(json['last_vertex_time'] ?? '');
+    final raw = json['vertices'];
+    if (raw is List) {
+      vertices.addAll([
+        for (final v in raw)
+          if (v is Map && v['latitude'] is num && v['longitude'] is num)
+            Position(
+              latitude: (v['latitude'] as num).toDouble(),
+              longitude: (v['longitude'] as num).toDouble(),
+              altitude: (v['altitude'] as num?)?.toDouble() ?? 0,
+              accuracy: (v['accuracy'] as num?)?.toDouble() ?? 0,
+              timestamp:
+                  DateTime.tryParse(v['timestamp'] ?? '') ?? DateTime.now(),
+              altitudeAccuracy: 0,
+              heading: 0,
+              headingAccuracy: 0,
+              speed: 0,
+              speedAccuracy: 0,
+            ),
+      ]);
+    }
+  }
+
   DateTime? _lastVertexTime;
 }
