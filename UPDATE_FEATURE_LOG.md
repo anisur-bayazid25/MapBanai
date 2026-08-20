@@ -144,10 +144,14 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 
 | # | Step | Command | Result |
 |---|------|---------|--------|
-| H1 | bump | `dart run tool/bump_version.dart patch` | pubspec + AppInfo.version → `2.1.2+3` |
-| H2 | commit | `git commit -m "..."` | (filled on execution) |
-| H3 | push main + tag | `git push origin main` + `git tag v2.1.2 && git push origin v2.1.2` | (filled on execution) |
-| H4 | CI build | poll `GET /actions/runs` | (filled on execution) |
-| H5 | release | `GET /releases/tags/v2.1.2` | (filled on execution) |
+| H1 | bump | `dart run tool/bump_version.dart patch` | OK — pubspec + AppInfo.version → `2.1.2+3` |
+| H2 | commit | `git commit -m "MapBanai v2.1.2: background GPS continuity + draft system"` | 164b323 (20 files, +1600) |
+| H3 | push main + tag | `git push origin main` + `git tag v2.1.2 && git push origin v2.1.2` | OK — CI triggered on 164b323 |
+| H4 | CI build | poll Actions run | **1st run FAILED (6m6s)** at `:app:compileReleaseKotlin`: `MainActivity.kt` latent errors — `lm.unregisterGpsStatusCallback` unresolved (hidden GpsStatus API — code registers a `GnssStatus.Callback`, so it must call `unregisterGnssStatusCallback`) and `openInputStream()` returns `InputStream` not `FileInputStream`. Root cause: the v2.1.1 release ran on 1cfd799 which PREDATES the 0f24150 sharing-subsystem commit that added this Kotlin — this was the first CI build to ever compile it. Fixed both + re-verified locally (`flutter build apk --release --no-pub` OK, 110.2 MB), committed 88990f1, moved tag `git push origin :refs/tags/v2.1.2` + `git tag -f v2.1.2 && git push origin v2.1.2` → rerun **success** |
+| H5 | release | `GET /releases/tags/v2.1.2` | **OK — Release "v2.1.2" published 2026-08-20T17:34Z by github-actions on 88990f1 with app-release.apk** |
 
 ## FINAL STATUS (v2.1.2)
+- **v2.1.2 SHIPPED** — main = 88990f1, Release v2.1.2 with app-release.apk (110.2 MB) built on GitHub Actions.
+- **Part G (v2.1.2 features): DONE, verified** — background GPS recorder (screen-off + Back-button continuity, fg notification + wake lock, Home banner), GIS line/polygon screen-off continuity, draft system (survey + GIS save/resume/delete via History Drafts section, drafts excluded from counts/annotations/exports). 178/178 tests, analyze 0 errors, release APK builds.
+- **Pipeline hiccup caught & fixed**: the Kotlin GLUE in MainActivity.kt (gnss callback unregister + stream typing) had never been compiled by CI — v2.1.1's tag build predated the sharing-subsystem commit that introduced it. Fixed, verified locally, re-tagged, CI passed.
+- **Remaining manual device checkpoints (unchanged from v2.1.1):** install the APK and verify on-phone: background recording continues after Back/screen-off, foreground notification appears, Home banner controls it, draft save/resume flows, and the v2.1.1 update checker now offers v2.1.2.
