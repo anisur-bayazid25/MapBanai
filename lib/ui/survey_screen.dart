@@ -7,7 +7,9 @@ import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
+import 'package:mapbanai/ui/import_flow_dialogs.dart';
 import 'package:mapbanai/ui/project_detail_screen.dart';
+import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/ui/survey_form_builder_screen.dart';
 import 'package:mapbanai/ui/survey_form_detail_screen.dart';
 import 'package:provider/provider.dart';
@@ -162,8 +164,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
     _showSnack('Project "${project.name}" deleted');
   }
 
-  void _shareProject() {
-    _showSnack('Sharing projects is coming soon');
+  Future<void> _shareProject() async {
+    final project = await _database.getProjectByName(_projectName);
+    if (project == null || !mounted) return;
+    final flow = ProjectSharingFlow(database: _database);
+    await showExportProjectOptions(context, flow: flow, project: project);
   }
 
   void _showSnack(String message) {

@@ -53,6 +53,82 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.1.3] — import robustness, QR camera scan, working share menu, resilient updater
+
+### Import: "Choose .mbproj file" 
+- `SafProjectFileSink.pickPackageFile` previously swallowed every picker
+  error (`catch (_) { return null; }`) AND used `FileType.custom +
+  allowedExtensions` — unreliable on Android SAF (some file managers ignore
+  the MIME filter → empty/null result) → "nothing happened". Now: `FileType.any`,
+  validate `p.extension(...).endsWith('.mbproj')`, throw
+  `ProjectImportException(wrongPackageType)` for a wrong file, and let real
+  picker errors propagate. `home_screen._startImportFlow` wraps the pick in
+  try/catch → SnackBar (generic messages when not a `ProjectImportException`/
+  `FormatException`). Cancel still returns null silently.
+
+### Import: "Paste project code" black screen (double-pop)
+- `runProjectImport` popped its blockers-first progress dialog at 3 points,
+  then the `catch` block popped AGAIN when `finishImport` threw → the 2nd pop
+  removed HomeScreen → black screen; error dialog rendered on a dead context.
+- Trigger in practice: **bootstrap QR codes**. `startQrImport` returns a
+  session with `bootstrapMeta` set but `allowBootstrap` stayed `false` (the
+  gate `if (session.allowBootstrap && ...)` never fired) → fell into
+  `finishImport` → `package == null` → threw internal → black screen.
+- Fix: (1) branch on `session.bootstrapMeta != null` directly (show the
+  friendly "info only, ask for the .mbproj" dialog) — for both pasted codes
+  and deep links; (2) guard every pop with `progressVisible` so the catch
+  block pops at most once; (3) `if (!context.mounted) return;` after the
+  start await. Removed the now-unused `allowBootstrap` field.
+
+### Import: "Scan QR code" (new, no native deps)
+- `pubspec` + `zxing2: ^0.2.4` (pure-Dart ZXing port; `dart pub get` only,
+  NO `.flutter-plugins` sync, no AGP/Gradle risk — `mobile_scanner` was
+  rejected: 6.x pins AGP 8.13/Gradle 8.13+ & Kotlin 2.2.20, 5.2.3 pins AGP
+  8.3.2/Gradle 8.4+, both incompatible with this repo's AGP 8.1.0/Gradle
+  8.3).
+- `lib/services/qr_scanner.dart`: `scanFromCamera()` captures a photo via the
+  already-present `image_picker` (intent-based, no CAMERA permission), then
+  `decodeFromFile()` decodes with `image` (decode → `bakeOrientation` → ABGR
+  → `RGBLuminanceSource` → `BinaryBitmap(GlobalHistogramBinarizer)` →
+  `QRCodeReader`), trying inverted source as a fallback, trimming the text.
+  Throws `QrScanException` (const ctor, user-safe message).
+- Home import dialog: 3rd option `Scan QR code`; on `QrScanException` a
+  dialog offers "Paste instead" + Close.
+
+### Survey Mode ⋮ → Share project
+- `survey_screen._shareProject` was a `void` stub ("coming soon"). Now
+  resolves the project via `_database.getProjectByName(_projectName)` and
+  calls the same `showExportProjectOptions(context, flow: ProjectSharingFlow(database: _database), project:)`
+  the working Project settings button uses. Reuses the screen's open DB.
+
+### Updater: 99% → "network error"
+- Root: `UpdateDownloader.download` had NO completeness check, NO resume, NO
+  retry; a mid-body connection drop (110 MB APK on a flaky link) surfaced as
+  `ClientException`, and `update_dialog` `catch (_)` swallowed the reason.
+- Rewrite: writes `.part`; `Range: bytes=N-` resume across up to 3 attempts
+  (partial file persists between attempts); accepts 200 (reset offset) and
+  206; per-chunk `.timeout(45s)`; enforces `received == expected` (throws
+  `HttpException` if short); atomic `rename()` to `mapbanai-update.apk` only
+  after a complete body; final `onProgress(1)` only after rename.
+  `download(url, {downloadDir, onProgress})` — injectable dir for tests.
+  On persistent failure throws `HttpException('Download failed: $cause …')`.
+- `update_dialog`: stores `_error` from the caught exception and displays it
+  in red (falling back to the old generic copy when empty).
+
+### Tests (185 total green; analyze 0 errors/warnings — 72 info-level, all pre-existing baseline)
+- `test/qr_scanner_test.dart`: renders a QR from `zxing2.Encoder` (ByteMatrix
+  → `image` PNG, quiet zone) → `decodeFromFile` round-trips; blank image
+  throws `QrScanException`; whitespace trimmed.
+- `test/update_downloader_test.dart`: local `HttpServer` with Range support:
+  clean download written to final `.apk` (no `.part` left, progress→1);
+  **mid-body socket drop** (announce full length, `detachSocket`,
+  write slice, `destroy`) → retried with `Range: bytes=512-` (206) and
+  completes byte-identical; 404 rejected.
+- `test/project_share_test.dart`: bootstrap QR `startQrImport` → session has
+  `bootstrapMeta` set and `isQr == false` (guards the black-screen branch).
+
+---
+
 ## [2.1.2] — background GPS continuity + drafts
 
 ### Background GPS recorder (screen-off + Back-button continuity)

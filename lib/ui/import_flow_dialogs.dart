@@ -69,25 +69,34 @@ Future<void> runProjectImport(
   );
 
   ProjectImportSession? session;
+  var progressVisible = true;
   try {
     session = qrPayload != null && qrPayload.isNotEmpty
         ? await flow.startQrImport(qrPayload)
         : await flow.startFileImport(filePath!);
+    if (!context.mounted) return;
 
-    if (session.allowBootstrap && session.bootstrapMeta != null) {
-      navigator.pop();
+    if (session.bootstrapMeta != null) {
+      if (progressVisible) {
+        navigator.pop();
+        progressVisible = false;
+      }
       await _showBootstrapMessage(context, session.bootstrapMeta!);
       return;
     }
 
     ImportChoice choice = ImportChoice.cancel;
     if (session.isConflict) {
-      navigator.pop();
+      if (progressVisible) {
+        navigator.pop();
+        progressVisible = false;
+      }
       choice = await showProjectConflictDialog(context, session.meta)
           ?? ImportChoice.cancel;
       if (choice == ImportChoice.cancel) return;
-    } else {
+    } else if (progressVisible) {
       navigator.pop();
+      progressVisible = false;
     }
 
     if (!context.mounted) return;
@@ -103,7 +112,13 @@ Future<void> runProjectImport(
     );
     onImported();
   } catch (error) {
-    navigator.pop();
+    // Pop the progress dialog exactly once — finishImport throws with the
+    // dialog already dismissed in some flows (e.g. bootstrap codes), and a
+    // second pop would remove HomeScreen and leave a black screen.
+    if (progressVisible) {
+      navigator.pop();
+      progressVisible = false;
+    }
     if (!context.mounted) return;
     await showImportErrorDialog(context, error);
   }

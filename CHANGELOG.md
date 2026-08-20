@@ -4,6 +4,30 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.1.3] - 2026-08-21
+
+### Fixed
+- **Import → "Choose .mbproj file" now works and never fails silently**: the
+  Android SAF filter could report nothing (or an error was swallowed) — the
+  picker now accepts any file and validates the `.mbproj` extension, and any
+  real failure shows a message instead of doing nothing.
+- **Import → "Paste project code" no longer black-screens the app**: the
+  import flow popped its progress dialog twice when the commit step threw
+  (removing the Home screen). Bootstrap codes (projects too large for a QR)
+  now show their friendly "ask the sender for the file" message instead of
+  an "Import failed" crash.
+- **Survey Mode ⋮ → Share project** now runs the real share sheet (Save /
+  Share .mbproj) instead of "coming soon".
+- **In-app update download no longer fails at ~99%**: downloads resume from
+  the last byte across dropped connections (up to 3 attempts), verify the
+  byte count against the server, and rename to the final APK atomically. The
+  dialog now shows the actual reason instead of a generic message.
+
+### Added
+- **Import → "Scan QR code"**: open the camera, photograph a project QR code
+  and import it (pure-Dart ZXing decode; paste is offered as a fallback if
+  the code can't be read).
+
 ## [2.1.2] - 2026-08-20
 
 ### Added

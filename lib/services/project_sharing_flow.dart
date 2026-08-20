@@ -57,18 +57,25 @@ class SafProjectFileSink implements ProjectFileSink {
 
   @override
   Future<String?> pickPackageFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Import project',
-        type: FileType.custom,
-        allowedExtensions: ['mbproj'],
+    // FileType.custom + allowedExtensions can be unreliable on Android SAF
+    // (some file managers ignore the MIME filter and report an empty/null
+    // result, which previously looked like "nothing happened"). Pick any
+    // file and validate the extension ourselves.
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Import project',
+      type: FileType.any,
+    );
+    final files = result?.files;
+    if (files == null || files.isEmpty) return null;
+    final path = files.first.path;
+    if (path == null || path.isEmpty) return null;
+    if (!p.extension(path).toLowerCase().endsWith('.mbproj')) {
+      throw const ProjectImportException(
+        ProjectImportError.wrongPackageType,
+        'The chosen file is not a .mbproj MapBanai package.',
       );
-      final files = result?.files;
-      if (files == null || files.isEmpty) return null;
-      return files.first.path;
-    } catch (_) {
-      return null;
     }
+    return path;
   }
 }
 
@@ -166,8 +173,9 @@ class ProjectSharingFlow {
   }
 
   /// Validates an inline QR payload (throws [FormatException] / returns
-  /// session with data). Bootstrap codes are reported through
-  /// [ProjectImportSession.allowBootstrap].
+  /// session with data). Bootstrap codes (informational only: the project is
+  /// too large for a QR) are reported through
+  /// [ProjectImportSession.bootstrapMeta].
   Future<ProjectImportSession> startQrImport(String payload) async {
     final decoded = ProjectQr.parse(payload);
     if (decoded == null) {
@@ -245,7 +253,6 @@ class ProjectImportSession {
     this.conflict, {
     this.qrData,
     this.payload,
-    this.allowBootstrap = false,
   });
 
   /// Set for file-based imports.
@@ -259,8 +266,6 @@ class ProjectImportSession {
 
   /// The original QR payload string (for bootstrap options).
   final String? payload;
-
-  final bool allowBootstrap;
 
   /// Set for bootstrap-QR payloads (no importable data — instructions only).
   ProjectPackageMeta? bootstrapMeta;

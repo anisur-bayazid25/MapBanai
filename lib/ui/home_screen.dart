@@ -7,7 +7,9 @@ import 'package:mapbanai/services/background_gps_recorder.dart';
 import 'package:mapbanai/services/backup_service.dart';
 import 'package:mapbanai/services/intent_handler.dart';
 import 'package:mapbanai/services/project_links.dart';
+import 'package:mapbanai/services/project_importer.dart';
 import 'package:mapbanai/services/project_sharing_flow.dart';
+import 'package:mapbanai/services/qr_scanner.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
@@ -183,7 +185,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
-  /// Home → Import Project: choose a .mbproj file or paste a project code.
+  /// Home → Import Project: choose a .mbproj file, paste a project code or
+  /// scan a project QR code.
   Future<void> _startImportFlow() async {
     final source = await showDialog<String>(
       context: context,
@@ -202,15 +205,79 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: const Text('Enter a MapBanai QR code or link'),
             onTap: () => Navigator.pop(context, 'paste'),
           ),
+          ListTile(
+            leading: const Icon(Icons.qr_code_scanner_rounded),
+            title: const Text('Scan QR code'),
+            subtitle: const Text('Open the camera to scan a project code'),
+            onTap: () => Navigator.pop(context, 'scan'),
+          ),
         ],
       ),
     );
     if (source == null || !mounted) return;
 
     if (source == 'file') {
-      final path = await SafProjectFileSink().pickPackageFile();
-      if (path == null || !mounted) return;
-      await _runProjectImport(filePath: path);
+      try {
+        final path = await SafProjectFileSink().pickPackageFile();
+        if (path == null || !mounted) return; // user cancelled
+        await _runProjectImport(filePath: path);
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is ProjectImportException || error is FormatException
+                  ? friendlyImportMessage(error)
+                  : 'Could not open the file picker. Please try again.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (source == 'scan') {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        final payload = await QrScanner.scanFromCamera();
+        if (!mounted || payload.trim().isEmpty) return;
+        await _runProjectImport(qrPayload: payload.trim());
+      } on QrScanException catch (error) {
+        if (!mounted) return;
+        final shown = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Could not read the QR code'),
+            content: Text(error.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Close'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final payload = await _promptPasteCode();
+                  if (!context.mounted) return;
+                  Navigator.pop(context, payload != null && payload.trim().isNotEmpty);
+                  if (payload != null && payload.trim().isNotEmpty) {
+                    await _runProjectImport(qrPayload: payload.trim());
+                  }
+                },
+                child: const Text('Paste instead'),
+              ),
+            ],
+          ),
+        );
+        if (shown ?? false) return; // pasted via the dialog
+        messenger.showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(content: Text(friendlyImportMessage(error))),
+        );
+      }
       return;
     }
 

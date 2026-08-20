@@ -44,11 +44,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   bool _downloading = false;
   double _progress = 0;
   bool _failed = false;
+  String _error = '';
 
   Future<void> _downloadAndInstall() async {
     setState(() {
       _downloading = true;
       _failed = false;
+      _error = '';
       _progress = 0;
     });
     try {
@@ -61,11 +63,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       await UpdateDownloader.openInstaller(file);
       if (!mounted) return;
       Navigator.pop(context);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _downloading = false;
         _failed = true;
+        _error = error.toString();
       });
     }
   }
@@ -105,9 +108,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 style: theme.textTheme.bodySmall,
               ),
             ] else if (_failed)
-              const Text(
-                'Download failed. Please check your connection and try again.',
-                style: TextStyle(color: Colors.red),
+              Text(
+                _error.trim().isEmpty
+                    ? 'Download failed. Please check your connection and '
+                        'try again.'
+                    : 'Download failed. $_error',
+                style: TextStyle(color: Colors.red.shade800),
               ),
           ],
         ),

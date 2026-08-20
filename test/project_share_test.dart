@@ -702,6 +702,25 @@ test('import as new copy creates a second project with new identity',
     await clean.close();
   });
 
+  test('bootstrap QR import surfaces a session-level instruction, not a '
+      'crash toward finishImport', () async {
+    final clean = AppDatabase.forTesting();
+    final flow2 = ProjectSharingFlow(database: clean, fileSink: _MemorySink());
+    final payload = ProjectQr.encodeBootstrap(
+      projectId: 'id-1',
+      projectName: 'Bootstrap Proj',
+      projectVersion: 4,
+      checksum: 'abc123',
+    );
+    final session = await flow2.startQrImport(payload);
+    // The import dialog branches on bootstrapMeta BEFORE finishImport, so
+    // the old "Nothing to import" path (which double-popped the navigator
+    // and black-screened the app) is unreachable for bootstrap codes.
+    expect(session.bootstrapMeta, isNotNull);
+    expect(session.isQr, isFalse);
+    await clean.close();
+  });
+
   test('bootstrap QR carries identity + checksum and decodes', () {
     final payload = ProjectQr.encodeBootstrap(
       projectId: 'id-1',
