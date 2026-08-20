@@ -1,12 +1,23 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+/// Thrown when the device blocks installing apps from unknown sources
+/// (Android 8+, `REQUEST_INSTALL_PACKAGES` not granted for MapBanai).
+class InstallPermissionException implements Exception {
+  const InstallPermissionException();
+
+  @override
+  String toString() =>
+      'Your device is blocking installation from this app. Allow '
+      '"Install unknown apps" for MapBanai, then try again.';
+}
+
 /// Downloads the APK from a GitHub release and hands it to the Android
-/// package installer via OpenFile.
+/// package installer.
 class UpdateDownloader {
   static const String _fileName = 'mapbanai-update.apk';
   static const int _maxAttempts = 3;
@@ -106,11 +117,37 @@ class UpdateDownloader {
     return finalFile;
   }
 
-  /// Opens the downloaded file with the system installer.
+  /// Hands the downloaded package to the system installer over the
+  /// `mapbanai/update` platform channel. Throws
+  /// [InstallPermissionException] when "Install unknown apps" is not
+  /// allowed for MapBanai yet.
   static Future<void> openInstaller(File file) async {
-    final result = await OpenFile.open(file.path);
-    if (result.type != ResultType.done) {
-      throw Exception('Could not open installer: ${result.message}');
+    try {
+      await const MethodChannel('mapbanai/update').invokeMethod<void>(
+        'openInstaller',
+        {'path': file.path},
+      );
+    } on PlatformException catch (e) {
+      if (e.code == 'install_permission') {
+        throw const InstallPermissionException();
+      }
+      throw Exception(
+        'Could not open the installer: ${e.message ?? e.code}.',
+      );
+    } on MissingPluginException {
+      throw const InstallPermissionException();
+    }
+  }
+
+  /// Opens the Android "Install unknown apps" settings screen for MapBanai.
+  /// Returns true when the settings screen was launched.
+  static Future<bool> requestInstallPermission() async {
+    try {
+      final allowed = await const MethodChannel('mapbanai/update')
+          .invokeMethod<bool>('openInstallUnknownAppSources');
+      return allowed ?? false;
+    } catch (_) {
+      return false;
     }
   }
 

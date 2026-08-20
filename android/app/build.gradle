@@ -99,6 +99,13 @@ configurations.all {
     }
 }
 
+dependencies {
+    // Used by MainActivity to share the downloaded APK with the system
+    // package installer via the ${applicationId}.fileprovider provider
+    // declared in AndroidManifest.xml.
+    implementation 'androidx.core:core:1.12.0'
+}
+
 flutter {
     source = "../.."
 }

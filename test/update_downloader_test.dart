@@ -91,6 +91,41 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('follows an HTTP redirect and still completes byte-identical',
+      () async {
+    // GitHub release URLs (github.com/.../download/...) 302-redirect to a
+    // signed objects.githubusercontent.com asset. The client must follow the
+    // redirect and then verify the final byte count, not the redirect URL.
+    final payload = _makePayload(3000);
+    final requests = <String>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) {
+      requests.add(req.uri.path);
+      if (req.uri.path == '/release/app.apk') {
+        req.response.statusCode = 302;
+        req.response.headers.set('Location', '/objects/app.apk');
+        req.response.close();
+        return;
+      }
+      req.response.add(payload);
+      req.response.close();
+    });
+    try {
+      double? lastProgress;
+      final file = await UpdateDownloader.download(
+        'http://127.0.0.1:${server.port}/release/app.apk',
+        downloadDir: tempDir,
+        onProgress: (p) => lastProgress = p,
+      );
+      expect(requests.first, '/release/app.apk');
+      expect(requests.last, '/objects/app.apk');
+      expect(lastProgress, 1);
+      expect(file.readAsBytesSync(), payload);
+    } finally {
+      await server.close(force: true);
+    }
+  });
 }
 
 Uint8List _makePayload(int length) {

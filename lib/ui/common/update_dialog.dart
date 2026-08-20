@@ -44,12 +44,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   bool _downloading = false;
   double _progress = 0;
   bool _failed = false;
+  bool _needsInstallPermission = false;
   String _error = '';
 
   Future<void> _downloadAndInstall() async {
     setState(() {
       _downloading = true;
       _failed = false;
+      _needsInstallPermission = false;
       _error = '';
       _progress = 0;
     });
@@ -68,6 +70,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       setState(() {
         _downloading = false;
         _failed = true;
+        _needsInstallPermission = error is InstallPermissionException;
         _error = error.toString();
       });
     }
@@ -107,7 +110,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 'Downloading... ${(_progress * 100).toStringAsFixed(0)}%',
                 style: theme.textTheme.bodySmall,
               ),
-            ] else if (_failed)
+            ] else if (_failed) ...[
               Text(
                 _error.trim().isEmpty
                     ? 'Download failed. Please check your connection and '
@@ -115,6 +118,15 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                     : 'Download failed. $_error',
                 style: TextStyle(color: Colors.red.shade800),
               ),
+              if (_needsInstallPermission) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Open the device settings and enable "Allow from this '
+                  'source", then tap Download & Install again.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ],
           ],
         ),
       ),
@@ -123,6 +135,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           onPressed: _downloading ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
+        if (_needsInstallPermission)
+          FilledButton.icon(
+            onPressed: _downloading
+                ? null
+                : () => UpdateDownloader.requestInstallPermission(),
+            icon: const Icon(Icons.settings_outlined, size: 18),
+            label: const Text('Allow installation'),
+          ),
         FilledButton.icon(
           onPressed: _downloading ? null : _downloadAndInstall,
           icon: const Icon(Icons.download_outlined, size: 18),

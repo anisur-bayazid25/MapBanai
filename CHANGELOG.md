@@ -4,6 +4,38 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.1.4] - 2026-08-21
+
+### Fixed
+- **In-app update no longer shows "Error in Download" after 100%**: the
+  download was fine — the installer step failed silently. The old helper
+  refused to open the APK when "Install unknown apps" is not enabled for
+  MapBanai (Android 8+), with no way to change it. MapBanai now opens the
+  package installer itself, waits for that permission, and the update dialog
+  detects the blocked state and offers an **"Allow installation"** button
+  that jumps straight to the device setting. (The manifest already declared
+  `REQUEST_INSTALL_PACKAGES`; the setting itself must be granted per-app.)
+- **Update downloads verified against HTTP redirects**: GitHub release URLs
+  302-redirect to the CDN; a new test proves the downloader follows the
+  redirect and still verifies the final byte count. The completed APK is
+  handed to the installer via our own FileProvider instead of the removed
+  `open_file` plugin.
+- **Release signing already matches CI** (`KEYSTORE_BASE64` +
+  `KEYSTORE_PASSWORD` + `KEY_ALIAS` + `KEY_PASSWORD` are used by
+  `android/app/build.gradle` exactly as `.github/workflows/release.yml`
+  passes them) — verified. Both the CI release and local
+  `keystore.properties` releases sign with the same expected key, so the
+  in-app update installs cleanly over the previous release.
+- **Backup service** (still backs up `mapbanai.db` + settings to
+  `Documents/MapBanai/backups` when the OS allows it, else app storage) no
+  longer tries the Android-only public path on other platforms; restore and
+  auto-backup behavior are now covered by tests. `hasFragileUserData` allows
+  Android's own backup to keep data too.
+
+### Tests
+- Downloader: clears the 302 → final-URL redirect scenario.
+- Backup: snapshot creation (db + settings) and restore-overwrite.
+
 ## [2.1.3] - 2026-08-21
 
 ### Fixed

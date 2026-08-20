@@ -29,8 +29,12 @@ class BackupService {
   /// survives app uninstalls; everything else falls back to app-private
   /// storage.
   Future<Directory> _backupRoot() async {
+    // Public Documents survives app uninstalls on Android, so the backup
+    // lives there when the OS allows direct access; the candidate is only
+    // meaningful on Android (a literal POSIX path is garbage elsewhere).
     final candidates = <Directory>[
-      Directory('/storage/emulated/0/Documents/$_relativePath'),
+      if (Platform.isAndroid)
+        Directory('/storage/emulated/0/Documents/$_relativePath'),
     ];
     for (final candidate in candidates) {
       try {

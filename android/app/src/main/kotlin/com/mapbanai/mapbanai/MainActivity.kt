@@ -1,13 +1,17 @@
 package com.mapbanai.mapbanai
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.location.GnssStatus
 import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -19,6 +23,7 @@ import java.io.InputStream
 class MainActivity : FlutterActivity() {
     private val gnssChannel = "mapbanai/gnss"
     private val intentsChannel = "mapbanai/intents"
+    private val updateChannel = "mapbanai/update"
     private var lastInView = 0
     private var lastInUse = 0
     private var gnssListener: GnssStatus.Callback? = null
@@ -180,6 +185,25 @@ class MainActivity : FlutterActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            updateChannel
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openInstaller" -> {
+                    val path = call.argument<String>("path")
+                    if (path == null) {
+                        result.error("no_file", "No file path given.", null)
+                        return@setMethodCallHandler
+                    }
+                    openInstaller(File(path), result)
+                }
+                "openInstallUnknownAppSources" -> {
+                    result.success(openInstallUnknownAppSources())
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             intentsChannel
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -194,6 +218,47 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    /** Hands a downloaded APK to the system package installer. */
+    private fun openInstaller(file: File, result: MethodChannel.Result) {
+        if (!file.exists()) {
+            result.error("no_file", "Downloaded package not found.", null)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            result.error("install_permission", "Install unknown apps is not allowed.", null)
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(intent)
+            result.success(true)
+        } catch (e: ActivityNotFoundException) {
+            result.error("no_handler", "No app can install this package.", null)
+        } catch (e: Exception) {
+            result.error("open_failed", e.message, null)
+        }
+    }
+
+    /** Opens the per-app "Install unknown apps" settings screen. */
+    private fun openInstallUnknownAppSources(): Boolean {
+        return try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
         }
     }
 

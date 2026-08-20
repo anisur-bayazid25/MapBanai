@@ -53,6 +53,79 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.1.4] — real in-app-update installer fix (+ verified backup/restore)
+
+### What was already in place (from 2.1.1–2.1.3) vs. what this release actually fixed
+The manifest already declared `REQUEST_INSTALL_PACKAGES`,
+`hasFragileUserData="true"`, the `${applicationId}.fileprovider`
+FileProvider, and `android/app/build.gradle` already signs release builds
+from the same `KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS /
+KEY_PASSWORD` env vars that `.github/workflows/release.yml` injects. So the
+blame for "download completes then shows Error in Download" was NOT the
+permission declaration or the signature config — it was the installer step.
+
+### Root cause of "Error in Download" at 100%
+`open_file`'s Android plugin (`openApkFile` in open_file_android 1.0.6)
+checks `PackageManager.canRequestPackageInstalls()` on Android 8+ and, when
+false, **returns error code −3 without launching the package installer**. Our
+code treated any non-`done` result as a failure and painted it as
+"Download failed." — so users with "Install unknown apps" disabled for
+MapBanai always hit it right after the bar hit 100%, and nothing guided them
+to the switch.
+
+### Fixes
+- **`lib/services/update_downloader.dart`**: dropped the `open_file`
+  dependency. `openInstaller` now calls the app's own `mapbanai/update`
+  platform channel and throws a typed `InstallPermissionException` on code
+  `install_permission`; added `requestInstallPermission()` that opens the
+  per-app "Install unknown apps" settings screen. (MissingPluginException is
+  also mapped to the same typed error so the dialog stays actionable.)
+- **`android/.../MainActivity.kt`** — new `mapbanai/update` MethodChannel:
+  - `openInstaller(path)` → on Android 8+, returns platform error
+    `install_permission` when `canRequestPackageInstalls()` is false; else
+    `FileProvider.getUriForFile(...)`
+    (`authority = $packageName.fileprovider`, `file_paths.xml` covers
+    external-path `.` and cache-path `.`) → `ACTION_VIEW`
+    `application/vnd.android.package-archive` with
+    `FLAG_GRANT_READ_URI_PERMISSION`, mapping `no_file`, `no_handler`, and
+    generic failures to distinct error codes.
+  - `openInstallUnknownAppSources()` → `Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`
+    for this package; returns whether the screen opened.
+  - `android/app/build.gradle`: added `implementation
+    'androidx.core:core:1.12.0'` (forced version) so MainActivity can compile
+    against `androidx.core.content.FileProvider`.
+- **`lib/ui/common/update_dialog.dart`**: while `Download & Install` keeps
+  its rollback to plain error text, an `InstallPermissionException` now also
+  sets a `_needsInstallPermission` flag that shows instructions plus an
+  **"Allow installation"** action button (opens the settings screen), then
+  the user taps Download & Install again. No more dead-end.
+- **Redirect handling test**: `package:http` already follows GitHub's
+  302 → `objects.githubusercontent.com` redirect; added
+  `test/update_downloader_test.dart` "follows an HTTP redirect and still
+  completes byte-identical" asserting the client hits both URL paths, hits
+  100% progress, and the final bytes match — proof that the updater handles
+  redirects and still enforces the byte count.
+
+### Backup/restore (`lib/services/backup_service.dart` + home_screen prompt)
+Already implemented since 2.1.1: periodic `VACUUM INTO` snapshot + settings
+JSON to `Documents/MapBanai/backups` (Android) with app-storage fallback,
+and the fresh-install restore offer on the Home screen (only when no
+projects exist yet and a backup is found; DB closed before the copy). This
+release:
+- Guarded the `/storage/emulated/0/Documents/...` candidate with
+  `Platform.isAndroid` — on Windows the literal POSIX path used to "succeed"
+  by creating `C:\storage\...`, silently misdirecting backups in dev/test.
+- `test/backup_service_test.dart`: fakes `PathProviderPlatform`; verifies
+  `createBackup()` writes db+prefs+meta, `hasBackups()`, and that
+  `restoreLatest()` overwrites the live `mapbanai.db` byte-for-byte.
+
+### Version/test state
+`2.1.4+5`. Full suite 188 green (added redirect + 2 backup tests); analyze
+0 errors/warnings (72 info-level baseline only); release APK builds
+(110.8 MB).
+
+---
+
 ## [2.1.3] — import robustness, QR camera scan, working share menu, resilient updater
 
 ### Import: "Choose .mbproj file" 
