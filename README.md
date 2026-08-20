@@ -139,6 +139,6 @@ MapBanai checks GitHub for new releases on launch and from **Settings**
 ## Support & feedback
 
 - GitHub: https://github.com/anisur-bayazid25/MapBanai (issues welcome)
-- Email: comlesconstructionus@gmail.com
+- Email: anisur.rahman.bayazid@gmail.com
 - Developer changelog (for maintainers): `CHANGELOG.md`,
   in-depth `AI_CHANGELOG.md`.
