@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:mapbanai/services/measure_units.dart';
+
 /// Geodesic and planar geometry helpers for recorded GPS tracks.
 class GeometryService {
   static const double _earthRadiusM = 6371000;
@@ -77,20 +79,11 @@ class GeometryService {
   }
 
   static String formatDistance(double meters) {
-    if (meters < 1000) {
-      return '${meters.toStringAsFixed(1)} m';
-    }
-    return '${(meters / 1000).toStringAsFixed(2)} km';
+    return MeasureUnits.formatDistance(meters, DistanceUnit.auto);
   }
 
   static String formatArea(double squareMeters) {
-    if (squareMeters >= 10000) {
-      return '${(squareMeters / 10000).toStringAsFixed(2)} ha';
-    }
-    if (squareMeters >= 4046.85642) {
-      return '${(squareMeters / 4046.85642).toStringAsFixed(2)} ac';
-    }
-    return '${squareMeters.toStringAsFixed(1)} m²';
+    return MeasureUnits.formatArea(squareMeters, AreaUnit.auto);
   }
 
   static double _toRad(double degrees) => degrees * math.pi / 180;

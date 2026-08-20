@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/state/project_state.dart';
+import 'package:mapbanai/services/backup_service.dart';
+import 'package:mapbanai/services/intent_handler.dart';
+import 'package:mapbanai/services/project_links.dart';
+import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
 import 'package:mapbanai/ui/gps_mode_screen.dart';
+import 'package:mapbanai/ui/import_flow_dialogs.dart';
 import 'package:mapbanai/ui/project_setup_screen.dart';
 import 'package:mapbanai/ui/settings_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
@@ -22,6 +29,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late AppDatabase _database;
+  late BackupService _backup;
+  Timer? _backupTimer;
   List<Project> _projects = [];
   int _refreshTick = 0;
 
@@ -29,11 +38,212 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _database = AppDatabase();
+    _backup = BackupService(_database);
     _loadProjects();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _promptUserNameOnce();
-      _checkForUpdatesSilently();
+      _handleStartupChecks();
     });
+  }
+
+  /// Runs the first-frame startup checks in order so dialogs do not stack:
+  /// backup restore offer (needs to happen before anything reads the list),
+  /// then the user-name prompt, then the silent update check and finally
+  /// any incoming project file/link.
+  Future<void> _handleStartupChecks() async {
+    await _promptRestoreBackup();
+    await _promptUserNameOnce();
+    _checkForUpdatesSilently();
+    _handleIncomingProject();
+    _scheduleBackups();
+  }
+
+  /// Automated data-retention backup while the app is used: one snapshot
+  /// shortly after launch, then every 6 hours. Purely best-effort.
+  void _scheduleBackups() {
+    _backupTimer?.cancel();
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted) _backup.createBackup();
+    });
+    _backupTimer = Timer.periodic(const Duration(hours: 6), (_) {
+      if (mounted) _backup.createBackup();
+    });
+  }
+
+  /// On a fresh install (no projects yet) with a previous backup on disk,
+  /// offer to restore settings and survey responses.
+  Future<void> _promptRestoreBackup() async {
+    try {
+      final projects = await _database.getProjects(includeArchived: true);
+      if (projects.isNotEmpty || !await _backup.hasBackups()) return;
+      if (!mounted) return;
+
+      final restore = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Previous data backup found'),
+          content: const Text(
+            'A backup from a previous MapBanai install was found. '
+            'Restore settings and survey responses?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      );
+      if (restore != true || !mounted) return;
+
+      await _database.close();
+      final restored = await _backup.restoreLatest();
+      _database = AppDatabase();
+      _backup = BackupService(_database);
+      await _loadProjects();
+      if (!mounted) return;
+
+      final projectState = context.read<ProjectState>();
+      final first = _projects.isNotEmpty ? _projects.first.name : '';
+      if (first.isNotEmpty) projectState.setSelectedProject(first);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(restored
+              ? 'Backup restored successfully.'
+              : 'Backup restore failed. Data was not changed.'),
+        ),
+      );
+    } catch (_) {
+      // Restore is best-effort; a failure must never block startup.
+    }
+  }
+
+  /// Handles a project file or link that opened MapBanai (Android "Open
+  /// with MapBanai" / mapbanai:// deep link).
+  Future<void> _handleIncomingProject() async {
+    final raw = await IntentHandler.getInitialOpen();
+    if (raw == null || !mounted) return;
+
+    if (raw.startsWith('http') || raw.startsWith('mapbanai:')) {
+      final info = ProjectLinks.parse(raw);
+      if (info == null || !mounted) return;
+      if (info.qrPayload != null && info.qrPayload!.isNotEmpty) {
+        await _runProjectImport(qrPayload: info.qrPayload);
+        return;
+      }
+      final file = info.fileUri;
+      if (file != null && !file.startsWith('content://') && !file.startsWith('file://')) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Online project links are not supported yet. Ask the sender '
+              'for the project file (.mbproj) or a project QR code.',
+            ),
+          ),
+        );
+        return;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Project invite received. Open the .mbproj file in MapBanai to '
+            'import it.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Native side materialized a content:// (or file://) URI into the app
+    // cache and handed back a plain file path.
+    final path = raw;
+    if (!mounted) return;
+    await _runProjectImport(filePath: path);
+  }
+
+  Future<void> _runProjectImport({String? filePath, String? qrPayload}) async {
+    final flow = ProjectSharingFlow(database: _database);
+    await runProjectImport(
+      context,
+      flow: flow,
+      filePath: filePath,
+      qrPayload: qrPayload,
+      onImported: () {
+        _loadProjects();
+      },
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Home → Import Project: choose a .mbproj file or paste a project code.
+  Future<void> _startImportFlow() async {
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Import project'),
+        children: [
+          ListTile(
+            leading: const Icon(Icons.folder_open_rounded),
+            title: const Text('Choose .mbproj file'),
+            subtitle: const Text('Pick a project package from your device'),
+            onTap: () => Navigator.pop(context, 'file'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.qr_code_2_rounded),
+            title: const Text('Paste project code'),
+            subtitle: const Text('Enter a MapBanai QR code or link'),
+            onTap: () => Navigator.pop(context, 'paste'),
+          ),
+        ],
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    if (source == 'file') {
+      final path = await SafProjectFileSink().pickPackageFile();
+      if (path == null || !mounted) return;
+      await _runProjectImport(filePath: path);
+      return;
+    }
+
+    final payload = await _promptPasteCode();
+    if (payload == null || payload.trim().isEmpty || !mounted) return;
+    await _runProjectImport(qrPayload: payload.trim());
+  }
+
+  Future<String?> _promptPasteCode() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Paste project code'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Paste the MapBanai code here',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Non-intrusive background update check: never blocks startup, never
@@ -119,6 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _backupTimer?.cancel();
     _database.close();
     super.dispose();
   }
@@ -242,6 +453,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _startImportFlow,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('Import Project'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(

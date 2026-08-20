@@ -47,6 +47,8 @@ app.*.map.json
 **/.gradle/
 /android/local.properties
 /android/app/key.properties
+/android/keystore.properties
+keystore.properties
 *.keystore
 *.jks
 *.apk

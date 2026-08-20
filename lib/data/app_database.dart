@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 part 'app_database.g.dart';
 
@@ -16,6 +17,12 @@ class Projects extends Table {
   RealColumn get gpsThresholdM => real().withDefault(const Constant(10))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
+  /// Stable cross-device project identity used by the .mbproj package
+  /// format. Null on databases migrated to schema 8 before any project was
+  /// created; created/imported projects always get a value.
+  TextColumn get externalId => text().nullable()();
+  /// Project definition version; preserved across export/import.
+  IntColumn get projectVersion => integer().withDefault(const Constant(1))();
 }
 
 class SurveySessions extends Table {
@@ -86,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -123,6 +130,20 @@ class AppDatabase extends _$AppDatabase {
           'WHERE project_id IS NULL;',
         );
       }
+      if (from < 8) {
+        await migrator.addColumn(projects, projects.externalId);
+        await migrator.addColumn(projects, projects.projectVersion);
+        // Backfill stable ids for existing projects.
+        final existing = await select(projects).get();
+        for (final project in existing) {
+          if (project.externalId == null) {
+            await (update(projects)..where((row) => row.id.equals(project.id)))
+                .write(
+              ProjectsCompanion(externalId: Value(const Uuid().v4())),
+            );
+          }
+        }
+      }
     },
   );
 
@@ -138,13 +159,43 @@ class AppDatabase extends _$AppDatabase {
   Future<Project?> getProjectByName(String name) async {
     final cleanName = name.trim();
     if (cleanName.isEmpty) return null;
-    return (select(projects)
-          ..where((row) => row.name.equals(cleanName)))
+    final matches = await (select(projects)
+          ..where((row) => row.name.equals(cleanName))
+          ..orderBy([(row) => OrderingTerm(expression: row.id)]))
+        .get();
+    // Names are not unique: a "new copy" import intentionally duplicates a
+    // project under a fresh identity. Return the earliest-created match.
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  Future<Project?> getProjectById(int id) async {
+    return (select(projects)..where((row) => row.id.equals(id)))
         .getSingleOrNull();
   }
 
   Future<bool> projectExists(String name) async {
     return await getProjectByName(name.trim()) != null;
+  }
+
+  /// Finds a project by its stable cross-device identity.
+  Future<Project?> getProjectByExternalId(String externalId) async {
+    final clean = externalId.trim();
+    if (clean.isEmpty) return null;
+    return (select(projects)..where((row) => row.externalId.equals(clean)))
+        .getSingleOrNull();
+  }
+
+  /// Whether a project with this stable identity (or exactly this name)
+  /// already exists on the device.
+  Future<Project?> findProjectConflict({
+    required String? externalId,
+    required String name,
+  }) async {
+    if (externalId != null && externalId.trim().isNotEmpty) {
+      final byExternal = await getProjectByExternalId(externalId);
+      if (byExternal != null) return byExternal;
+    }
+    return getProjectByName(name);
   }
 
   Future<int> insertProject(ProjectsCompanion entry) => into(projects).insert(entry);
@@ -221,10 +272,36 @@ class AppDatabase extends _$AppDatabase {
       description: Value(description.trim()),
       gpsThresholdM: Value(gpsThresholdM),
       isActive: const Value(true),
+      externalId: Value(const Uuid().v4()),
     );
 
     await insertProject(project);
   }
+
+  /// Inserts a complete project definition (used by the .mbproj importer).
+  /// `isActive` is always false so an imported project never hijacks the
+  /// current selection; the user picks it explicitly.
+  Future<int> insertImportedProject(
+    String name, {
+    required String externalId,
+    String description = '',
+    double gpsThresholdM = 10,
+    DateTime? createdAt,
+    bool archived = false,
+    int projectVersion = 1,
+  }) =>
+      into(projects).insert(
+        ProjectsCompanion(
+          name: Value(name.trim()),
+          description: Value(description.trim()),
+          gpsThresholdM: Value(gpsThresholdM),
+          archived: Value(archived),
+          createdAt: Value(createdAt ?? DateTime.now()),
+          isActive: const Value(false),
+          externalId: Value(externalId),
+          projectVersion: Value(projectVersion),
+        ),
+      );
 
   Future<void> updateProject(
     int id, {

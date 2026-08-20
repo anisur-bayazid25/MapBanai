@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/app_info.dart';
+import 'package:mapbanai/services/measure_units.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
@@ -21,6 +22,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   static const String _userNameKey = 'user_name';
   static const String _languageKey = 'language';
+  static const String _distanceUnitKey = 'distance_unit';
+  static const String _areaUnitKey = 'area_unit';
 
   static const List<({String code, String label})> _languages = [
     (code: 'system', label: 'System default'),
@@ -31,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _nameController = TextEditingController();
   bool _loading = true;
   String _language = 'system';
+  DistanceUnit _distanceUnit = DistanceUnit.auto;
+  AreaUnit _areaUnit = AreaUnit.auto;
   String _appVersion = '';
   bool _checkingUpdates = false;
 
@@ -46,6 +51,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!_languages.any((l) => l.code == language)) {
       language = 'system';
     }
+    _distanceUnit = DistanceUnit.fromSetting(
+      await widget.database.getSetting(_distanceUnitKey),
+    );
+    _areaUnit = AreaUnit.fromSetting(
+      await widget.database.getSetting(_areaUnitKey),
+    );
     var appVersion = '';
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -74,6 +85,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _nameController.text.trim(),
     );
     await widget.database.setSetting(_languageKey, _language);
+    await widget.database.setSetting(_distanceUnitKey, _distanceUnit.name);
+    await widget.database.setSetting(_areaUnitKey, _areaUnit.name);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Settings saved')),
@@ -211,6 +224,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() => _language = value);
+                    }
+                  },
+                ),
+                const Divider(height: 32),
+                const SectionHeader(
+                  title: 'Measurement units',
+                  subtitle:
+                      'Used by the GIS distance and area tools. Automatic '
+                      'picks metres/kilometres and square metres or hectares.',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<DistanceUnit>(
+                  value: _distanceUnit,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Distance',
+                  ),
+                  items: [
+                    for (final unit in DistanceUnit.values)
+                      DropdownMenuItem(
+                        value: unit,
+                        child: Text(unit.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _distanceUnit = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<AreaUnit>(
+                  value: _areaUnit,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Area',
+                  ),
+                  items: [
+                    for (final unit in AreaUnit.values)
+                      DropdownMenuItem(
+                        value: unit,
+                        child: Text(unit.label),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _areaUnit = value);
                     }
                   },
                 ),

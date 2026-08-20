@@ -66,9 +66,32 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _externalIdMeta =
+      const VerificationMeta('externalId');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, description, archived, gpsThresholdM, createdAt, isActive];
+  late final GeneratedColumn<String> externalId = GeneratedColumn<String>(
+      'external_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projectVersionMeta =
+      const VerificationMeta('projectVersion');
+  @override
+  late final GeneratedColumn<int> projectVersion = GeneratedColumn<int>(
+      'project_version', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        description,
+        archived,
+        gpsThresholdM,
+        createdAt,
+        isActive,
+        externalId,
+        projectVersion
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -112,6 +135,18 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
       context.handle(_isActiveMeta,
           isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
     }
+    if (data.containsKey('external_id')) {
+      context.handle(
+          _externalIdMeta,
+          externalId.isAcceptableOrUnknown(
+              data['external_id']!, _externalIdMeta));
+    }
+    if (data.containsKey('project_version')) {
+      context.handle(
+          _projectVersionMeta,
+          projectVersion.isAcceptableOrUnknown(
+              data['project_version']!, _projectVersionMeta));
+    }
     return context;
   }
 
@@ -135,6 +170,10 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       isActive: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
+      externalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}external_id']),
+      projectVersion: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}project_version'])!,
     );
   }
 
@@ -152,6 +191,14 @@ class Project extends DataClass implements Insertable<Project> {
   final double gpsThresholdM;
   final DateTime createdAt;
   final bool isActive;
+
+  /// Stable cross-device project identity used by the .mbproj package
+  /// format. Null on databases migrated to schema 8 before any project was
+  /// created; created/imported projects always get a value.
+  final String? externalId;
+
+  /// Project definition version; preserved across export/import.
+  final int projectVersion;
   const Project(
       {required this.id,
       required this.name,
@@ -159,7 +206,9 @@ class Project extends DataClass implements Insertable<Project> {
       required this.archived,
       required this.gpsThresholdM,
       required this.createdAt,
-      required this.isActive});
+      required this.isActive,
+      this.externalId,
+      required this.projectVersion});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -170,6 +219,10 @@ class Project extends DataClass implements Insertable<Project> {
     map['gps_threshold_m'] = Variable<double>(gpsThresholdM);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['is_active'] = Variable<bool>(isActive);
+    if (!nullToAbsent || externalId != null) {
+      map['external_id'] = Variable<String>(externalId);
+    }
+    map['project_version'] = Variable<int>(projectVersion);
     return map;
   }
 
@@ -182,6 +235,10 @@ class Project extends DataClass implements Insertable<Project> {
       gpsThresholdM: Value(gpsThresholdM),
       createdAt: Value(createdAt),
       isActive: Value(isActive),
+      externalId: externalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalId),
+      projectVersion: Value(projectVersion),
     );
   }
 
@@ -196,6 +253,8 @@ class Project extends DataClass implements Insertable<Project> {
       gpsThresholdM: serializer.fromJson<double>(json['gpsThresholdM']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       isActive: serializer.fromJson<bool>(json['isActive']),
+      externalId: serializer.fromJson<String?>(json['externalId']),
+      projectVersion: serializer.fromJson<int>(json['projectVersion']),
     );
   }
   @override
@@ -209,6 +268,8 @@ class Project extends DataClass implements Insertable<Project> {
       'gpsThresholdM': serializer.toJson<double>(gpsThresholdM),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'isActive': serializer.toJson<bool>(isActive),
+      'externalId': serializer.toJson<String?>(externalId),
+      'projectVersion': serializer.toJson<int>(projectVersion),
     };
   }
 
@@ -219,7 +280,9 @@ class Project extends DataClass implements Insertable<Project> {
           bool? archived,
           double? gpsThresholdM,
           DateTime? createdAt,
-          bool? isActive}) =>
+          bool? isActive,
+          Value<String?> externalId = const Value.absent(),
+          int? projectVersion}) =>
       Project(
         id: id ?? this.id,
         name: name ?? this.name,
@@ -228,6 +291,8 @@ class Project extends DataClass implements Insertable<Project> {
         gpsThresholdM: gpsThresholdM ?? this.gpsThresholdM,
         createdAt: createdAt ?? this.createdAt,
         isActive: isActive ?? this.isActive,
+        externalId: externalId.present ? externalId.value : this.externalId,
+        projectVersion: projectVersion ?? this.projectVersion,
       );
   Project copyWithCompanion(ProjectsCompanion data) {
     return Project(
@@ -241,6 +306,11 @@ class Project extends DataClass implements Insertable<Project> {
           : this.gpsThresholdM,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      externalId:
+          data.externalId.present ? data.externalId.value : this.externalId,
+      projectVersion: data.projectVersion.present
+          ? data.projectVersion.value
+          : this.projectVersion,
     );
   }
 
@@ -253,14 +323,16 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('archived: $archived, ')
           ..write('gpsThresholdM: $gpsThresholdM, ')
           ..write('createdAt: $createdAt, ')
-          ..write('isActive: $isActive')
+          ..write('isActive: $isActive, ')
+          ..write('externalId: $externalId, ')
+          ..write('projectVersion: $projectVersion')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, name, description, archived, gpsThresholdM, createdAt, isActive);
+  int get hashCode => Object.hash(id, name, description, archived,
+      gpsThresholdM, createdAt, isActive, externalId, projectVersion);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -271,7 +343,9 @@ class Project extends DataClass implements Insertable<Project> {
           other.archived == this.archived &&
           other.gpsThresholdM == this.gpsThresholdM &&
           other.createdAt == this.createdAt &&
-          other.isActive == this.isActive);
+          other.isActive == this.isActive &&
+          other.externalId == this.externalId &&
+          other.projectVersion == this.projectVersion);
 }
 
 class ProjectsCompanion extends UpdateCompanion<Project> {
@@ -282,6 +356,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<double> gpsThresholdM;
   final Value<DateTime> createdAt;
   final Value<bool> isActive;
+  final Value<String?> externalId;
+  final Value<int> projectVersion;
   const ProjectsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -290,6 +366,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.gpsThresholdM = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.projectVersion = const Value.absent(),
   });
   ProjectsCompanion.insert({
     this.id = const Value.absent(),
@@ -299,6 +377,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.gpsThresholdM = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.isActive = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.projectVersion = const Value.absent(),
   }) : name = Value(name);
   static Insertable<Project> custom({
     Expression<int>? id,
@@ -308,6 +388,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<double>? gpsThresholdM,
     Expression<DateTime>? createdAt,
     Expression<bool>? isActive,
+    Expression<String>? externalId,
+    Expression<int>? projectVersion,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -317,6 +399,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (gpsThresholdM != null) 'gps_threshold_m': gpsThresholdM,
       if (createdAt != null) 'created_at': createdAt,
       if (isActive != null) 'is_active': isActive,
+      if (externalId != null) 'external_id': externalId,
+      if (projectVersion != null) 'project_version': projectVersion,
     });
   }
 
@@ -327,7 +411,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       Value<bool>? archived,
       Value<double>? gpsThresholdM,
       Value<DateTime>? createdAt,
-      Value<bool>? isActive}) {
+      Value<bool>? isActive,
+      Value<String?>? externalId,
+      Value<int>? projectVersion}) {
     return ProjectsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -336,6 +422,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       gpsThresholdM: gpsThresholdM ?? this.gpsThresholdM,
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
+      externalId: externalId ?? this.externalId,
+      projectVersion: projectVersion ?? this.projectVersion,
     );
   }
 
@@ -363,6 +451,12 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
+    if (externalId.present) {
+      map['external_id'] = Variable<String>(externalId.value);
+    }
+    if (projectVersion.present) {
+      map['project_version'] = Variable<int>(projectVersion.value);
+    }
     return map;
   }
 
@@ -375,7 +469,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('archived: $archived, ')
           ..write('gpsThresholdM: $gpsThresholdM, ')
           ..write('createdAt: $createdAt, ')
-          ..write('isActive: $isActive')
+          ..write('isActive: $isActive, ')
+          ..write('externalId: $externalId, ')
+          ..write('projectVersion: $projectVersion')
           ..write(')'))
         .toString();
   }
@@ -1826,6 +1922,8 @@ typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
   Value<double> gpsThresholdM,
   Value<DateTime> createdAt,
   Value<bool> isActive,
+  Value<String?> externalId,
+  Value<int> projectVersion,
 });
 typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
   Value<int> id,
@@ -1835,6 +1933,8 @@ typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
   Value<double> gpsThresholdM,
   Value<DateTime> createdAt,
   Value<bool> isActive,
+  Value<String?> externalId,
+  Value<int> projectVersion,
 });
 
 final class $$ProjectsTableReferences
@@ -1916,6 +2016,13 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get projectVersion => $composableBuilder(
+      column: $table.projectVersion,
+      builder: (column) => ColumnFilters(column));
 
   Expression<bool> surveySessionsRefs(
       Expression<bool> Function($$SurveySessionsTableFilterComposer f) f) {
@@ -2011,6 +2118,13 @@ class $$ProjectsTableOrderingComposer
 
   ColumnOrderings<bool> get isActive => $composableBuilder(
       column: $table.isActive, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get projectVersion => $composableBuilder(
+      column: $table.projectVersion,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProjectsTableAnnotationComposer
@@ -2042,6 +2156,12 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => column);
+
+  GeneratedColumn<int> get projectVersion => $composableBuilder(
+      column: $table.projectVersion, builder: (column) => column);
 
   Expression<T> surveySessionsRefs<T extends Object>(
       Expression<T> Function($$SurveySessionsTableAnnotationComposer a) f) {
@@ -2140,6 +2260,8 @@ class $$ProjectsTableTableManager extends RootTableManager<
             Value<double> gpsThresholdM = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
+            Value<String?> externalId = const Value.absent(),
+            Value<int> projectVersion = const Value.absent(),
           }) =>
               ProjectsCompanion(
             id: id,
@@ -2149,6 +2271,8 @@ class $$ProjectsTableTableManager extends RootTableManager<
             gpsThresholdM: gpsThresholdM,
             createdAt: createdAt,
             isActive: isActive,
+            externalId: externalId,
+            projectVersion: projectVersion,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -2158,6 +2282,8 @@ class $$ProjectsTableTableManager extends RootTableManager<
             Value<double> gpsThresholdM = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<bool> isActive = const Value.absent(),
+            Value<String?> externalId = const Value.absent(),
+            Value<int> projectVersion = const Value.absent(),
           }) =>
               ProjectsCompanion.insert(
             id: id,
@@ -2167,6 +2293,8 @@ class $$ProjectsTableTableManager extends RootTableManager<
             gpsThresholdM: gpsThresholdM,
             createdAt: createdAt,
             isActive: isActive,
+            externalId: externalId,
+            projectVersion: projectVersion,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

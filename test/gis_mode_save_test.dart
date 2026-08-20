@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show Point;
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart';
@@ -352,5 +353,92 @@ void main() {
     expect(saved, hasLength(1));
     expect((saved.single['features'] as List).length, 2,
         reason: 'both saved points must stay on the map');
+  });
+
+  Future<void> pumpMeasureSetup(WidgetTester tester,
+      FakeGeolocatorPlatform geolocator, FakeMaplibrePlatform fake) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: GisModeScreen(projectName: 'Test Project')),
+    );
+    await pumpFrames(tester);
+    geolocator.emit(testFix());
+    await pumpFrames(tester);
+    fake.onMapStyleLoadedPlatform.call(null);
+    await pumpFrames(tester, 12);
+  }
+
+  void callMapClick(
+    FakeMaplibrePlatform fake,
+    double lat,
+    double lon,
+  ) {
+    fake.onMapClickPlatform.call({
+      'point': Point(lat.toDouble(), lon.toDouble()),
+      'latLng': LatLng(lat, lon),
+    });
+  }
+
+  testWidgets('distance measure shows live length and exits cleanly',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpMeasureSetup(tester, geolocator, fake);
+
+    await tester.tap(find.byTooltip('Measure Distance'));
+    await pumpFrames(tester);
+    expect(
+      find.text('Measure distance — tap points on the map'),
+      findsOneWidget,
+    );
+
+    callMapClick(fake, 23.8103, 90.4125);
+    callMapClick(fake, 23.8110, 90.4135);
+    await pumpFrames(tester, 12);
+
+    expect(find.textContaining('2 pts'), findsOneWidget);
+    expect(find.textContaining('m'), findsWidgets);
+
+    await tester.tap(find.text('Done'));
+    await pumpFrames(tester);
+    expect(
+      find.text('Measure distance — tap points on the map'),
+      findsNothing,
+    );
+    expect(tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byIcon(Icons.add_location_alt_outlined),
+        matching: find.byType(IconButton),
+      ),
+    ).onPressed, isNotNull, reason: 'drawing tools must unlock after measure');
+  });
+
+  testWidgets('area measure shows area and perimeter', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpMeasureSetup(tester, geolocator, fake);
+
+    await tester.tap(find.byTooltip('Measure Area'));
+    await pumpFrames(tester);
+    expect(find.text('Measure area — tap points on the map'), findsOneWidget);
+
+    callMapClick(fake, 23.8103, 90.4125);
+    callMapClick(fake, 23.8110, 90.4125);
+    callMapClick(fake, 23.8110, 90.4135);
+    callMapClick(fake, 23.8103, 90.4135);
+    await pumpFrames(tester, 12);
+
+    expect(find.textContaining('4 pts'), findsOneWidget);
+    expect(find.textContaining('ac'), findsOneWidget);
+    expect(find.textContaining('P '), findsOneWidget);
+
+    await tester.tap(find.text('Done'));
+    await pumpFrames(tester);
+    expect(find.text('Measure area — tap points on the map'), findsNothing);
   });
 }

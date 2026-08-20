@@ -10,11 +10,14 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/geometry_service.dart';
 import 'package:mapbanai/services/location_service.dart';
 import 'package:mapbanai/services/map_service.dart';
+import 'package:mapbanai/services/measure_units.dart';
 import 'package:mapbanai/services/track_recorder.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/feature_detail_sheet.dart';
 
 enum _DraftType { none, point, line, polygon }
+
+enum _MeasureTool { none, distance, area }
 
 class _InfoFeature {
   final int sessionId;
@@ -70,6 +73,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
   _InfoFeature? _infoFeature;
   bool _showInfoPanel = false;
 
+  _MeasureTool _measureTool = _MeasureTool.none;
+  List<({double lat, double lon})> _measurePoints = [];
+  List<Circle> _measureMarkers = [];
+  Line? _measureLine;
+  Fill? _measureFill;
+  DistanceUnit _measureDistanceUnit = DistanceUnit.auto;
+  AreaUnit _measureAreaUnit = AreaUnit.auto;
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +113,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   Future<void> _selectProject(int id, String name) async {
     _cancelDraft();
+    await _endMeasure();
     setState(() {
       _selectedProjectId = id;
       _selectedProjectName = name;
@@ -216,6 +228,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     String layerId,
     Annotation? annotation,
   ) {
+    if (_measureTool != _MeasureTool.none) return;
     final data = _annotationData(annotation);
     final sessionId = data?['session_id'];
     final title = data?['title'] as String?;
@@ -787,6 +800,165 @@ class _GisModeScreenState extends State<GisModeScreen> {
     _removeDraftAnnotations();
   }
 
+  // ── measurement tools ────────────────────────────────────────
+
+  bool get _measureActive => _measureTool != _MeasureTool.none;
+  bool get _editingActive => _draftActive || _measureActive;
+
+  Future<void> _toggleMeasureTool(_MeasureTool tool) async {
+    if (_editingActive && !_measureActive) return;
+    if (_measureTool == tool) {
+      await _endMeasure();
+      return;
+    }
+    _measureDistanceUnit = DistanceUnit.fromSetting(
+      await _database.getSetting('distance_unit'),
+    );
+    _measureAreaUnit = AreaUnit.fromSetting(
+      await _database.getSetting('area_unit'),
+    );
+    if (!mounted) return;
+    setState(() {
+      _measureTool = tool;
+      _measurePoints = [];
+    });
+  }
+
+  void _onMapMeasureTap(Point<double> point, LatLng coordinates) {
+    if (_measureTool == _MeasureTool.none) return;
+    _addMeasurePoint(coordinates);
+  }
+
+  Future<void> _addMeasurePoint(LatLng coordinates) async {
+    final controller = _controller;
+    if (!_styleReady || controller == null) return;
+    _measurePoints = [
+      ..._measurePoints,
+      (lat: coordinates.latitude, lon: coordinates.longitude),
+    ];
+    final circle = await controller.addCircle(
+      CircleOptions(
+        geometry: coordinates,
+        circleRadius: 6,
+        circleColor: '#00ACC1',
+        circleStrokeWidth: 2,
+        circleStrokeColor: '#FFFFFF',
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _measureMarkers = [..._measureMarkers, circle];
+    });
+    _updateMeasureOverlay();
+  }
+
+  Future<void> _updateMeasureOverlay() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    final geometry = [
+      for (final p in _measurePoints) LatLng(p.lat, p.lon),
+    ];
+
+    if (_measureTool == _MeasureTool.distance && geometry.length >= 2) {
+      final line = _measureLine;
+      if (line == null) {
+        final added = await controller.addLine(
+          LineOptions(
+            geometry: geometry,
+            lineColor: '#00ACC1',
+            lineWidth: 3.0,
+            lineOpacity: 0.9,
+          ),
+        );
+        if (mounted) setState(() => _measureLine = added);
+      } else {
+        await controller.updateLine(line, LineOptions(geometry: geometry));
+      }
+    } else if (_measureTool == _MeasureTool.area) {
+      final closed = [
+        ...geometry,
+        if (geometry.length >= 3) geometry.first,
+      ];
+      if (closed.length >= 2) {
+        final line = _measureLine;
+        if (line == null) {
+          final added = await controller.addLine(
+            LineOptions(
+              geometry: closed,
+              lineColor: '#26A69A',
+              lineWidth: 3.0,
+              lineOpacity: 0.9,
+            ),
+          );
+          if (mounted) setState(() => _measureLine = added);
+        } else {
+          await controller.updateLine(
+            line,
+            LineOptions(geometry: closed),
+          );
+        }
+      }
+      if (geometry.length >= 3) {
+        final fill = _measureFill;
+        if (fill == null) {
+          final added = await controller.addFill(
+            FillOptions(
+              geometry: [geometry],
+              fillColor: '#26A69A',
+              fillOpacity: 0.25,
+              fillOutlineColor: '#00695C',
+            ),
+          );
+          if (mounted) setState(() => _measureFill = added);
+        } else {
+          await controller.updateFill(fill, FillOptions(geometry: [geometry]));
+        }
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _undoMeasurePoint() async {
+    final controller = _controller;
+    if (_measureMarkers.isNotEmpty && controller != null) {
+      await controller.removeCircle(_measureMarkers.last);
+    }
+    if (!mounted) return;
+    setState(() {
+      if (_measurePoints.isNotEmpty) {
+        _measurePoints = _measurePoints.sublist(0, _measurePoints.length - 1);
+      }
+      if (_measureMarkers.isNotEmpty) {
+        _measureMarkers =
+            _measureMarkers.sublist(0, _measureMarkers.length - 1);
+      }
+    });
+    _updateMeasureOverlay();
+  }
+
+  Future<void> _endMeasure() async {
+    final controller = _controller;
+    if (controller != null && mounted) {
+      for (final marker in _measureMarkers) {
+        await controller.removeCircle(marker);
+      }
+      if (_measureLine != null) {
+        await controller.removeLine(_measureLine!);
+      }
+      if (_measureFill != null) {
+        await controller.removeFill(_measureFill!);
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _measureTool = _MeasureTool.none;
+      _measurePoints = [];
+      _measureMarkers = [];
+      _measureLine = null;
+      _measureFill = null;
+    });
+  }
+
   Future<void> _removeDraftAnnotations() async {
     final controller = _controller;
     if (controller == null) return;
@@ -955,9 +1127,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ),
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
+            onMapClick: _onMapMeasureTap,
             styleString: _buildStyleString(basemap),
             myLocationEnabled: true,
             myLocationRenderMode: MyLocationRenderMode.normal,
+            compassViewPosition: CompassViewPosition.bottomRight,
+            compassViewMargins: const Point(16, 56),
             annotationConsumeTapEvents: const [
               AnnotationType.circle,
               AnnotationType.line,
@@ -983,6 +1158,13 @@ class _GisModeScreenState extends State<GisModeScreen> {
               top: 108,
               child: _buildDraftBanner(),
             ),
+          if (_measureActive)
+            Positioned(
+              left: 16,
+              right: 16,
+              top: 108,
+              child: _buildMeasureBanner(),
+            ),
           if (_showInfoPanel)
             Positioned(
               left: 16,
@@ -993,19 +1175,6 @@ class _GisModeScreenState extends State<GisModeScreen> {
         ],
       ),
       bottomNavigationBar: _buildBottomToolbar(),
-      floatingActionButton: FloatingActionButton.small(
-        heroTag: 'info',
-        tooltip: 'Feature info',
-        onPressed: () {
-          setState(() {
-            _showInfoPanel = !_showInfoPanel;
-          });
-        },
-        child: Icon(
-          _showInfoPanel ? Icons.info : Icons.info_outline,
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -1371,6 +1540,90 @@ class _GisModeScreenState extends State<GisModeScreen> {
     return Row(children: actions);
   }
 
+  Widget _buildMeasureBanner() {
+    final points = _measurePoints;
+    final distanceUnit = _measureDistanceUnit;
+    final areaUnit = _measureAreaUnit;
+    final isArea = _measureTool == _MeasureTool.area;
+
+    final length = GeometryService.polylineLengthM(points);
+    final metrics = <String>[
+      '${points.length} pts',
+      MeasureUnits.formatDistance(length, distanceUnit),
+    ];
+    if (isArea && points.length >= 3) {
+      metrics.insertAll(1, [
+        MeasureUnits.formatArea(GeometryService.polygonAreaM2(points), areaUnit),
+        'P ${MeasureUnits.formatDistance(GeometryService.polygonPerimeterM(points), distanceUnit)}',
+      ]);
+    }
+
+    return Card(
+      elevation: 6,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isArea ? Icons.square_foot : Icons.straighten,
+                  color: const Color(0xFF00838F),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isArea ? 'Measure area — tap points on the map' : 'Measure distance — tap points on the map',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              points.isEmpty ? 'Tap the map to add the first point' : metrics.join('  •  '),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: points.isEmpty ? null : _undoMeasurePoint,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Undo'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: points.isEmpty ? null : () => _endMeasure(),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Clear'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _endMeasure,
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomToolbar() {
     return Container(
       decoration: BoxDecoration(
@@ -1388,18 +1641,16 @@ class _GisModeScreenState extends State<GisModeScreen> {
             child: IconButton(
               icon: CircleAvatar(
                 radius: 14,
-                backgroundColor:
-                    _draftType == _DraftType.point
-                        ? Colors.red.shade50
-                        : Colors.transparent,
+                backgroundColor: _draftType == _DraftType.point
+                    ? Colors.red.shade50
+                    : Colors.transparent,
                 child: Icon(
                   Icons.add_location_alt_outlined,
                   size: 22,
-                  color: _draftActive ? Colors.grey : Colors.red.shade700,
+                  color: _editingActive ? Colors.grey : Colors.red.shade700,
                 ),
               ),
-              onPressed:
-                  _draftActive ? null : _startPointDraft,
+              onPressed: _editingActive ? null : _startPointDraft,
             ),
           ),
           Tooltip(
@@ -1408,9 +1659,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
               icon: Icon(
                 Icons.polyline_outlined,
                 size: 24,
-                color: _draftActive ? Colors.grey : Colors.blue.shade700,
+                color: _editingActive ? Colors.grey : Colors.blue.shade700,
               ),
-              onPressed: _draftActive ? null : _startLineDraft,
+              onPressed: _editingActive ? null : _startLineDraft,
             ),
           ),
           Tooltip(
@@ -1419,9 +1670,39 @@ class _GisModeScreenState extends State<GisModeScreen> {
               icon: Icon(
                 Icons.pentagon_outlined,
                 size: 24,
-                color: _draftActive ? Colors.grey : Colors.blue.shade700,
+                color: _editingActive ? Colors.grey : Colors.blue.shade700,
               ),
-              onPressed: _draftActive ? null : _startPolygonDraft,
+              onPressed: _editingActive ? null : _startPolygonDraft,
+            ),
+          ),
+          Tooltip(
+            message: 'Measure Distance',
+            child: IconButton(
+              icon: Icon(
+                Icons.straighten,
+                size: 24,
+                color: _measureTool == _MeasureTool.distance
+                    ? const Color(0xFF00838F)
+                    : _draftActive
+                        ? Colors.grey
+                        : Colors.teal.shade700,
+              ),
+              onPressed: _draftActive ? null : () => _toggleMeasureTool(_MeasureTool.distance),
+            ),
+          ),
+          Tooltip(
+            message: 'Measure Area',
+            child: IconButton(
+              icon: Icon(
+                Icons.square_foot,
+                size: 24,
+                color: _measureTool == _MeasureTool.area
+                    ? const Color(0xFF00838F)
+                    : _draftActive
+                        ? Colors.grey
+                        : Colors.teal.shade700,
+              ),
+              onPressed: _draftActive ? null : () => _toggleMeasureTool(_MeasureTool.area),
             ),
           ),
           Tooltip(

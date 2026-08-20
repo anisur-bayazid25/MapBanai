@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
+import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
+import 'package:mapbanai/ui/import_flow_dialogs.dart';
+import 'package:mapbanai/ui/project_qr_screen.dart';
 import 'package:mapbanai/ui/survey_form_builder_screen.dart';
 import 'package:mapbanai/ui/survey_form_detail_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
@@ -169,6 +172,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
     await _load();
     _showSnack(wasArchived ? 'Project restored' : 'Project archived');
+  }
+
+  Future<void> _showExportOptions() async {
+    final project = _project;
+    if (project == null || !mounted) return;
+    final flow = ProjectSharingFlow(database: _database);
+    await showExportProjectOptions(context, flow: flow, project: project);
+  }
+
+  void _showQr() {
+    final project = _project;
+    if (project == null || !mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProjectQrScreen(
+          project: project,
+          database: _database,
+        ),
+      ),
+    );
   }
 
   void _showSnack(String message) {
@@ -355,6 +378,39 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       appBar: AppBar(
         title: Text(project?.name ?? 'Project'),
         actions: [
+          if (project != null) ...[
+            PopupMenuButton<String>(
+              key: const ValueKey('project-share-menu'),
+              icon: const Icon(Icons.ios_share_rounded),
+              tooltip: 'Share',
+              onSelected: (value) {
+                switch (value) {
+                  case 'export':
+                    _showExportOptions();
+                  case 'qr':
+                    _showQr();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'export',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.save_alt_rounded),
+                    title: Text('Export / Share project'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'qr',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.qr_code_2_rounded),
+                    title: Text('QR code'),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (project != null && project.archived)
             TextButton.icon(
               onPressed: _toggleArchived,
