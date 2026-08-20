@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
     private val gnssChannel = "mapbanai/gnss"
@@ -104,7 +105,7 @@ class MainActivity : FlutterActivity() {
     /** Copies a readable content/file URI into the cache dir. */
     private fun copyToCache(uri: Uri): File? {
         var descriptor: ParcelFileDescriptor? = null
-        var input: FileInputStream? = null
+        var input: InputStream? = null
         try {
             descriptor = try {
                 contentResolver.openFileDescriptor(uri, "r")
@@ -201,7 +202,7 @@ class MainActivity : FlutterActivity() {
         if (listener != null) {
             val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             try {
-                lm.unregisterGpsStatusCallback(listener)
+                lm.unregisterGnssStatusCallback(listener)
             } catch (e: Exception) {
                 // Ignore.
             }
