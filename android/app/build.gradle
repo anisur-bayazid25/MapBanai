@@ -5,22 +5,11 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-// Signing configuration. Release builds prefer, in order:
-//   1. KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD
-//      environment variables (GitHub Actions secrets), or
-//   2. a local keystore.properties file (./keystore.properties), or
-//   3. the debug signing config so `flutter build apk --release` still
-//      works on a developer machine without a keystore.
-def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
-def hasEnvKeystore = System.getenv("KEYSTORE_BASE64") != null &&
-        !System.getenv("KEYSTORE_BASE64").isEmpty()
-def hasPropertiesKeystore = keystorePropertiesFile.exists() &&
-        keystoreProperties["storeFile"] != null &&
-        file(keystoreProperties["storeFile"]).exists()
 
 android {
     namespace = "com.mapbanai.mapbanai"
@@ -49,34 +38,16 @@ android {
 
     signingConfigs {
         release {
-            if (hasEnvKeystore) {
-                def decodedFile = file("${rootProject.projectDir}/ci-keystore.jks")
-                new FileOutputStream(decodedFile).withCloseable { fos ->
-                    fos.write(java.util.Base64.decoder.decode(System.getenv("KEYSTORE_BASE64")))
-                }
-                storeFile decodedFile
-                storePassword System.getenv("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
-            } else if (hasPropertiesKeystore) {
-                storeFile file(keystoreProperties["storeFile"])
-                storePassword keystoreProperties["storePassword"]
-                keyAlias keystoreProperties["keyAlias"]
-                keyPassword keystoreProperties["keyPassword"]
-            }
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? rootProject.file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
         }
     }
 
     buildTypes {
         release {
-            if (hasEnvKeystore || hasPropertiesKeystore) {
-                signingConfig = signingConfigs.release
-            } else {
-                // Signing with the debug keys so `flutter run --release` and
-                // local `flutter build apk --release` keep working when no
-                // release keystore is configured.
-                signingConfig = signingConfigs.debug
-            }
+            signingConfig signingConfigs.release
         }
     }
 }
