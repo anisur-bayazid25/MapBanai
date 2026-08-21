@@ -319,4 +319,65 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('survey response with embedded PhotoQuestion photo is queued for upload', () async {
+    final photoPath = await createTempPhoto('embedded.jpg', List<int>.filled(60, 5));
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var hits = 0;
+    String? capturedFilename;
+    server.listen((req) async {
+      hits++;
+      final body = await utf8.decoder.bind(req).join();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      capturedFilename = decoded['filename'] as String?;
+      req.response.statusCode = 200;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({'ok': true}));
+      await req.response.close();
+    });
+
+    try {
+      final endpoint = 'http://127.0.0.1:${server.port}/exec';
+      final projectId = await createProjectWithSync(endpoint);
+      // Simulate a survey response where a PhotoQuestion answer is stored as JSON string under arbitrary field name
+      final answers = {
+        'site_name': 'Test Site',
+        'site_photo': jsonEncode({
+          'path': photoPath,
+          'thumb': '${photoPath}_thumb',
+          'latitude': 23.5,
+          'longitude': 90.5,
+        }),
+        'notes': 'some notes',
+      };
+      await db.into(db.surveySessions).insert(
+            SurveySessionsCompanion.insert(
+              projectId: projectId,
+              title: 'SurveyWithPhoto',
+              status: const drift.Value('saved'),
+              responses: drift.Value(jsonEncode({
+                'form_name': 'TestForm',
+                'user_name': 'Tester',
+                'answers': answers,
+              })),
+            ),
+          );
+
+      final svc = PhotoSyncService(db, delay: (d) async {});
+      // Should find the embedded photo
+      final unsynced = await svc.queryUnsyncedPhotos(projectId);
+      expect(unsynced, hasLength(1));
+      expect(unsynced.first.title, 'SurveyWithPhoto');
+
+      final result = await svc.syncPhotos(projectId);
+      expect(hits, 1);
+      expect(capturedFilename, 'embedded.jpg');
+      expect(result.total, 1);
+      expect(result.synced, 1);
+      final sessions = await db.getSurveySessionsByProject(projectId);
+      expect(sessions.first.photoSyncedAt, isNotNull);
+    } finally {
+      await server.close(force: true);
+    }
+  });
 }

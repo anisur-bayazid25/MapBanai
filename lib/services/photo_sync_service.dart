@@ -61,26 +61,73 @@ class PhotoSyncService {
           ..where((t) => t.photoSyncedAt.isNull())
           ..where((t) => t.status.equals('draft').not()))
         .get();
-    return all.where((s) => _extractPhotoPath(s.responses).isNotEmpty).toList();
+    return all.where((s) => _extractAllPhotoPaths(s.responses).isNotEmpty).toList();
   }
 
   String _extractPhotoPath(String responsesJson) {
+    final paths = _extractAllPhotoPaths(responsesJson);
+    return paths.isEmpty ? '' : paths.first;
+  }
+
+  /// Extracts all photo paths from a responses JSON, including top-level
+  /// feature photos and embedded PhotoQuestion answers inside survey responses.
+  /// PhotoQuestion answers are stored as JSON strings under arbitrary field
+  /// names, with a nested "path" key pointing under the app's photos directory.
+  List<String> _extractAllPhotoPaths(String responsesJson) {
+    final paths = <String>[];
     try {
       final decoded = jsonDecode(responsesJson) as Map<String, dynamic>;
+      // Top-level feature photo (GIS)
       final photo = decoded['photo'];
       if (photo is Map<String, dynamic> && photo['path'] is String) {
-        return photo['path'] as String;
+        final p = photo['path'] as String;
+        if (p.isNotEmpty) paths.add(p);
+      } else if (photo is String && photo.isNotEmpty) {
+        paths.add(photo);
       }
-      if (photo is String && photo.isNotEmpty) return photo;
       if (decoded['photo_path'] is String) {
-        return decoded['photo_path'] as String;
+        final p = decoded['photo_path'] as String;
+        if (p.isNotEmpty && !paths.contains(p)) paths.add(p);
       }
-      // Some GIS features may store photo under different keys?
-      // Fallback: check nested fields
-      return '';
+      // Embedded survey photo questions: answers map may contain JSON strings
+      // with a "path" key. Don't hardcode field name — check every value.
+      final answers = decoded['answers'];
+      if (answers is Map) {
+        for (final value in answers.values) {
+          String? candidate;
+          if (value is String) {
+            // PhotoQuestion stores JSON string like '{"path":"...","thumb":...}'
+            try {
+              final inner = jsonDecode(value);
+              if (inner is Map<String, dynamic> && inner['path'] is String) {
+                candidate = inner['path'] as String;
+              }
+            } catch (_) {
+              // Not a JSON string with path — ignore
+            }
+            // Also handle direct path string without JSON wrapper (just path)
+            if (candidate == null && value.contains('photos') && value.contains('.jpg')) {
+              // Heuristic: if value looks like a photo path, treat as candidate
+              // but only if it points under photos directory
+              if (value.contains('/') && (value.endsWith('.jpg') || value.endsWith('.jpeg') || value.endsWith('.png'))) {
+                candidate = value;
+              }
+            }
+          } else if (value is Map<String, dynamic> && value['path'] is String) {
+            candidate = value['path'] as String;
+          }
+          if (candidate != null && candidate.isNotEmpty && !paths.contains(candidate)) {
+            // Only queue if it points under app's photos directory (or at least looks like a photo file)
+            if (candidate.contains('photos') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.png')) {
+              paths.add(candidate);
+            }
+          }
+        }
+      }
     } catch (_) {
-      return '';
+      // ignore malformed JSON
     }
+    return paths;
   }
 
   String _mimeTypeFor(String filename) {
@@ -123,33 +170,68 @@ class PhotoSyncService {
           total: 0, synced: 0, failed: 0, skippedOversized: 0);
     }
 
+    // Expand to per-photo granularity: a single survey session may contain
+    // multiple embedded PhotoQuestion answers, each with its own file.
+    final allPhotoPaths = <String>[];
+    final sessionForPath = <String, SurveySession>{};
+    for (final s in photos) {
+      final paths = _extractAllPhotoPaths(s.responses);
+      for (final pth in paths) {
+        // Use path as key; if same path appears in multiple sessions (unlikely),
+        // last session wins — acceptable for counting.
+        if (!allPhotoPaths.contains(pth)) {
+          allPhotoPaths.add(pth);
+          sessionForPath[pth] = s;
+        }
+      }
+      // Fallback: if _extractAllPhotoPaths returned empty but _extractPhotoPath had a value
+      // (should not happen after the new extractor, but keep for safety)
+      if (paths.isEmpty) {
+        final single = _extractPhotoPath(s.responses);
+        if (single.isNotEmpty && !allPhotoPaths.contains(single)) {
+          allPhotoPaths.add(single);
+          sessionForPath[single] = s;
+        }
+      }
+    }
+
+    final total = allPhotoPaths.length;
+    if (total == 0) {
+      return const PhotoSyncResult(total: 0, synced: 0, failed: 0, skippedOversized: 0);
+    }
+
     int synced = 0;
     int failed = 0;
     int skipped = 0;
+    // Track per-session photo success to decide when to mark photo_synced_at
+    final sessionPhotoSuccess = <int, int>{}; // sessionId -> success count
+    final sessionPhotoTotal = <int, int>{};
+    for (final s in photos) {
+      sessionPhotoTotal[s.id] = _extractAllPhotoPaths(s.responses).length;
+      if (sessionPhotoTotal[s.id] == 0) {
+        sessionPhotoTotal[s.id] = 1; // fallback single
+      }
+    }
 
-    for (var idx = 0; idx < photos.length; idx++) {
-      final session = photos[idx];
-      final photoPath = _extractPhotoPath(session.responses);
-      if (photoPath.isEmpty) {
-        await (db.update(db.surveySessions)
-              ..where((t) => t.id.equals(session.id)))
-            .write(SurveySessionsCompanion(photoSyncedAt: Value(DateTime.now())));
-        synced++;
-        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
+    for (final photoPath in allPhotoPaths) {
+      final session = sessionForPath[photoPath];
+      if (session == null) {
+        failed++;
+        if (onProgress != null) onProgress(synced + failed + skipped, total);
         continue;
       }
 
       final file = File(photoPath);
       if (!file.existsSync()) {
         failed++;
-        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
+        if (onProgress != null) onProgress(synced + failed + skipped, total);
         continue;
       }
 
       final size = file.lengthSync();
       if (size > maxPhotoBytes) {
         skipped++;
-        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
+        if (onProgress != null) onProgress(synced + failed + skipped, total);
         continue;
       }
 
@@ -159,7 +241,7 @@ class PhotoSyncService {
         base64 = base64Encode(bytes);
       } catch (e) {
         failed++;
-        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
+        if (onProgress != null) onProgress(synced + failed + skipped, total);
         continue;
       }
 
@@ -167,7 +249,6 @@ class PhotoSyncService {
       final mimeType = _mimeTypeFor(filename);
 
       bool succeeded = false;
-      // Retry up to 3 attempts
       for (var attempt = 1; attempt <= 3; attempt++) {
         try {
           final payload = jsonEncode({
@@ -229,21 +310,24 @@ class PhotoSyncService {
       }
 
       if (succeeded) {
-        await (db.update(db.surveySessions)
-              ..where((t) => t.id.equals(session.id)))
-            .write(SurveySessionsCompanion(photoSyncedAt: Value(DateTime.now())));
         synced++;
+        sessionPhotoSuccess[session.id] =
+            (sessionPhotoSuccess[session.id] ?? 0) + 1;
+        if (sessionPhotoSuccess[session.id] == sessionPhotoTotal[session.id]) {
+          await (db.update(db.surveySessions)
+                ..where((t) => t.id.equals(session.id)))
+              .write(SurveySessionsCompanion(photoSyncedAt: Value(DateTime.now())));
+        }
       } else {
         failed++;
       }
       if (onProgress != null) {
         try {
-          onProgress(synced + failed + skipped, photos.length);
+          onProgress(synced + failed + skipped, total);
         } catch (_) {}
       }
     }
 
-    final total = photos.length;
     return PhotoSyncResult(
       total: total,
       synced: synced,

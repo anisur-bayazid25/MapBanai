@@ -388,4 +388,77 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('stable UUID: same record re-synced produces same response_id and is deduped', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final seenIds = <String>{};
+    var firstId = '';
+    var secondId = '';
+    var callCount = 0;
+    server.listen((req) async {
+      final body = await utf8.decoder.bind(req).join();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final responses = decoded['responses'] as List;
+      final id = responses.isNotEmpty ? (responses.first as Map)['response_id'] as String : '';
+      if (callCount == 0) {
+        firstId = id;
+        seenIds.add(id);
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'ok': true, 'responses': 1}));
+        await req.response.close();
+      } else {
+        secondId = id;
+        final isDuplicate = seenIds.contains(id);
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'ok': true, 'responses': isDuplicate ? 0 : 1}));
+        await req.response.close();
+      }
+      callCount++;
+    });
+
+    try {
+      final endpoint = 'http://127.0.0.1:${server.port}/exec';
+      final projectId = await createProjectWithSync(endpoint);
+      // Insert one survey session via helper (which now generates externalId)
+      final sessionId = await db.insertSurveySession(
+        SurveySessionsCompanion(
+          projectId: drift.Value(projectId),
+          title: const drift.Value('StableIdResp'),
+          status: const drift.Value('saved'),
+          responses: drift.Value(jsonEncode({
+            'form_name': 'TestForm',
+            'user_name': 'Tester',
+            'answers': {'q': 'a'},
+          })),
+        ),
+      );
+      // Ensure externalId was generated
+      final inserted = await (db.select(db.surveySessions)..where((t) => t.id.equals(sessionId))).getSingle();
+      expect(inserted.externalId, isNotNull);
+      expect(inserted.externalId!.isNotEmpty, isTrue);
+
+      final svc = CloudSyncService(db);
+      // First sync
+      await svc.syncProject(projectId);
+      expect(firstId, isNotEmpty);
+      expect(firstId, equals(inserted.externalId));
+
+      // Reset synced_at to simulate re-sync of same never-changing record
+      await (db.update(db.surveySessions)..where((t) => t.id.equals(sessionId)))
+          .write(SurveySessionsCompanion(syncedAt: drift.Value(null)));
+
+      // Second sync — should produce same stable ID
+      await svc.syncProject(projectId);
+      expect(secondId, equals(firstId));
+      expect(secondId.isNotEmpty, isTrue);
+      // Server would have returned 0 for duplicate, but our client marks as synced regardless
+      // Verify that second sync also marks as synced (since server said ok:true)
+      final remaining = await svc.queryUnsyncedResponses(projectId);
+      expect(remaining, isEmpty);
+    } finally {
+      await server.close(force: true);
+    }
+  });
 }

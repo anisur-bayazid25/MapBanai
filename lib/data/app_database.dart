@@ -34,6 +34,10 @@ class SurveySessions extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
   DateTimeColumn get photoSyncedAt => dateTime().nullable()();
+  /// Stable cross-device identity for sync deduplication. Generated once at
+  /// creation time (UUID v4), not at sync time, and preserved via .mbproj
+  /// if sessions were ever exported.
+  TextColumn get externalId => text().nullable()();
 }
 
 class StoredForms extends Table {
@@ -113,7 +117,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.testWithExecutor(QueryExecutor executor) : super(executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -168,6 +172,18 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(surveySessions, surveySessions.syncedAt);
         await migrator.addColumn(surveySessions, surveySessions.photoSyncedAt);
         await migrator.createTable(syncConfigs);
+      }
+      if (from < 10) {
+        await migrator.addColumn(surveySessions, surveySessions.externalId);
+        final existing = await select(surveySessions).get();
+        for (final row in existing) {
+          if (row.externalId == null) {
+            await (update(surveySessions)..where((t) => t.id.equals(row.id)))
+                .write(
+              SurveySessionsCompanion(externalId: Value(const Uuid().v4())),
+            );
+          }
+        }
       }
     },
   );
@@ -225,8 +241,12 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> insertProject(ProjectsCompanion entry) => into(projects).insert(entry);
 
-  Future<int> insertSurveySession(SurveySessionsCompanion entry) =>
-      into(surveySessions).insert(entry);
+  Future<int> insertSurveySession(SurveySessionsCompanion entry) {
+    final withExternalId = entry.externalId.present
+        ? entry
+        : entry.copyWith(externalId: Value(const Uuid().v4()));
+    return into(surveySessions).insert(withExternalId);
+  }
 
   Future<List<SurveySession>> getSurveySessions() {
     return (select(surveySessions)

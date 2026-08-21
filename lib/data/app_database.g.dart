@@ -541,6 +541,12 @@ class $SurveySessionsTable extends SurveySessions
   late final GeneratedColumn<DateTime> photoSyncedAt =
       GeneratedColumn<DateTime>('photo_synced_at', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _externalIdMeta =
+      const VerificationMeta('externalId');
+  @override
+  late final GeneratedColumn<String> externalId = GeneratedColumn<String>(
+      'external_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -550,7 +556,8 @@ class $SurveySessionsTable extends SurveySessions
         responses,
         createdAt,
         syncedAt,
-        photoSyncedAt
+        photoSyncedAt,
+        externalId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -599,6 +606,12 @@ class $SurveySessionsTable extends SurveySessions
           photoSyncedAt.isAcceptableOrUnknown(
               data['photo_synced_at']!, _photoSyncedAtMeta));
     }
+    if (data.containsKey('external_id')) {
+      context.handle(
+          _externalIdMeta,
+          externalId.isAcceptableOrUnknown(
+              data['external_id']!, _externalIdMeta));
+    }
     return context;
   }
 
@@ -624,6 +637,8 @@ class $SurveySessionsTable extends SurveySessions
           .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
       photoSyncedAt: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}photo_synced_at']),
+      externalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}external_id']),
     );
   }
 
@@ -642,6 +657,11 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
   final DateTime createdAt;
   final DateTime? syncedAt;
   final DateTime? photoSyncedAt;
+
+  /// Stable cross-device identity for sync deduplication. Generated once at
+  /// creation time (UUID v4), not at sync time, and preserved via .mbproj
+  /// if sessions were ever exported.
+  final String? externalId;
   const SurveySession(
       {required this.id,
       required this.projectId,
@@ -650,7 +670,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       required this.responses,
       required this.createdAt,
       this.syncedAt,
-      this.photoSyncedAt});
+      this.photoSyncedAt,
+      this.externalId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -665,6 +686,9 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
     }
     if (!nullToAbsent || photoSyncedAt != null) {
       map['photo_synced_at'] = Variable<DateTime>(photoSyncedAt);
+    }
+    if (!nullToAbsent || externalId != null) {
+      map['external_id'] = Variable<String>(externalId);
     }
     return map;
   }
@@ -683,6 +707,9 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       photoSyncedAt: photoSyncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(photoSyncedAt),
+      externalId: externalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalId),
     );
   }
 
@@ -698,6 +725,7 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
       photoSyncedAt: serializer.fromJson<DateTime?>(json['photoSyncedAt']),
+      externalId: serializer.fromJson<String?>(json['externalId']),
     );
   }
   @override
@@ -712,6 +740,7 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
       'photoSyncedAt': serializer.toJson<DateTime?>(photoSyncedAt),
+      'externalId': serializer.toJson<String?>(externalId),
     };
   }
 
@@ -723,7 +752,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           String? responses,
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent(),
-          Value<DateTime?> photoSyncedAt = const Value.absent()}) =>
+          Value<DateTime?> photoSyncedAt = const Value.absent(),
+          Value<String?> externalId = const Value.absent()}) =>
       SurveySession(
         id: id ?? this.id,
         projectId: projectId ?? this.projectId,
@@ -734,6 +764,7 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
         photoSyncedAt:
             photoSyncedAt.present ? photoSyncedAt.value : this.photoSyncedAt,
+        externalId: externalId.present ? externalId.value : this.externalId,
       );
   SurveySession copyWithCompanion(SurveySessionsCompanion data) {
     return SurveySession(
@@ -747,6 +778,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       photoSyncedAt: data.photoSyncedAt.present
           ? data.photoSyncedAt.value
           : this.photoSyncedAt,
+      externalId:
+          data.externalId.present ? data.externalId.value : this.externalId,
     );
   }
 
@@ -760,14 +793,15 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           ..write('responses: $responses, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
-          ..write('photoSyncedAt: $photoSyncedAt')
+          ..write('photoSyncedAt: $photoSyncedAt, ')
+          ..write('externalId: $externalId')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(id, projectId, title, status, responses,
-      createdAt, syncedAt, photoSyncedAt);
+      createdAt, syncedAt, photoSyncedAt, externalId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -779,7 +813,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           other.responses == this.responses &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt &&
-          other.photoSyncedAt == this.photoSyncedAt);
+          other.photoSyncedAt == this.photoSyncedAt &&
+          other.externalId == this.externalId);
 }
 
 class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
@@ -791,6 +826,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
   final Value<DateTime?> photoSyncedAt;
+  final Value<String?> externalId;
   const SurveySessionsCompanion({
     this.id = const Value.absent(),
     this.projectId = const Value.absent(),
@@ -800,6 +836,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.photoSyncedAt = const Value.absent(),
+    this.externalId = const Value.absent(),
   });
   SurveySessionsCompanion.insert({
     this.id = const Value.absent(),
@@ -810,6 +847,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.photoSyncedAt = const Value.absent(),
+    this.externalId = const Value.absent(),
   })  : projectId = Value(projectId),
         title = Value(title);
   static Insertable<SurveySession> custom({
@@ -821,6 +859,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
     Expression<DateTime>? photoSyncedAt,
+    Expression<String>? externalId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -831,6 +870,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (photoSyncedAt != null) 'photo_synced_at': photoSyncedAt,
+      if (externalId != null) 'external_id': externalId,
     });
   }
 
@@ -842,7 +882,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       Value<String>? responses,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
-      Value<DateTime?>? photoSyncedAt}) {
+      Value<DateTime?>? photoSyncedAt,
+      Value<String?>? externalId}) {
     return SurveySessionsCompanion(
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
@@ -852,6 +893,7 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       photoSyncedAt: photoSyncedAt ?? this.photoSyncedAt,
+      externalId: externalId ?? this.externalId,
     );
   }
 
@@ -882,6 +924,9 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     if (photoSyncedAt.present) {
       map['photo_synced_at'] = Variable<DateTime>(photoSyncedAt.value);
     }
+    if (externalId.present) {
+      map['external_id'] = Variable<String>(externalId.value);
+    }
     return map;
   }
 
@@ -895,7 +940,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
           ..write('responses: $responses, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
-          ..write('photoSyncedAt: $photoSyncedAt')
+          ..write('photoSyncedAt: $photoSyncedAt, ')
+          ..write('externalId: $externalId')
           ..write(')'))
         .toString();
   }
@@ -2838,6 +2884,7 @@ typedef $$SurveySessionsTableCreateCompanionBuilder = SurveySessionsCompanion
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<DateTime?> photoSyncedAt,
+  Value<String?> externalId,
 });
 typedef $$SurveySessionsTableUpdateCompanionBuilder = SurveySessionsCompanion
     Function({
@@ -2849,6 +2896,7 @@ typedef $$SurveySessionsTableUpdateCompanionBuilder = SurveySessionsCompanion
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<DateTime?> photoSyncedAt,
+  Value<String?> externalId,
 });
 
 final class $$SurveySessionsTableReferences
@@ -2899,6 +2947,9 @@ class $$SurveySessionsTableFilterComposer
 
   ColumnFilters<DateTime> get photoSyncedAt => $composableBuilder(
       column: $table.photoSyncedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => ColumnFilters(column));
 
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
@@ -2952,6 +3003,9 @@ class $$SurveySessionsTableOrderingComposer
       column: $table.photoSyncedAt,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => ColumnOrderings(column));
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -3002,6 +3056,9 @@ class $$SurveySessionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get photoSyncedAt => $composableBuilder(
       column: $table.photoSyncedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get externalId => $composableBuilder(
+      column: $table.externalId, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -3056,6 +3113,7 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<DateTime?> photoSyncedAt = const Value.absent(),
+            Value<String?> externalId = const Value.absent(),
           }) =>
               SurveySessionsCompanion(
             id: id,
@@ -3066,6 +3124,7 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             createdAt: createdAt,
             syncedAt: syncedAt,
             photoSyncedAt: photoSyncedAt,
+            externalId: externalId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -3076,6 +3135,7 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<DateTime?> photoSyncedAt = const Value.absent(),
+            Value<String?> externalId = const Value.absent(),
           }) =>
               SurveySessionsCompanion.insert(
             id: id,
@@ -3086,6 +3146,7 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             createdAt: createdAt,
             syncedAt: syncedAt,
             photoSyncedAt: photoSyncedAt,
+            externalId: externalId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 import 'package:mapbanai/data/app_database.dart';
+import 'package:uuid/uuid.dart';
 
 class CloudSyncException implements Exception {
   final String message;
@@ -251,8 +252,12 @@ class CloudSyncService {
       final surveyor = resp['user_name']?.toString() ??
           resp['surveyor']?.toString() ??
           '';
+      // Use stable UUID, fallback to local id only for very old unmigrated rows
+      final stableId = (s.externalId != null && s.externalId!.isNotEmpty)
+          ? s.externalId!
+          : s.id.toString();
       list.add({
-        'response_id': s.id.toString(),
+        'response_id': stableId,
         'project_name': projectName,
         'surveyor': surveyor,
         'submitted_at': s.createdAt.toIso8601String(),
@@ -340,8 +345,12 @@ class CloudSyncService {
         geojson = null;
       }
 
+      // Use stable UUID for deduplication
+      final stableId = (s.externalId != null && s.externalId!.isNotEmpty)
+          ? s.externalId!
+          : s.id.toString();
       list.add({
-        'feature_id': s.id.toString(),
+        'feature_id': stableId,
         'project_name': projectName,
         'surveyor': resp['user_name']?.toString() ?? '',
         'geometry_type': geometryType,
