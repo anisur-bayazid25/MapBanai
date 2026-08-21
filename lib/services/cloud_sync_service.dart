@@ -119,9 +119,9 @@ class CloudSyncService {
         if (decoded is Map<String, dynamic> && decoded['error'] is String) {
           throw CloudSyncException(decoded['error'] as String);
         }
-      } catch (_) {
+      } catch (e) {
+        if (e is CloudSyncException) rethrow;
         // ignore parse errors, fall through
-        if (_ is CloudSyncException) rethrow;
       }
       throw CloudSyncException(
         'Sync failed: HTTP ${httpResponse.statusCode}',

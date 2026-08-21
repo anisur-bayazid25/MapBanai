@@ -49,7 +49,8 @@ class PhotoSyncService {
         _delayFn = delay;
 
   Future<void> _delay(Duration d) {
-    if (_delayFn != null) return _delayFn!(d);
+    final fn = _delayFn;
+    if (fn != null) return fn(d);
     return Future.delayed(d);
   }
 
@@ -92,7 +93,11 @@ class PhotoSyncService {
 
   /// Uploads each unsynced photo individually with retry.
   /// Returns counts for reporting: "x/y photos synced".
-  Future<PhotoSyncResult> syncPhotos(int projectId) async {
+  /// Optional [onProgress] is called after each photo with current index (1-based) and total.
+  Future<PhotoSyncResult> syncPhotos(
+    int projectId, {
+    void Function(int current, int total)? onProgress,
+  }) async {
     final config = await db.getSyncConfig(projectId);
     final rawUrl = config?.syncEndpointUrl?.trim() ?? '';
     if (rawUrl.isEmpty) {
@@ -122,29 +127,30 @@ class PhotoSyncService {
     int failed = 0;
     int skipped = 0;
 
-    for (final session in photos) {
+    for (var idx = 0; idx < photos.length; idx++) {
+      final session = photos[idx];
       final photoPath = _extractPhotoPath(session.responses);
       if (photoPath.isEmpty) {
-        // No path to sync, treat as synced to avoid loop? Or skip?
-        // Mark as synced to clear it.
         await (db.update(db.surveySessions)
               ..where((t) => t.id.equals(session.id)))
             .write(SurveySessionsCompanion(photoSyncedAt: Value(DateTime.now())));
         synced++;
+        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
         continue;
       }
 
       final file = File(photoPath);
       if (!file.existsSync()) {
-        // File missing - count as failed but continue.
         failed++;
+        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
         continue;
       }
 
       final size = file.lengthSync();
       if (size > maxPhotoBytes) {
         skipped++;
-        continue; // clear "too large, skipped" without network call
+        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
+        continue;
       }
 
       String base64;
@@ -153,6 +159,7 @@ class PhotoSyncService {
         base64 = base64Encode(bytes);
       } catch (e) {
         failed++;
+        if (onProgress != null) onProgress(synced + failed + skipped, photos.length);
         continue;
       }
 
@@ -225,6 +232,11 @@ class PhotoSyncService {
         synced++;
       } else {
         failed++;
+      }
+      if (onProgress != null) {
+        try {
+          onProgress(synced + failed + skipped, photos.length);
+        } catch (_) {}
       }
     }
 

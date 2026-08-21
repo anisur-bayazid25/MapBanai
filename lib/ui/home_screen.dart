@@ -5,11 +5,14 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/services/background_gps_recorder.dart';
 import 'package:mapbanai/services/backup_service.dart';
+import 'package:mapbanai/services/cloud_sync_service.dart';
 import 'package:mapbanai/services/intent_handler.dart';
+import 'package:mapbanai/services/photo_sync_service.dart';
 import 'package:mapbanai/services/project_links.dart';
 import 'package:mapbanai/services/project_importer.dart';
 import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/services/qr_scanner.dart';
+import 'package:mapbanai/services/sync_orchestrator.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
@@ -17,6 +20,7 @@ import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
 import 'package:mapbanai/ui/gps_mode_screen.dart';
 import 'package:mapbanai/ui/import_flow_dialogs.dart';
+import 'package:mapbanai/ui/project_detail_screen.dart';
 import 'package:mapbanai/ui/project_setup_screen.dart';
 import 'package:mapbanai/ui/settings_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
@@ -333,6 +337,224 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _handleSync() async {
+    final projectState = context.read<ProjectState>();
+    final selected = projectState.selectedProject;
+    if (selected.isEmpty) {
+      _showSnack('Select a project first');
+      return;
+    }
+    final project = await _database.getProjectByName(selected);
+    if (project == null) {
+      _showSnack('Project not found: $selected');
+      return;
+    }
+    final config = await _database.getSyncConfig(project.id);
+    if (config == null ||
+        config.syncEndpointUrl == null ||
+        config.syncEndpointUrl!.trim().isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Set up cloud sync for this project first')),
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ProjectDetailScreen(
+            projectId: project.id,
+            database: _database,
+          ),
+        ),
+      );
+      if (mounted) setState(() => _refreshTick++);
+      return;
+    }
+
+    if (!mounted) return;
+    final result = await showDialog<FullSyncResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SyncProgressDialog(
+        database: _database,
+        projectId: project.id,
+        projectName: project.name,
+      ),
+    );
+    if (result != null && mounted) {
+      if (result.dataError != null) {
+        final msg = result.dataError!;
+        final isOffline = _isOfflineError(msg);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isOffline ? 'No internet connection' : msg),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.summary)),
+        );
+      }
+      setState(() => _refreshTick++);
+    }
+  }
+
+  bool _isOfflineError(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('connection refused') ||
+        lower.contains('network error') ||
+        lower.contains('timed out') ||
+        lower.contains('no internet');
+  }
+
+  String _formatLastSynced(DateTime? dt) {
+    if (dt == null) return 'Never synced';
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return 'Last synced: $y-$m-$d $hh:$mm';
+  }
+
+  Widget _buildSyncCard(BuildContext context, String selected) {
+    if (selected.isEmpty) return const SizedBox.shrink();
+    int? projectId;
+    for (final p in _projects) {
+      if (p.name == selected) {
+        projectId = p.id;
+        break;
+      }
+    }
+    if (projectId == null) return const SizedBox.shrink();
+    return FutureBuilder<SyncConfig?>(
+      key: ValueKey('syncCard_${_refreshTick}_$selected'),
+      future: _database.getSyncConfig(projectId),
+      builder: (context, snapshot) {
+        final cfg = snapshot.data;
+        final hasConfig = cfg != null &&
+            cfg.syncEndpointUrl != null &&
+            cfg.syncEndpointUrl!.trim().isNotEmpty;
+        final lastText = _formatLastSynced(cfg?.lastSyncAt);
+        if (!hasConfig) {
+          return Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: InkWell(
+              onTap: _handleSync,
+              borderRadius: BorderRadius.circular(18),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(Icons.cloud_off_outlined,
+                          color: Colors.grey.shade700, size: 30),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Set up cloud sync',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Configure sync for "$selected"',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(color: Colors.grey.shade700),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            lastText,
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade600),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: InkWell(
+            onTap: _handleSync,
+            borderRadius: BorderRadius.circular(18),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6A1B9A).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.cloud_sync_outlined,
+                        color: Color(0xFF6A1B9A), size: 30),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sync',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Upload responses & photos to cloud',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: Colors.grey.shade700),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          lastText,
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade600),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _loadProjects() async {
     final projects = await _database.getProjects();
     if (!mounted) return;
@@ -482,6 +704,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     _loadProjects();
                   },
                 ),
+                const SizedBox(height: 16),
+                _buildSyncCard(context, selected),
                 const SizedBox(height: 24),
                 _buildCollectedData(projectState, selected),
                 const SizedBox(height: 20),
@@ -828,6 +1052,154 @@ Widget _buildProjectSelector(
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _SyncProgressDialog extends StatefulWidget {
+  final AppDatabase database;
+  final int projectId;
+  final String projectName;
+
+  const _SyncProgressDialog({
+    required this.database,
+    required this.projectId,
+    required this.projectName,
+  });
+
+  @override
+  State<_SyncProgressDialog> createState() => _SyncProgressDialogState();
+}
+
+class _SyncProgressDialogState extends State<_SyncProgressDialog> {
+  String _phase = 'Syncing data...';
+  int _photoCurrent = 0;
+  int _photoTotal = 0;
+  String? _error;
+  FullSyncResult? _result;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      // Phase 1: data
+      setState(() => _phase = 'Syncing data...');
+      final dataResult = await CloudSyncService(widget.database)
+          .syncProject(widget.projectId)
+          .catchError((e) {
+        // rethrow to handle offline vs generic
+        throw e;
+      });
+
+      // Phase 2: photos with progress
+      final photoService = PhotoSyncService(
+        widget.database,
+        maxPhotoBytes: PhotoSyncService.defaultMaxBytes,
+      );
+      // Set initial photo phase
+      setState(() {
+        _phase = 'Syncing photos...';
+      });
+      final photoResult = await photoService.syncPhotos(
+        widget.projectId,
+        onProgress: (current, total) {
+          if (mounted) {
+            setState(() {
+              _photoCurrent = current;
+              _photoTotal = total;
+              _phase = 'Syncing photos ($current/$total)...';
+            });
+          }
+        },
+      );
+
+      final full = FullSyncResult(
+        data: dataResult,
+        photos: photoResult,
+        dataError: null,
+      );
+
+      setState(() {
+        _result = full;
+        _done = true;
+        _phase = full.summary;
+      });
+    } catch (e) {
+      final msg = e.toString();
+      final isOffline = msg.toLowerCase().contains('socketexception') ||
+          msg.toLowerCase().contains('failed host lookup') ||
+          msg.toLowerCase().contains('network is unreachable') ||
+          msg.toLowerCase().contains('connection refused') ||
+          msg.toLowerCase().contains('network error') ||
+          msg.toLowerCase().contains('timed out') ||
+          msg.toLowerCase().contains('no internet');
+      setState(() {
+        _error = isOffline ? 'No internet connection' : msg;
+        _done = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_done
+          ? (_error != null ? 'Sync failed' : 'Sync complete')
+          : 'Syncing...'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_done) ...[
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(),
+            ),
+            const SizedBox(height: 16),
+            Text(_phase, textAlign: TextAlign.center),
+            if (_photoTotal > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '$_photoCurrent/$_photoTotal photos',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+          ] else if (_error != null) ...[
+            Icon(Icons.error_outline, color: Colors.red.shade700, size: 48),
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+          ] else ...[
+            Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              _result?.summary ?? 'Sync finished',
+              textAlign: TextAlign.center,
+            ),
+            if (_result != null && _result!.photos.total > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                _result!.photos.summary,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ],
+      ),
+      actions: _done
+          ? [
+              TextButton(
+                onPressed: () => Navigator.pop(context, _result),
+                child: const Text('Close'),
+              ),
+            ]
+          : null,
     );
   }
 }
