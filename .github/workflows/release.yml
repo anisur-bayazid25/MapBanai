@@ -11,6 +11,7 @@ permissions:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +54,7 @@ jobs:
           fi
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: flutter pub get
 
       - name: Build release APK
