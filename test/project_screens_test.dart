@@ -98,7 +98,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Archive project'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Archive project'),
+      200,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Archive project'));
     await tester.pumpAndSettle();

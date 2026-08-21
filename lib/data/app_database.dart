@@ -520,6 +520,52 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteProjectField(int id) =>
       (delete(projectFields)..where((row) => row.id.equals(id))).go();
 
+  // ── Sync config (per-project) ────────────────────────────────
+
+  Future<SyncConfig?> getSyncConfig(int projectId) async {
+    return (select(syncConfigs)..where((t) => t.projectId.equals(projectId)))
+        .getSingleOrNull();
+  }
+
+  Future<void> upsertSyncConfig({
+    required int projectId,
+    String? syncEndpointUrl,
+    String? syncApiKey,
+    Value<DateTime?> lastSyncAt = const Value.absent(),
+  }) async {
+    final trimmedUrl = syncEndpointUrl?.trim();
+    final trimmedKey = syncApiKey?.trim();
+    await into(syncConfigs).insert(
+      SyncConfigsCompanion(
+        projectId: Value(projectId),
+        syncEndpointUrl: trimmedUrl == null || trimmedUrl.isEmpty
+            ? const Value(null)
+            : Value(trimmedUrl),
+        syncApiKey: trimmedKey == null || trimmedKey.isEmpty
+            ? const Value(null)
+            : Value(trimmedKey),
+        lastSyncAt: lastSyncAt,
+      ),
+      onConflict: DoUpdate(
+        (old) => SyncConfigsCompanion(
+          syncEndpointUrl: trimmedUrl == null || trimmedUrl.isEmpty
+              ? const Value(null)
+              : Value(trimmedUrl),
+          syncApiKey: trimmedKey == null || trimmedKey.isEmpty
+              ? const Value(null)
+              : Value(trimmedKey),
+          lastSyncAt: lastSyncAt,
+        ),
+        target: [syncConfigs.projectId],
+      ),
+    );
+  }
+
+  Future<void> deleteSyncConfig(int projectId) async {
+    await (delete(syncConfigs)..where((t) => t.projectId.equals(projectId)))
+        .go();
+  }
+
   // ── Reset / maintenance ──────────────────────────────────────
 
   /// Deletes all user-generated data (projects, sessions, stored forms and

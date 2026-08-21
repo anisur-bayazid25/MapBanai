@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
@@ -35,6 +36,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   List<StoredForm> _forms = [];
   bool _loading = true;
 
+  // Cloud Sync
+  final TextEditingController _syncUrlController = TextEditingController();
+  final TextEditingController _syncApiKeyController = TextEditingController();
+  SyncConfig? _syncConfig;
+  bool _savingSync = false;
+  bool _testingSync = false;
+  bool _obscureApiKey = true;
+
   @override
   void initState() {
     super.initState();
@@ -59,18 +68,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final forms = project == null
         ? <StoredForm>[]
         : await _database.getStoredFormsForProject(project.id);
+    final syncConfig = project == null
+        ? null
+        : await _database.getSyncConfig(project.id);
     if (!mounted) return;
     setState(() {
       _project = project;
       _sessionCount = count;
       _fields = fields;
       _forms = forms;
+      _syncConfig = syncConfig;
+      _syncUrlController.text = syncConfig?.syncEndpointUrl ?? '';
+      _syncApiKeyController.text = syncConfig?.syncApiKey ?? '';
       _loading = false;
     });
   }
 
   @override
   void dispose() {
+    _syncUrlController.dispose();
+    _syncApiKeyController.dispose();
     if (widget.database == null) {
       _database.close();
     }
@@ -199,6 +216,96 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
+  }
+
+  void _showSyncSnack(String message, {required bool success}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
+      ),
+    );
+  }
+
+  Future<void> _saveSyncConfig() async {
+    final project = _project;
+    if (project == null) return;
+    setState(() => _savingSync = true);
+    try {
+      final url = _syncUrlController.text.trim();
+      final key = _syncApiKeyController.text.trim();
+      await _database.upsertSyncConfig(
+        projectId: project.id,
+        syncEndpointUrl: url.isEmpty ? null : url,
+        syncApiKey: key.isEmpty ? null : key,
+      );
+      final updated = await _database.getSyncConfig(project.id);
+      if (!mounted) return;
+      setState(() => _syncConfig = updated);
+      _showSyncSnack('Sync settings saved', success: true);
+    } catch (e) {
+      _showSyncSnack('Failed to save sync settings: $e', success: false);
+    } finally {
+      if (mounted) setState(() => _savingSync = false);
+    }
+  }
+
+  Future<void> _testSyncConnection() async {
+    final rawUrl = _syncUrlController.text.trim();
+    if (rawUrl.isEmpty) {
+      _showSyncSnack('Please enter a sync URL first', success: false);
+      return;
+    }
+    Uri uri;
+    try {
+      uri = Uri.parse(rawUrl);
+      if (!uri.hasScheme || !(uri.scheme == 'http' || uri.scheme == 'https')) {
+        throw const FormatException('URL must start with http:// or https://');
+      }
+      if (uri.host.isEmpty) {
+        throw const FormatException('Invalid URL');
+      }
+    } catch (e) {
+      _showSyncSnack('Invalid URL: $e', success: false);
+      return;
+    }
+
+    setState(() => _testingSync = true);
+    try {
+      final response = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _showSyncSnack(
+          'Connection failed: HTTP ${response.statusCode}',
+          success: false,
+        );
+        return;
+      }
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(response.body);
+      } catch (_) {
+        _showSyncSnack(
+          'Connection failed: response is not valid JSON',
+          success: false,
+        );
+        return;
+      }
+      if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
+        _showSyncSnack('Connection successful', success: true);
+      } else {
+        _showSyncSnack(
+          'Connection failed: missing {ok: true} in response',
+          success: false,
+        );
+      }
+    } catch (e) {
+      _showSyncSnack('Connection failed: $e', success: false);
+    } finally {
+      if (mounted) setState(() => _testingSync = false);
+    }
   }
 
   // ── data collection fields ──────────────────────────────────
@@ -643,6 +750,95 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         onPressed: _importXlsForm,
                         icon: const Icon(Icons.upload_file_outlined, size: 18),
                         label: const Text('Import XLSForm'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Cloud Sync',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Connect this project to a Google Apps Script Web App for '
+                  'background sync.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _syncUrlController,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Apps Script Web App URL',
+                    hintText: 'https://script.google.com/macros/s/.../exec',
+                    prefixIcon: Icon(Icons.cloud_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _syncApiKeyController,
+                  obscureText: _obscureApiKey,
+                  obscuringCharacter: '•',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: 'API key',
+                    hintText: 'Shared secret token',
+                    prefixIcon: const Icon(Icons.vpn_key_outlined),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureApiKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () => setState(
+                        () => _obscureApiKey = !_obscureApiKey,
+                      ),
+                    ),
+                  ),
+                ),
+                if (_syncConfig?.lastSyncAt != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last synced: ${_syncConfig!.lastSyncAt}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _savingSync ? null : _saveSyncConfig,
+                        icon: _savingSync
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined, size: 18),
+                        label: Text(_savingSync ? 'Saving...' : 'Save'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _testingSync ? null : _testSyncConnection,
+                        icon: _testingSync
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.wifi_tethering_outlined, size: 18),
+                        label:
+                            Text(_testingSync ? 'Testing...' : 'Test Connection'),
                       ),
                     ),
                   ],
