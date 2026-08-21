@@ -188,12 +188,24 @@ class PhotoSyncService {
               headers: {'Content-Type': 'application/json'},
               body: payload,
             ).timeout(const Duration(seconds: 30));
+            // Apps Script can reject application/json with 405; retry once as text/plain
+            if (resp.statusCode == 405) {
+              resp = await _postJsonWithRedirect(
+                client: client,
+                uri: uri,
+                headers: {'Content-Type': 'text/plain;charset=utf-8'},
+                body: payload,
+              ).timeout(const Duration(seconds: 30));
+            }
           } finally {
             if (shouldClose) client.close();
           }
 
           if (resp.statusCode < 200 || resp.statusCode >= 300) {
-            // try to extract error, but treat as failure for retry
+            if (resp.statusCode == 405) {
+              throw HttpException(
+                  'HTTP 405 Method Not Allowed — Web App must implement doPost(e) and be deployed as /exec with Anyone access');
+            }
             throw HttpException('HTTP ${resp.statusCode}');
           }
 

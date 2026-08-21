@@ -94,12 +94,24 @@ class CloudSyncService {
       final client = _client ?? http.Client();
       final shouldClose = _client == null;
       try {
+        // Apps Script Web Apps historically handle POST with text/plain more reliably
+        // than application/json (avoids CORS preflight that can surface as 405).
+        // We try application/json first, and on 405 retry once with text/plain.
         httpResponse = await _postJsonWithRedirect(
           client: client,
           uri: uri,
           headers: {'Content-Type': 'application/json'},
           body: body,
         ).timeout(const Duration(seconds: 30));
+        if (httpResponse.statusCode == 405) {
+          // Retry once with text/plain — some Apps Script deployments only accept that.
+          httpResponse = await _postJsonWithRedirect(
+            client: client,
+            uri: uri,
+            headers: {'Content-Type': 'text/plain;charset=utf-8'},
+            body: body,
+          ).timeout(const Duration(seconds: 30));
+        }
       } finally {
         if (shouldClose) client.close();
       }
@@ -121,6 +133,15 @@ class CloudSyncService {
       } catch (e) {
         if (e is CloudSyncException) rethrow;
         // ignore parse errors, fall through
+      }
+      // Provide a more actionable message for 405
+      if (httpResponse.statusCode == 405) {
+        throw CloudSyncException(
+          'Sync failed: HTTP 405 Method Not Allowed — the Web App URL does not accept POST. '
+          'Check that the Apps Script is deployed as Web App (Execute as: Me, Who has access: Anyone) '
+          'and implements function doPost(e) handling action=sync_data / upload_photo. '
+          'Also verify you are using the /exec URL, not /dev.',
+        );
       }
       throw CloudSyncException(
         'Sync failed: HTTP ${httpResponse.statusCode}',
