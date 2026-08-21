@@ -32,6 +32,8 @@ class SurveySessions extends Table {
   TextColumn get status => text().withDefault(const Constant('draft'))();
   TextColumn get responses => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get syncedAt => dateTime().nullable()();
+  DateTimeColumn get photoSyncedAt => dateTime().nullable()();
 }
 
 class StoredForms extends Table {
@@ -69,6 +71,20 @@ class ProjectFields extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Per-project sync configuration (endpoint + shared-secret token).
+/// One row per project — `projectId` is the primary key and cascades on
+/// project delete. Stored as-is, no encryption (shared-secret token).
+class SyncConfigs extends Table {
+  IntColumn get projectId =>
+      integer().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get syncEndpointUrl => text().nullable()();
+  TextColumn get syncApiKey => text().nullable()();
+  DateTimeColumn get lastSyncAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {projectId};
+}
+
 @DriftDatabase(tables: [
   Projects,
   SurveySessions,
@@ -76,6 +92,7 @@ class ProjectFields extends Table {
   AppSettings,
   GpsLogs,
   ProjectFields,
+  SyncConfigs,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Test hook: use a same-isolate file connection instead of opening the
@@ -92,8 +109,11 @@ class AppDatabase extends _$AppDatabase {
   @visibleForTesting
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
+  @visibleForTesting
+  AppDatabase.testWithExecutor(QueryExecutor executor) : super(executor);
+
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -143,6 +163,11 @@ class AppDatabase extends _$AppDatabase {
             );
           }
         }
+      }
+      if (from < 9) {
+        await migrator.addColumn(surveySessions, surveySessions.syncedAt);
+        await migrator.addColumn(surveySessions, surveySessions.photoSyncedAt);
+        await migrator.createTable(syncConfigs);
       }
     },
   );
@@ -251,11 +276,12 @@ class AppDatabase extends _$AppDatabase {
       (delete(surveySessions)..where((row) => row.id.equals(id))).go();
 
   /// Deletes a project together with all its survey sessions/features,
-  /// attribute fields and stored forms.
+  /// attribute fields, stored forms and sync config.
   Future<void> deleteProject(int id) async {
     await (delete(surveySessions)..where((row) => row.projectId.equals(id))).go();
     await (delete(projectFields)..where((row) => row.projectId.equals(id))).go();
     await (delete(storedForms)..where((row) => row.projectId.equals(id))).go();
+    await (delete(syncConfigs)..where((row) => row.projectId.equals(id))).go();
     await (delete(projects)..where((row) => row.id.equals(id))).go();
   }
 
@@ -501,6 +527,7 @@ class AppDatabase extends _$AppDatabase {
   /// survives a reset. Photo files on disk are left untouched.
   Future<void> resetAllData() async {
     await delete(surveySessions).go();
+    await delete(syncConfigs).go();
     await delete(projects).go();
     await delete(storedForms).go();
     await delete(gpsLogs).go();

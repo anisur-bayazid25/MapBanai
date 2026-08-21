@@ -529,9 +529,29 @@ class $SurveySessionsTable extends SurveySessions
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _syncedAtMeta =
+      const VerificationMeta('syncedAt');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, projectId, title, status, responses, createdAt];
+  late final GeneratedColumn<DateTime> syncedAt = GeneratedColumn<DateTime>(
+      'synced_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _photoSyncedAtMeta =
+      const VerificationMeta('photoSyncedAt');
+  @override
+  late final GeneratedColumn<DateTime> photoSyncedAt =
+      GeneratedColumn<DateTime>('photo_synced_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        projectId,
+        title,
+        status,
+        responses,
+        createdAt,
+        syncedAt,
+        photoSyncedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -569,6 +589,16 @@ class $SurveySessionsTable extends SurveySessions
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('synced_at')) {
+      context.handle(_syncedAtMeta,
+          syncedAt.isAcceptableOrUnknown(data['synced_at']!, _syncedAtMeta));
+    }
+    if (data.containsKey('photo_synced_at')) {
+      context.handle(
+          _photoSyncedAtMeta,
+          photoSyncedAt.isAcceptableOrUnknown(
+              data['photo_synced_at']!, _photoSyncedAtMeta));
+    }
     return context;
   }
 
@@ -590,6 +620,10 @@ class $SurveySessionsTable extends SurveySessions
           .read(DriftSqlType.string, data['${effectivePrefix}responses'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      syncedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
+      photoSyncedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}photo_synced_at']),
     );
   }
 
@@ -606,13 +640,17 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
   final String status;
   final String responses;
   final DateTime createdAt;
+  final DateTime? syncedAt;
+  final DateTime? photoSyncedAt;
   const SurveySession(
       {required this.id,
       required this.projectId,
       required this.title,
       required this.status,
       required this.responses,
-      required this.createdAt});
+      required this.createdAt,
+      this.syncedAt,
+      this.photoSyncedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -622,6 +660,12 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
     map['status'] = Variable<String>(status);
     map['responses'] = Variable<String>(responses);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || syncedAt != null) {
+      map['synced_at'] = Variable<DateTime>(syncedAt);
+    }
+    if (!nullToAbsent || photoSyncedAt != null) {
+      map['photo_synced_at'] = Variable<DateTime>(photoSyncedAt);
+    }
     return map;
   }
 
@@ -633,6 +677,12 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       status: Value(status),
       responses: Value(responses),
       createdAt: Value(createdAt),
+      syncedAt: syncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedAt),
+      photoSyncedAt: photoSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(photoSyncedAt),
     );
   }
 
@@ -646,6 +696,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       status: serializer.fromJson<String>(json['status']),
       responses: serializer.fromJson<String>(json['responses']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
+      photoSyncedAt: serializer.fromJson<DateTime?>(json['photoSyncedAt']),
     );
   }
   @override
@@ -658,6 +710,8 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       'status': serializer.toJson<String>(status),
       'responses': serializer.toJson<String>(responses),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'syncedAt': serializer.toJson<DateTime?>(syncedAt),
+      'photoSyncedAt': serializer.toJson<DateTime?>(photoSyncedAt),
     };
   }
 
@@ -667,7 +721,9 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           String? title,
           String? status,
           String? responses,
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          Value<DateTime?> syncedAt = const Value.absent(),
+          Value<DateTime?> photoSyncedAt = const Value.absent()}) =>
       SurveySession(
         id: id ?? this.id,
         projectId: projectId ?? this.projectId,
@@ -675,6 +731,9 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
         status: status ?? this.status,
         responses: responses ?? this.responses,
         createdAt: createdAt ?? this.createdAt,
+        syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
+        photoSyncedAt:
+            photoSyncedAt.present ? photoSyncedAt.value : this.photoSyncedAt,
       );
   SurveySession copyWithCompanion(SurveySessionsCompanion data) {
     return SurveySession(
@@ -684,6 +743,10 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
       status: data.status.present ? data.status.value : this.status,
       responses: data.responses.present ? data.responses.value : this.responses,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
+      photoSyncedAt: data.photoSyncedAt.present
+          ? data.photoSyncedAt.value
+          : this.photoSyncedAt,
     );
   }
 
@@ -695,14 +758,16 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           ..write('title: $title, ')
           ..write('status: $status, ')
           ..write('responses: $responses, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('syncedAt: $syncedAt, ')
+          ..write('photoSyncedAt: $photoSyncedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, projectId, title, status, responses, createdAt);
+  int get hashCode => Object.hash(id, projectId, title, status, responses,
+      createdAt, syncedAt, photoSyncedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -712,7 +777,9 @@ class SurveySession extends DataClass implements Insertable<SurveySession> {
           other.title == this.title &&
           other.status == this.status &&
           other.responses == this.responses &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.syncedAt == this.syncedAt &&
+          other.photoSyncedAt == this.photoSyncedAt);
 }
 
 class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
@@ -722,6 +789,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
   final Value<String> status;
   final Value<String> responses;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> syncedAt;
+  final Value<DateTime?> photoSyncedAt;
   const SurveySessionsCompanion({
     this.id = const Value.absent(),
     this.projectId = const Value.absent(),
@@ -729,6 +798,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     this.status = const Value.absent(),
     this.responses = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.syncedAt = const Value.absent(),
+    this.photoSyncedAt = const Value.absent(),
   });
   SurveySessionsCompanion.insert({
     this.id = const Value.absent(),
@@ -737,6 +808,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     this.status = const Value.absent(),
     this.responses = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.syncedAt = const Value.absent(),
+    this.photoSyncedAt = const Value.absent(),
   })  : projectId = Value(projectId),
         title = Value(title);
   static Insertable<SurveySession> custom({
@@ -746,6 +819,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     Expression<String>? status,
     Expression<String>? responses,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? syncedAt,
+    Expression<DateTime>? photoSyncedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -754,6 +829,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       if (status != null) 'status': status,
       if (responses != null) 'responses': responses,
       if (createdAt != null) 'created_at': createdAt,
+      if (syncedAt != null) 'synced_at': syncedAt,
+      if (photoSyncedAt != null) 'photo_synced_at': photoSyncedAt,
     });
   }
 
@@ -763,7 +840,9 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       Value<String>? title,
       Value<String>? status,
       Value<String>? responses,
-      Value<DateTime>? createdAt}) {
+      Value<DateTime>? createdAt,
+      Value<DateTime?>? syncedAt,
+      Value<DateTime?>? photoSyncedAt}) {
     return SurveySessionsCompanion(
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
@@ -771,6 +850,8 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
       status: status ?? this.status,
       responses: responses ?? this.responses,
       createdAt: createdAt ?? this.createdAt,
+      syncedAt: syncedAt ?? this.syncedAt,
+      photoSyncedAt: photoSyncedAt ?? this.photoSyncedAt,
     );
   }
 
@@ -795,6 +876,12 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (syncedAt.present) {
+      map['synced_at'] = Variable<DateTime>(syncedAt.value);
+    }
+    if (photoSyncedAt.present) {
+      map['photo_synced_at'] = Variable<DateTime>(photoSyncedAt.value);
+    }
     return map;
   }
 
@@ -806,7 +893,9 @@ class SurveySessionsCompanion extends UpdateCompanion<SurveySession> {
           ..write('title: $title, ')
           ..write('status: $status, ')
           ..write('responses: $responses, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('syncedAt: $syncedAt, ')
+          ..write('photoSyncedAt: $photoSyncedAt')
           ..write(')'))
         .toString();
   }
@@ -1891,6 +1980,286 @@ class ProjectFieldsCompanion extends UpdateCompanion<ProjectField> {
   }
 }
 
+class $SyncConfigsTable extends SyncConfigs
+    with TableInfo<$SyncConfigsTable, SyncConfig> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncConfigsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<int> projectId = GeneratedColumn<int>(
+      'project_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES projects (id) ON DELETE CASCADE'));
+  static const VerificationMeta _syncEndpointUrlMeta =
+      const VerificationMeta('syncEndpointUrl');
+  @override
+  late final GeneratedColumn<String> syncEndpointUrl = GeneratedColumn<String>(
+      'sync_endpoint_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _syncApiKeyMeta =
+      const VerificationMeta('syncApiKey');
+  @override
+  late final GeneratedColumn<String> syncApiKey = GeneratedColumn<String>(
+      'sync_api_key', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lastSyncAtMeta =
+      const VerificationMeta('lastSyncAt');
+  @override
+  late final GeneratedColumn<DateTime> lastSyncAt = GeneratedColumn<DateTime>(
+      'last_sync_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [projectId, syncEndpointUrl, syncApiKey, lastSyncAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_configs';
+  @override
+  VerificationContext validateIntegrity(Insertable<SyncConfig> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
+    }
+    if (data.containsKey('sync_endpoint_url')) {
+      context.handle(
+          _syncEndpointUrlMeta,
+          syncEndpointUrl.isAcceptableOrUnknown(
+              data['sync_endpoint_url']!, _syncEndpointUrlMeta));
+    }
+    if (data.containsKey('sync_api_key')) {
+      context.handle(
+          _syncApiKeyMeta,
+          syncApiKey.isAcceptableOrUnknown(
+              data['sync_api_key']!, _syncApiKeyMeta));
+    }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+          _lastSyncAtMeta,
+          lastSyncAt.isAcceptableOrUnknown(
+              data['last_sync_at']!, _lastSyncAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {projectId};
+  @override
+  SyncConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncConfig(
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}project_id'])!,
+      syncEndpointUrl: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}sync_endpoint_url']),
+      syncApiKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sync_api_key']),
+      lastSyncAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}last_sync_at']),
+    );
+  }
+
+  @override
+  $SyncConfigsTable createAlias(String alias) {
+    return $SyncConfigsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncConfig extends DataClass implements Insertable<SyncConfig> {
+  final int projectId;
+  final String? syncEndpointUrl;
+  final String? syncApiKey;
+  final DateTime? lastSyncAt;
+  const SyncConfig(
+      {required this.projectId,
+      this.syncEndpointUrl,
+      this.syncApiKey,
+      this.lastSyncAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['project_id'] = Variable<int>(projectId);
+    if (!nullToAbsent || syncEndpointUrl != null) {
+      map['sync_endpoint_url'] = Variable<String>(syncEndpointUrl);
+    }
+    if (!nullToAbsent || syncApiKey != null) {
+      map['sync_api_key'] = Variable<String>(syncApiKey);
+    }
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
+    }
+    return map;
+  }
+
+  SyncConfigsCompanion toCompanion(bool nullToAbsent) {
+    return SyncConfigsCompanion(
+      projectId: Value(projectId),
+      syncEndpointUrl: syncEndpointUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncEndpointUrl),
+      syncApiKey: syncApiKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncApiKey),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
+    );
+  }
+
+  factory SyncConfig.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncConfig(
+      projectId: serializer.fromJson<int>(json['projectId']),
+      syncEndpointUrl: serializer.fromJson<String?>(json['syncEndpointUrl']),
+      syncApiKey: serializer.fromJson<String?>(json['syncApiKey']),
+      lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'projectId': serializer.toJson<int>(projectId),
+      'syncEndpointUrl': serializer.toJson<String?>(syncEndpointUrl),
+      'syncApiKey': serializer.toJson<String?>(syncApiKey),
+      'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
+    };
+  }
+
+  SyncConfig copyWith(
+          {int? projectId,
+          Value<String?> syncEndpointUrl = const Value.absent(),
+          Value<String?> syncApiKey = const Value.absent(),
+          Value<DateTime?> lastSyncAt = const Value.absent()}) =>
+      SyncConfig(
+        projectId: projectId ?? this.projectId,
+        syncEndpointUrl: syncEndpointUrl.present
+            ? syncEndpointUrl.value
+            : this.syncEndpointUrl,
+        syncApiKey: syncApiKey.present ? syncApiKey.value : this.syncApiKey,
+        lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+      );
+  SyncConfig copyWithCompanion(SyncConfigsCompanion data) {
+    return SyncConfig(
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      syncEndpointUrl: data.syncEndpointUrl.present
+          ? data.syncEndpointUrl.value
+          : this.syncEndpointUrl,
+      syncApiKey:
+          data.syncApiKey.present ? data.syncApiKey.value : this.syncApiKey,
+      lastSyncAt:
+          data.lastSyncAt.present ? data.lastSyncAt.value : this.lastSyncAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConfig(')
+          ..write('projectId: $projectId, ')
+          ..write('syncEndpointUrl: $syncEndpointUrl, ')
+          ..write('syncApiKey: $syncApiKey, ')
+          ..write('lastSyncAt: $lastSyncAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(projectId, syncEndpointUrl, syncApiKey, lastSyncAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncConfig &&
+          other.projectId == this.projectId &&
+          other.syncEndpointUrl == this.syncEndpointUrl &&
+          other.syncApiKey == this.syncApiKey &&
+          other.lastSyncAt == this.lastSyncAt);
+}
+
+class SyncConfigsCompanion extends UpdateCompanion<SyncConfig> {
+  final Value<int> projectId;
+  final Value<String?> syncEndpointUrl;
+  final Value<String?> syncApiKey;
+  final Value<DateTime?> lastSyncAt;
+  const SyncConfigsCompanion({
+    this.projectId = const Value.absent(),
+    this.syncEndpointUrl = const Value.absent(),
+    this.syncApiKey = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+  });
+  SyncConfigsCompanion.insert({
+    this.projectId = const Value.absent(),
+    this.syncEndpointUrl = const Value.absent(),
+    this.syncApiKey = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+  });
+  static Insertable<SyncConfig> custom({
+    Expression<int>? projectId,
+    Expression<String>? syncEndpointUrl,
+    Expression<String>? syncApiKey,
+    Expression<DateTime>? lastSyncAt,
+  }) {
+    return RawValuesInsertable({
+      if (projectId != null) 'project_id': projectId,
+      if (syncEndpointUrl != null) 'sync_endpoint_url': syncEndpointUrl,
+      if (syncApiKey != null) 'sync_api_key': syncApiKey,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+    });
+  }
+
+  SyncConfigsCompanion copyWith(
+      {Value<int>? projectId,
+      Value<String?>? syncEndpointUrl,
+      Value<String?>? syncApiKey,
+      Value<DateTime?>? lastSyncAt}) {
+    return SyncConfigsCompanion(
+      projectId: projectId ?? this.projectId,
+      syncEndpointUrl: syncEndpointUrl ?? this.syncEndpointUrl,
+      syncApiKey: syncApiKey ?? this.syncApiKey,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (projectId.present) {
+      map['project_id'] = Variable<int>(projectId.value);
+    }
+    if (syncEndpointUrl.present) {
+      map['sync_endpoint_url'] = Variable<String>(syncEndpointUrl.value);
+    }
+    if (syncApiKey.present) {
+      map['sync_api_key'] = Variable<String>(syncApiKey.value);
+    }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConfigsCompanion(')
+          ..write('projectId: $projectId, ')
+          ..write('syncEndpointUrl: $syncEndpointUrl, ')
+          ..write('syncApiKey: $syncApiKey, ')
+          ..write('lastSyncAt: $lastSyncAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1900,6 +2269,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $GpsLogsTable gpsLogs = $GpsLogsTable(this);
   late final $ProjectFieldsTable projectFields = $ProjectFieldsTable(this);
+  late final $SyncConfigsTable syncConfigs = $SyncConfigsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1910,8 +2280,21 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         storedForms,
         appSettings,
         gpsLogs,
-        projectFields
+        projectFields,
+        syncConfigs
       ];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
+        [
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('projects',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('sync_configs', kind: UpdateKind.delete),
+            ],
+          ),
+        ],
+      );
 }
 
 typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
@@ -1982,6 +2365,21 @@ final class $$ProjectsTableReferences
         .filter((f) => f.projectId.id($_item.id));
 
     final cache = $_typedResult.readTableOrNull(_projectFieldsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$SyncConfigsTable, List<SyncConfig>>
+      _syncConfigsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+          db.syncConfigs,
+          aliasName:
+              $_aliasNameGenerator(db.projects.id, db.syncConfigs.projectId));
+
+  $$SyncConfigsTableProcessedTableManager get syncConfigsRefs {
+    final manager = $$SyncConfigsTableTableManager($_db, $_db.syncConfigs)
+        .filter((f) => f.projectId.id($_item.id));
+
+    final cache = $_typedResult.readTableOrNull(_syncConfigsRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -2079,6 +2477,27 @@ class $$ProjectsTableFilterComposer
             $$ProjectFieldsTableFilterComposer(
               $db: $db,
               $table: $db.projectFields,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> syncConfigsRefs(
+      Expression<bool> Function($$SyncConfigsTableFilterComposer f) f) {
+    final $$SyncConfigsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.syncConfigs,
+        getReferencedColumn: (t) => t.projectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SyncConfigsTableFilterComposer(
+              $db: $db,
+              $table: $db.syncConfigs,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -2225,6 +2644,27 @@ class $$ProjectsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> syncConfigsRefs<T extends Object>(
+      Expression<T> Function($$SyncConfigsTableAnnotationComposer a) f) {
+    final $$SyncConfigsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.syncConfigs,
+        getReferencedColumn: (t) => t.projectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SyncConfigsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.syncConfigs,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$ProjectsTableTableManager extends RootTableManager<
@@ -2241,7 +2681,8 @@ class $$ProjectsTableTableManager extends RootTableManager<
     PrefetchHooks Function(
         {bool surveySessionsRefs,
         bool storedFormsRefs,
-        bool projectFieldsRefs})> {
+        bool projectFieldsRefs,
+        bool syncConfigsRefs})> {
   $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
       : super(TableManagerState(
           db: db,
@@ -2303,13 +2744,15 @@ class $$ProjectsTableTableManager extends RootTableManager<
           prefetchHooksCallback: (
               {surveySessionsRefs = false,
               storedFormsRefs = false,
-              projectFieldsRefs = false}) {
+              projectFieldsRefs = false,
+              syncConfigsRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (surveySessionsRefs) db.surveySessions,
                 if (storedFormsRefs) db.storedForms,
-                if (projectFieldsRefs) db.projectFields
+                if (projectFieldsRefs) db.projectFields,
+                if (syncConfigsRefs) db.syncConfigs
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -2349,6 +2792,18 @@ class $$ProjectsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.projectId == item.id),
+                        typedResults: items),
+                  if (syncConfigsRefs)
+                    await $_getPrefetchedData(
+                        currentTable: table,
+                        referencedTable:
+                            $$ProjectsTableReferences._syncConfigsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProjectsTableReferences(db, table, p0)
+                                .syncConfigsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.projectId == item.id),
                         typedResults: items)
                 ];
               },
@@ -2371,7 +2826,8 @@ typedef $$ProjectsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function(
         {bool surveySessionsRefs,
         bool storedFormsRefs,
-        bool projectFieldsRefs})>;
+        bool projectFieldsRefs,
+        bool syncConfigsRefs})>;
 typedef $$SurveySessionsTableCreateCompanionBuilder = SurveySessionsCompanion
     Function({
   Value<int> id,
@@ -2380,6 +2836,8 @@ typedef $$SurveySessionsTableCreateCompanionBuilder = SurveySessionsCompanion
   Value<String> status,
   Value<String> responses,
   Value<DateTime> createdAt,
+  Value<DateTime?> syncedAt,
+  Value<DateTime?> photoSyncedAt,
 });
 typedef $$SurveySessionsTableUpdateCompanionBuilder = SurveySessionsCompanion
     Function({
@@ -2389,6 +2847,8 @@ typedef $$SurveySessionsTableUpdateCompanionBuilder = SurveySessionsCompanion
   Value<String> status,
   Value<String> responses,
   Value<DateTime> createdAt,
+  Value<DateTime?> syncedAt,
+  Value<DateTime?> photoSyncedAt,
 });
 
 final class $$SurveySessionsTableReferences
@@ -2433,6 +2893,12 @@ class $$SurveySessionsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get syncedAt => $composableBuilder(
+      column: $table.syncedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get photoSyncedAt => $composableBuilder(
+      column: $table.photoSyncedAt, builder: (column) => ColumnFilters(column));
 
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
@@ -2479,6 +2945,13 @@ class $$SurveySessionsTableOrderingComposer
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get syncedAt => $composableBuilder(
+      column: $table.syncedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get photoSyncedAt => $composableBuilder(
+      column: $table.photoSyncedAt,
+      builder: (column) => ColumnOrderings(column));
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -2523,6 +2996,12 @@ class $$SurveySessionsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get syncedAt =>
+      $composableBuilder(column: $table.syncedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get photoSyncedAt => $composableBuilder(
+      column: $table.photoSyncedAt, builder: (column) => column);
 
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
@@ -2575,6 +3054,8 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             Value<String> status = const Value.absent(),
             Value<String> responses = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> syncedAt = const Value.absent(),
+            Value<DateTime?> photoSyncedAt = const Value.absent(),
           }) =>
               SurveySessionsCompanion(
             id: id,
@@ -2583,6 +3064,8 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             status: status,
             responses: responses,
             createdAt: createdAt,
+            syncedAt: syncedAt,
+            photoSyncedAt: photoSyncedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -2591,6 +3074,8 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             Value<String> status = const Value.absent(),
             Value<String> responses = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> syncedAt = const Value.absent(),
+            Value<DateTime?> photoSyncedAt = const Value.absent(),
           }) =>
               SurveySessionsCompanion.insert(
             id: id,
@@ -2599,6 +3084,8 @@ class $$SurveySessionsTableTableManager extends RootTableManager<
             status: status,
             responses: responses,
             createdAt: createdAt,
+            syncedAt: syncedAt,
+            photoSyncedAt: photoSyncedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (
@@ -3473,6 +3960,260 @@ typedef $$ProjectFieldsTableProcessedTableManager = ProcessedTableManager<
     (ProjectField, $$ProjectFieldsTableReferences),
     ProjectField,
     PrefetchHooks Function({bool projectId})>;
+typedef $$SyncConfigsTableCreateCompanionBuilder = SyncConfigsCompanion
+    Function({
+  Value<int> projectId,
+  Value<String?> syncEndpointUrl,
+  Value<String?> syncApiKey,
+  Value<DateTime?> lastSyncAt,
+});
+typedef $$SyncConfigsTableUpdateCompanionBuilder = SyncConfigsCompanion
+    Function({
+  Value<int> projectId,
+  Value<String?> syncEndpointUrl,
+  Value<String?> syncApiKey,
+  Value<DateTime?> lastSyncAt,
+});
+
+final class $$SyncConfigsTableReferences
+    extends BaseReferences<_$AppDatabase, $SyncConfigsTable, SyncConfig> {
+  $$SyncConfigsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias(
+          $_aliasNameGenerator(db.syncConfigs.projectId, db.projects.id));
+
+  $$ProjectsTableProcessedTableManager get projectId {
+    final manager = $$ProjectsTableTableManager($_db, $_db.projects)
+        .filter((f) => f.id($_item.projectId));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$SyncConfigsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncConfigsTable> {
+  $$SyncConfigsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get syncEndpointUrl => $composableBuilder(
+      column: $table.syncEndpointUrl,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get syncApiKey => $composableBuilder(
+      column: $table.syncApiKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => ColumnFilters(column));
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableFilterComposer(
+              $db: $db,
+              $table: $db.projects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$SyncConfigsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncConfigsTable> {
+  $$SyncConfigsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get syncEndpointUrl => $composableBuilder(
+      column: $table.syncEndpointUrl,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get syncApiKey => $composableBuilder(
+      column: $table.syncApiKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableOrderingComposer(
+              $db: $db,
+              $table: $db.projects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$SyncConfigsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncConfigsTable> {
+  $$SyncConfigsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get syncEndpointUrl => $composableBuilder(
+      column: $table.syncEndpointUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get syncApiKey => $composableBuilder(
+      column: $table.syncApiKey, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.projectId,
+        referencedTable: $db.projects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProjectsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.projects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$SyncConfigsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SyncConfigsTable,
+    SyncConfig,
+    $$SyncConfigsTableFilterComposer,
+    $$SyncConfigsTableOrderingComposer,
+    $$SyncConfigsTableAnnotationComposer,
+    $$SyncConfigsTableCreateCompanionBuilder,
+    $$SyncConfigsTableUpdateCompanionBuilder,
+    (SyncConfig, $$SyncConfigsTableReferences),
+    SyncConfig,
+    PrefetchHooks Function({bool projectId})> {
+  $$SyncConfigsTableTableManager(_$AppDatabase db, $SyncConfigsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncConfigsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncConfigsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncConfigsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> projectId = const Value.absent(),
+            Value<String?> syncEndpointUrl = const Value.absent(),
+            Value<String?> syncApiKey = const Value.absent(),
+            Value<DateTime?> lastSyncAt = const Value.absent(),
+          }) =>
+              SyncConfigsCompanion(
+            projectId: projectId,
+            syncEndpointUrl: syncEndpointUrl,
+            syncApiKey: syncApiKey,
+            lastSyncAt: lastSyncAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> projectId = const Value.absent(),
+            Value<String?> syncEndpointUrl = const Value.absent(),
+            Value<String?> syncApiKey = const Value.absent(),
+            Value<DateTime?> lastSyncAt = const Value.absent(),
+          }) =>
+              SyncConfigsCompanion.insert(
+            projectId: projectId,
+            syncEndpointUrl: syncEndpointUrl,
+            syncApiKey: syncApiKey,
+            lastSyncAt: lastSyncAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$SyncConfigsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({projectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (projectId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.projectId,
+                    referencedTable:
+                        $$SyncConfigsTableReferences._projectIdTable(db),
+                    referencedColumn:
+                        $$SyncConfigsTableReferences._projectIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$SyncConfigsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $SyncConfigsTable,
+    SyncConfig,
+    $$SyncConfigsTableFilterComposer,
+    $$SyncConfigsTableOrderingComposer,
+    $$SyncConfigsTableAnnotationComposer,
+    $$SyncConfigsTableCreateCompanionBuilder,
+    $$SyncConfigsTableUpdateCompanionBuilder,
+    (SyncConfig, $$SyncConfigsTableReferences),
+    SyncConfig,
+    PrefetchHooks Function({bool projectId})>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3489,4 +4230,6 @@ class $AppDatabaseManager {
       $$GpsLogsTableTableManager(_db, _db.gpsLogs);
   $$ProjectFieldsTableTableManager get projectFields =>
       $$ProjectFieldsTableTableManager(_db, _db.projectFields);
+  $$SyncConfigsTableTableManager get syncConfigs =>
+      $$SyncConfigsTableTableManager(_db, _db.syncConfigs);
 }
