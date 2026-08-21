@@ -14,6 +14,8 @@ import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/services/qr_scanner.dart';
 import 'package:mapbanai/services/sync_orchestrator.dart';
 import 'package:mapbanai/services/update_checker.dart';
+import 'package:mapbanai/services/webmap_data_service.dart';
+import 'package:mapbanai/services/webmap_generator.dart';
 import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/ui/common/update_dialog.dart';
@@ -25,6 +27,7 @@ import 'package:mapbanai/ui/project_setup_screen.dart';
 import 'package:mapbanai/ui/settings_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
 import 'package:mapbanai/ui/survey_screen.dart';
+import 'package:mapbanai/ui/webmap_viewer_screen.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -409,6 +412,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _generateAndOpenWebMap() async {
+    // Show loading indicator while generating (can take a moment for large datasets)
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final dataService = WebMapDataService(_database);
+      final generator = WebMapGenerator(dataService: dataService);
+      // Check feature count first for empty-data and large-dataset handling
+      final featureCollection = await dataService.buildFeatureCollection();
+      final count = (featureCollection['features'] as List).length;
+      if (count == 0) {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No data to map yet — collect some survey responses or GIS features first.')),
+        );
+        return;
+      }
+      if (count > 1000 && mounted) {
+        // Still generate but inform user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Generating webmap for $count features — this may take a moment...')),
+        );
+      }
+      final html = await generator.generateHtml(featureCollection: featureCollection);
+      final file = await generator.writeToFile(html);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => WebmapViewerScreen(htmlFile: file)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate webmap: $e')),
+      );
+    }
+  }
+
   bool _isOfflineError(String message) {
     final lower = message.toLowerCase();
     return lower.contains('socketexception') ||
@@ -719,6 +766,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 _buildSyncCard(context, selected),
+                const SizedBox(height: 16),
+                // WebMap generator — placed on Home (global, covers all projects' data) rather than GIS toolbar,
+                // since it aggregates both GIS features and survey geopoints.
+                _ModeCard(
+                  title: 'WebMap',
+                  subtitle: 'Offline HTML map with filters and popups',
+                  color: const Color(0xFF4A148C),
+                  icon: Icons.public_outlined,
+                  onTap: _generateAndOpenWebMap,
+                ),
                 const SizedBox(height: 24),
                 _buildCollectedData(projectState, selected),
                 const SizedBox(height: 20),

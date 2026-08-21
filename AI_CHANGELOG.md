@@ -84,6 +84,61 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.2.1] — persistent signing (no more package conflicts)
+
+- **Problem:** Every CI build used a throwaway debug keystore, so each release had a different cert → `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, users had to uninstall (losing data).
+- **Fix:** Generated **one** persistent `android/mapbanai-release.jks` (RSA 2048, 10k days, alias `mapbanai`, SHA1 `A1:E3:3B:AF…`) **once**; `android/key.properties` (gitignored) now points to it; `android/app/build.gradle` reads `key.properties` (`rootProject.file('key.properties')`) for `signingConfigs.release` and `buildTypes.release.signingConfig = signingConfigs.release` (with `debug` fallback when file absent for dev machines). `android/.gitignore` and root `.gitignore` now ignore `key.properties`/`*.jks`. Local `flutter build apk --release` now signs with the persistent cert (verified `keytool -printcert` matches keystore, 111.1 MB, two consecutive builds same SHA1).
+- **CI:** `release.yml` now decodes `MAPBANAI_KEYSTORE_BASE64` (fallback `KEYSTORE_BASE64`) → `android/mapbanai-release.jks` + writes `android/key.properties` from `KEYSTORE_PASSWORD`/`KEY_PASSWORD`/`KEY_ALIAS` before `flutter build`; fails fast with `test -s` check and `wc -c` log if secret missing. Added `RELEASE_SIGNING.md` with exact `gh secret set` commands and manual steps.
+
+---
+
+## [2.2.2] — restore diagnostics + POST 302 preservation (pre-fix)
+
+- **Restore:** Added `RESTORE_BUG_LOG.md` (full path analysis: `BackupService._backupRoot` → `/storage/emulated/0/Documents/MapBanai/backups` vs fallback `app_flutter/mapbanai_backups`; on Android 11+ public path fails due to scoped storage without `MANAGE_ALL_FILES`/`MediaStore`, so backups land in **app-private** and are **wiped on uninstall** — documented as design, not patchable locally; sync backend is the durable store). `home_screen.dart` now `debugPrint`s searched `_backupRoot`/`newest`/`liveExists` and surfaces `SnackBar('Restore failed: $e')` instead of silent `catch (_)`.
+- **Sync 302:** `cloud_sync_service`/`photo_sync_service` `_postJsonWithRedirect` used `http.Request(followRedirects:false)` and re-issued POST (preserved body) — **wrong** for Apps Script (googleusercontent only accepts GET after the initial POST executes). Added unit tests asserting `firstBody == secondBody` with POST.
+
+---
+
+## [2.2.3] — fix 405: follow Apps Script 302 with GET + signing secret fallback
+
+- **Root cause:** Apps Script flow is `POST script.google.com/.../exec` (executes `doPost`, caches response) → `302 Location: script.googleusercontent.com/...` (content hop, **only GET**). Re-POSTing there → `405 Method Not Allowed`. Both plain `http.post()` (dart:io re-POSTs) and the previous "preserve method" fix did that.
+- **Fix:** `_postJsonWithRedirect` now `var method='POST', payload=body` then on 301-308 → resolve `Location`, allow-list host (`.google.com`/`.googleusercontent.com`/loopback), then **`method='GET', payload=null`** for the follow-up. Removed `text/plain` retry. `cloud_sync`/`photo_sync` keep 5-hop cap and `isRedirect` check.
+- **Tests:** Updated `cloud_sync_service_test` + `photo_sync_service_test` to assert `firstMethod=='POST'` with full JSON body, `followMethod=='GET'`, and row marked synced.
+- **CI:** `release.yml` now warns and falls back to debug signing when no keystore secret is set (`rm -f` + `WARNING…` instead of `exit 1`), so releases still land (with debug cert) until secrets are set; `build.gradle` mirrors with `signingConfig = keystorePropertiesFile.exists() ? release : debug`.
+- **Docs:** `RELEASE_SIGNING.md` already documents `MAPBANAI_KEYSTORE_BASE64` etc.
+
+---
+
+## [2.2.4] — stable UUID for sync + survey photo sync
+
+- **Stable IDs (Task 1 of fix set):** Added `SurveySessions.externalId` (`text().nullable()`, Drift 9→10, migration `if (from<10){addColumn; backfill missing with `Uuid().v4()`}`), `insertSurveySession` now auto-generates `externalId` if `Value.absent()`, `cloud_sync_service` `_buildResponsesPayload`/`_buildFeaturesPayload` now use `s.externalId ?? s.id.toString()` (`stableId`), `photo_sync` unchanged (filename). Migration test extended to handle v10, stable-UUID test: insert via helper → sync → reset `syncedAt` → re-sync → same `response_id` both times, server dedup `responses:0`.
+- **Survey photo sync:** `PhotoSyncService._extractAllPhotoPaths` now also scans `responses['answers']` map: for each value, if `String` try `jsonDecode` to `Map` with `path` (PhotoQuestion stores JSON string like `{"path":".../photos/...jpg"}`) or direct `path` string, or `Map` with `path`, and only queues if `contains('photos')` or `.jpg/.png`. `queryUnsyncedPhotos` uses this, `syncPhotos` expands per-photo (not per-session) with `allPhotoPaths`/`sessionForPath`, total is sum of paths, per-photo retry, `photo_synced_at` only when all photos for that session succeed (skipped oversize not counted as success, so remains `null` and matches existing oversize test).
+- **Tests:** `cloud_sync_service_test` stable-UUID case + `photo_sync_service_test` embedded survey photo case (`site_photo` JSON string → queued, `filename` `embedded.jpg`, `synced`).
+- **Build:** `dart run build_runner` 1237 outputs, `flutter test` 206/206 → 208/208 with new tests.
+
+---
+
+## [2.2.5] — CI timeout for pub get
+
+- **Diagnosis:** `git diff be8903f..HEAD -- pubspec.yaml` showed only `version` bump (no new `git:`/`path:` deps; only `maplibre_gl: path: third_party/maplibre_gl` vendored). `flutter pub get -v` locally resolved in **4.15 s** (no `version solving failed`), so not a resolver conflict.
+- **Conclusion:** Transient `pub.dev`/GitHub outage, not a code pin. Fix is to fail fast.
+- **Fix:** `release.yml` `jobs.build-release.timeout-minutes: 15` + `Install dependencies` step `timeout-minutes: 10` so a future stall aborts after 10 min instead of silently eating 16+ min.
+- **Version:** `2.2.4+10` → `2.2.5+11` (`2.2.5` tag).
+
+---
+
+## [2.2.6] — (local signing verification, no code change beyond version)
+
+- Local `flutter build apk --release` twice on `2.2.5` → both `111.1 MB`, `keytool -printcert` same `CN=MapBanai` SHA1, proving persistent signing works locally. CI `v2.2.5` run `32475344855` in_progress at time of log.
+
+---
+
+## [2.2.7] — (pending) WebMap HTML generator (Task 2 local, no push yet)
+
+- Local assets `assets/leaflet/leaflet.css/js` (1.9.4, 14.8/147.5 KB) + `pubspec` `assets/leaflet/`, `WebMapDataService` (FeatureCollection from all non-draft sessions, GIS `feature_type` + survey geopoint via `answers` `geopoint` string/`{lat,lon}` map, `p.basename` fix for Windows, thumbnail `512px/70` base64 capped), `WebMapGenerator` (inlines Leaflet, OSM tiles, geometry styling, popup table + thumbnail, filter sidebar for `form_name`/`surveyor`/`submitted_at` date range, legend, `writeToFile`), tests `webmap_data_service_test` + `webmap_generator_test` (mock 3-feature collection, filter options, file write) — **local only, not pushed per 4-set instruction**.
+
+---
+
 ## [2.1.4] — real in-app-update installer fix (+ verified backup/restore)
 
 ### What was already in place (from 2.1.1–2.1.3) vs. what this release actually fixed
@@ -470,4 +525,5 @@ gps_logs, project_fields).
 1 → 2: survey_sessions.responses; 3: stored_forms table; 4: app_settings +
 gps_logs (dropped field_tasks); 5: projects description/archived/
 gpsThresholdM; 6: project_fields; 7: stored_forms.projectId + legacy form
-attach; 8 (this session): projects.external_id.
+attach; 8: projects.external_id; 9: survey_sessions.syncedAt/photoSyncedAt + sync_configs;
+10: survey_sessions.externalId (stable UUID, backfilled).

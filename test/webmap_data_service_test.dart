@@ -162,7 +162,6 @@ void main() {
     expect(surveyFeature['geometry']['coordinates'], [90.5, 23.5]);
 
     // Ensure draft and no-location excluded
-    final titles = features.map((f) => (f as Map)['properties']['id'].toString()).toList();
     // All features should have id (stable UUID)
     for (final f in features) {
       final p = (f as Map)['properties'] as Map;

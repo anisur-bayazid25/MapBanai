@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 import 'package:mapbanai/data/app_database.dart';
-import 'package:uuid/uuid.dart';
 
 class CloudSyncException implements Exception {
   final String message;
