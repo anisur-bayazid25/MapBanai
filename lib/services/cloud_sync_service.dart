@@ -94,13 +94,12 @@ class CloudSyncService {
       final client = _client ?? http.Client();
       final shouldClose = _client == null;
       try {
-        httpResponse = await client
-            .post(
-              uri,
-              headers: {'Content-Type': 'application/json'},
-              body: body,
-            )
-            .timeout(const Duration(seconds: 30));
+        httpResponse = await _postJsonWithRedirect(
+          client: client,
+          uri: uri,
+          headers: {'Content-Type': 'application/json'},
+          body: body,
+        ).timeout(const Duration(seconds: 30));
       } finally {
         if (shouldClose) client.close();
       }
@@ -163,6 +162,54 @@ class CloudSyncService {
           : 'Sync failed';
       throw CloudSyncException(message);
     }
+  }
+
+  Future<http.Response> _postJsonWithRedirect({
+    required http.Client client,
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) async {
+    const maxHops = 5;
+    Uri currentUri = uri;
+    for (var hop = 0; hop <= maxHops; hop++) {
+      final request = http.Request('POST', currentUri);
+      request.headers.addAll(headers);
+      request.body = body;
+      request.followRedirects = false;
+      final streamed = await client.send(request);
+      final response = await http.Response.fromStream(streamed);
+      final isRedirect = response.isRedirect ||
+          (response.statusCode >= 301 && response.statusCode <= 308);
+      if (isRedirect) {
+        if (hop == maxHops) {
+          throw const CloudSyncException('Too many redirects');
+        }
+        final location = response.headers['location'];
+        if (location == null || location.isEmpty) {
+          throw const CloudSyncException('Redirect without Location header');
+        }
+        Uri nextUri = Uri.parse(location);
+        if (!nextUri.hasScheme) {
+          nextUri = currentUri.resolveUri(nextUri);
+        }
+        final host = nextUri.host.toLowerCase();
+        // Allow loopback for unit tests; production only follows google hosts.
+        final isLoopback = host == '127.0.0.1' ||
+            host == 'localhost' ||
+            host == '::1';
+        if (!(host.endsWith('.google.com') ||
+            host.endsWith('.googleusercontent.com') ||
+            isLoopback)) {
+          throw CloudSyncException(
+              'Refusing to follow redirect to $host');
+        }
+        currentUri = nextUri;
+        continue;
+      }
+      return response;
+    }
+    throw const CloudSyncException('Too many redirects');
   }
 
   List<Map<String, dynamic>> _buildResponsesPayload(

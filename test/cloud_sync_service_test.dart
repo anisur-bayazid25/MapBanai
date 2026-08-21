@@ -320,4 +320,63 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('POST body survives 302 redirect preserving method and body', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    String? firstBody;
+    String? secondBody;
+    var hits = 0;
+    server.listen((req) async {
+      final body = await utf8.decoder.bind(req).join();
+      hits++;
+      if (req.uri.path == '/exec') {
+        firstBody = body;
+        req.response.statusCode = 302;
+        req.response.headers
+            .set('Location', 'http://127.0.0.1:${server.port}/redirected');
+        await req.response.close();
+      } else if (req.uri.path == '/redirected') {
+        secondBody = body;
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'ok': true}));
+        await req.response.close();
+      } else {
+        req.response.statusCode = 404;
+        await req.response.close();
+      }
+    });
+
+    try {
+      final endpoint = 'http://127.0.0.1:${server.port}/exec';
+      final projectId = await createProjectWithSync(endpoint);
+      await db.into(db.surveySessions).insert(
+            SurveySessionsCompanion.insert(
+              projectId: projectId,
+              title: 'RedirectResp',
+              status: const drift.Value('saved'),
+              responses: drift.Value(jsonEncode({
+                'form_name': 'RedirectForm',
+                'user_name': 'Tester',
+                'answers': {'q': 'v'},
+              })),
+            ),
+          );
+      final svc = CloudSyncService(db);
+      final result = await svc.syncProject(projectId);
+      expect(result.responsesSynced, 1);
+      expect(hits, 2);
+      expect(firstBody, isNotNull);
+      expect(secondBody, isNotNull);
+      expect(secondBody, equals(firstBody));
+      final decoded = jsonDecode(secondBody!) as Map<String, dynamic>;
+      expect(decoded['action'], 'sync_data');
+      expect(decoded['apiKey'], 'test-key-123');
+      // Verify row was marked synced despite redirect
+      final remaining = await svc.queryUnsyncedResponses(projectId);
+      expect(remaining, isEmpty);
+    } finally {
+      await server.close(force: true);
+    }
+  });
 }

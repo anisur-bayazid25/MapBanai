@@ -82,7 +82,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _promptRestoreBackup() async {
     try {
       final projects = await _database.getProjects(includeArchived: true);
-      if (projects.isNotEmpty || !await _backup.hasBackups()) return;
+      final hasBackups = await _backup.hasBackups();
+      final newest = await _backup.newestBackup();
+      debugPrint(
+          '[Restore] _promptRestoreBackup: projects=${projects.length} hasBackups=$hasBackups newest=${newest?.path} exists=${newest != null ? newest.existsSync() : false}');
+      if (projects.isNotEmpty || !hasBackups) return;
       if (!mounted) return;
 
       final restore = await showDialog<bool>(
@@ -107,8 +111,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (restore != true || !mounted) return;
 
+      debugPrint('[Restore] user confirmed restore, closing DB and copying');
       await _database.close();
       final restored = await _backup.restoreLatest();
+      debugPrint('[Restore] restoreLatest returned $restored');
       _database = AppDatabase();
       _backup = BackupService(_database);
       await _loadProjects();
@@ -124,8 +130,13 @@ class _HomeScreenState extends State<HomeScreen> {
               : 'Backup restore failed. Data was not changed.'),
         ),
       );
-    } catch (_) {
-      // Restore is best-effort; a failure must never block startup.
+    } catch (e, st) {
+      debugPrint('[Restore] _promptRestoreBackup failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restore failed: $e')),
+        );
+      }
     }
   }
 
@@ -566,6 +577,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _promptUserNameOnce() async {
     final stored = await _database.getSetting('user_name');
+    debugPrint(
+        '[Restore] _promptUserNameOnce: searched key=user_name value=${stored ?? "null"} exists=${stored != null && stored.trim().isNotEmpty} — note: backup location does NOT use username, it is scanned via BackupService._backupRoot newestBackup()');
     if (stored != null && stored.trim().isNotEmpty) return;
     if (!mounted) return;
 

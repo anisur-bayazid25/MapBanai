@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -39,14 +40,19 @@ class BackupService {
     for (final candidate in candidates) {
       try {
         await candidate.create(recursive: true);
-        if (await _isWritable(candidate)) return candidate;
-      } catch (_) {
-        // Try the next candidate.
+        final writable = await _isWritable(candidate);
+        debugPrint(
+            '[BackupService._backupRoot] candidate=${candidate.path} writable=$writable');
+        if (writable) return candidate;
+      } catch (e, st) {
+        debugPrint(
+            '[BackupService._backupRoot] candidate=${candidate.path} failed: $e\n$st');
       }
     }
     final docs = await getApplicationDocumentsDirectory();
     final fallback = Directory(p.join(docs.path, 'mapbanai_backups'));
     await fallback.create(recursive: true);
+    debugPrint('[BackupService._backupRoot] fallback=${fallback.path}');
     return fallback;
   }
 
@@ -65,8 +71,11 @@ class BackupService {
     try {
       final docs = await getApplicationDocumentsDirectory();
       final file = File(p.join(docs.path, 'mapbanai.db'));
-      return file.existsSync() ? file : null;
-    } catch (_) {
+      final exists = file.existsSync();
+      debugPrint('[BackupService._liveDbFile] path=${file.path} exists=$exists');
+      return exists ? file : null;
+    } catch (e, st) {
+      debugPrint('[BackupService._liveDbFile] failed: $e\n$st');
       return null;
     }
   }
@@ -84,6 +93,7 @@ class BackupService {
       if (!snapshotOk) {
         final live = await _liveDbFile();
         if (live == null) {
+          debugPrint('[BackupService.createBackup] live DB not found, aborting');
           await dir.delete(recursive: true);
           return null;
         }
@@ -91,6 +101,7 @@ class BackupService {
         snapshotOk = snapshot.existsSync();
       }
       if (!snapshotOk) {
+        debugPrint('[BackupService.createBackup] snapshot failed for ${snapshot.path}');
         await dir.delete(recursive: true);
         return null;
       }
@@ -108,8 +119,10 @@ class BackupService {
       );
 
       await _pruneOld(root);
+      debugPrint('[BackupService.createBackup] success dir=${dir.path}');
       return dir.path;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[BackupService.createBackup] failed: $e\n$st');
       return null;
     }
   }
@@ -127,14 +140,17 @@ class BackupService {
   Future<List<Directory>> _backups() async {
     try {
       final root = await _backupRoot();
+      debugPrint('[BackupService._backups] scanning root=${root.path}');
       final dirs = root
           .listSync(followLinks: false)
           .whereType<Directory>()
           .where((d) => File(p.join(d.path, 'mapbanai.db')).existsSync())
           .toList()
         ..sort((a, b) => b.path.compareTo(a.path));
+      debugPrint('[BackupService._backups] found ${dirs.length} backups');
       return dirs;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[BackupService._backups] failed: $e\n$st');
       return const [];
     }
   }
@@ -170,13 +186,25 @@ class BackupService {
   /// Returns true when the snapshot file was copied.
   Future<bool> restoreLatest() async {
     final latest = await newestBackup();
-    if (latest == null) return false;
+    debugPrint(
+        '[BackupService.restoreLatest] latest=${latest?.path} exists=${latest != null ? Directory(latest.path).existsSync() : false}');
+    if (latest == null) {
+      debugPrint('[BackupService.restoreLatest] no backup found');
+      return false;
+    }
     try {
-      final live = await _liveDbFile();
-      if (live == null) return false;
-      await File(p.join(latest.path, 'mapbanai.db')).copy(live.path);
+      final docs = await getApplicationDocumentsDirectory();
+      final livePath = p.join(docs.path, 'mapbanai.db');
+      final liveFile = File(livePath);
+      debugPrint(
+          '[BackupService.restoreLatest] livePath=$livePath exists=${liveFile.existsSync()} latestDb=${p.join(latest.path, 'mapbanai.db')}');
+      // Ensure parent dir exists for fresh installs where DB file hasn't been created yet
+      await Directory(p.dirname(livePath)).create(recursive: true);
+      await File(p.join(latest.path, 'mapbanai.db')).copy(livePath);
+      debugPrint('[BackupService.restoreLatest] copy succeeded');
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[BackupService.restoreLatest] failed: $e\n$st');
       return false;
     }
   }
