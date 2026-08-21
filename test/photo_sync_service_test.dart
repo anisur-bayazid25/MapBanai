@@ -253,23 +253,26 @@ void main() {
     expect(list.first.title, 'WithPhoto');
   });
 
-  test('photo POST body survives 302 redirect', () async {
+  test('photo POST follows Apps Script 302 with GET and marks synced',
+      () async {
     final photoPath = await createTempPhoto('r.jpg', List<int>.filled(80, 7));
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    String? firstBody;
-    String? secondBody;
+    String? postBody;
+    var postMethod = '';
+    var followMethod = '';
     var hits = 0;
     server.listen((req) async {
       final body = await utf8.decoder.bind(req).join();
       hits++;
       if (req.uri.path == '/exec') {
-        firstBody = body;
+        postMethod = req.method;
+        postBody = body;
         req.response.statusCode = 302;
         req.response.headers
             .set('Location', 'http://127.0.0.1:${server.port}/redirected');
         await req.response.close();
       } else if (req.uri.path == '/redirected') {
-        secondBody = body;
+        followMethod = req.method;
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.write(jsonEncode({'ok': true}));
@@ -298,12 +301,17 @@ void main() {
           );
       final svc = PhotoSyncService(db, delay: (d) async {});
       final result = await svc.syncPhotos(projectId);
+
       expect(hits, 2);
-      expect(firstBody, isNotNull);
-      expect(secondBody, equals(firstBody));
-      final decoded = jsonDecode(secondBody!) as Map<String, dynamic>;
+      expect(postMethod, 'POST');
+      expect(followMethod, 'GET',
+          reason: 'Apps Script redirect target only accepts GET; '
+              're-POSTing returns 405');
+      expect(postBody, isNotNull);
+      final decoded = jsonDecode(postBody!) as Map<String, dynamic>;
       expect(decoded['action'], 'upload_photo');
       expect(decoded['apiKey'], 'key123');
+
       expect(result.synced, 1);
       final sessions = await db.getSurveySessionsByProject(projectId);
       expect(sessions.first.photoSyncedAt, isNotNull);

@@ -188,15 +188,6 @@ class PhotoSyncService {
               headers: {'Content-Type': 'application/json'},
               body: payload,
             ).timeout(const Duration(seconds: 30));
-            // Apps Script can reject application/json with 405; retry once as text/plain
-            if (resp.statusCode == 405) {
-              resp = await _postJsonWithRedirect(
-                client: client,
-                uri: uri,
-                headers: {'Content-Type': 'text/plain;charset=utf-8'},
-                body: payload,
-              ).timeout(const Duration(seconds: 30));
-            }
           } finally {
             if (shouldClose) client.close();
           }
@@ -204,7 +195,8 @@ class PhotoSyncService {
           if (resp.statusCode < 200 || resp.statusCode >= 300) {
             if (resp.statusCode == 405) {
               throw HttpException(
-                  'HTTP 405 Method Not Allowed — Web App must implement doPost(e) and be deployed as /exec with Anyone access');
+                  'HTTP 405 Method Not Allowed — endpoint rejected the request; '
+                  'verify the Web App deployment (/exec, Anyone access) and doPost(e)');
             }
             throw HttpException('HTTP ${resp.statusCode}');
           }
@@ -260,6 +252,13 @@ class PhotoSyncService {
     );
   }
 
+  /// POSTs [body] as JSON, following redirects the way Apps Script requires.
+  ///
+  /// Apps Script Web App flow: the initial POST to script.google.com/.../exec
+  /// EXECUTES doPost and caches the response, then answers 302 with a
+  /// Location on script.googleusercontent.com that serves the cached body
+  /// and ONLY accepts GET. Re-POSTing there returns "405 Method Not Allowed",
+  /// so after the first hop we always switch to GET with no body.
   Future<http.Response> _postJsonWithRedirect({
     required http.Client client,
     required Uri uri,
@@ -268,40 +267,45 @@ class PhotoSyncService {
   }) async {
     const maxHops = 5;
     Uri currentUri = uri;
+    var method = 'POST';
+    String? payload = body;
     for (var hop = 0; hop <= maxHops; hop++) {
-      final request = http.Request('POST', currentUri);
+      final request = http.Request(method, currentUri);
       request.headers.addAll(headers);
-      request.body = body;
+      if (payload != null) request.body = payload;
       request.followRedirects = false;
       final streamed = await client.send(request);
       final response = await http.Response.fromStream(streamed);
       final isRedirect = response.isRedirect ||
           (response.statusCode >= 301 && response.statusCode <= 308);
-      if (isRedirect) {
-        if (hop == maxHops) {
-          throw const HttpException('Too many redirects');
-        }
-        final location = response.headers['location'];
-        if (location == null || location.isEmpty) {
-          throw const HttpException('Redirect without Location');
-        }
-        Uri nextUri = Uri.parse(location);
-        if (!nextUri.hasScheme) {
-          nextUri = currentUri.resolveUri(nextUri);
-        }
-        final host = nextUri.host.toLowerCase();
-        final isLoopback = host == '127.0.0.1' ||
-            host == 'localhost' ||
-            host == '::1';
-        if (!(host.endsWith('.google.com') ||
-            host.endsWith('.googleusercontent.com') ||
-            isLoopback)) {
-          throw HttpException('Refusing redirect to $host');
-        }
-        currentUri = nextUri;
-        continue;
+      if (!isRedirect) {
+        return response;
       }
-      return response;
+      if (hop == maxHops) {
+        throw const HttpException('Too many redirects');
+      }
+      final location = response.headers['location'];
+      if (location == null || location.isEmpty) {
+        throw const HttpException('Redirect without Location');
+      }
+      Uri nextUri = Uri.parse(location);
+      if (!nextUri.hasScheme) {
+        nextUri = currentUri.resolveUri(nextUri);
+      }
+      final host = nextUri.host.toLowerCase();
+      final isLoopback = host == '127.0.0.1' ||
+          host == 'localhost' ||
+          host == '::1';
+      if (!(host.endsWith('.google.com') ||
+          host.endsWith('.googleusercontent.com') ||
+          isLoopback)) {
+        throw HttpException('Refusing redirect to $host');
+      }
+      // The script already ran on the initial POST; the redirect target only
+      // serves the cached response via GET.
+      method = 'GET';
+      payload = null;
+      currentUri = nextUri;
     }
     throw const HttpException('Too many redirects');
   }

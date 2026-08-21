@@ -94,24 +94,12 @@ class CloudSyncService {
       final client = _client ?? http.Client();
       final shouldClose = _client == null;
       try {
-        // Apps Script Web Apps historically handle POST with text/plain more reliably
-        // than application/json (avoids CORS preflight that can surface as 405).
-        // We try application/json first, and on 405 retry once with text/plain.
         httpResponse = await _postJsonWithRedirect(
           client: client,
           uri: uri,
           headers: {'Content-Type': 'application/json'},
           body: body,
         ).timeout(const Duration(seconds: 30));
-        if (httpResponse.statusCode == 405) {
-          // Retry once with text/plain — some Apps Script deployments only accept that.
-          httpResponse = await _postJsonWithRedirect(
-            client: client,
-            uri: uri,
-            headers: {'Content-Type': 'text/plain;charset=utf-8'},
-            body: body,
-          ).timeout(const Duration(seconds: 30));
-        }
       } finally {
         if (shouldClose) client.close();
       }
@@ -137,10 +125,9 @@ class CloudSyncService {
       // Provide a more actionable message for 405
       if (httpResponse.statusCode == 405) {
         throw CloudSyncException(
-          'Sync failed: HTTP 405 Method Not Allowed — the Web App URL does not accept POST. '
-          'Check that the Apps Script is deployed as Web App (Execute as: Me, Who has access: Anyone) '
-          'and implements function doPost(e) handling action=sync_data / upload_photo. '
-          'Also verify you are using the /exec URL, not /dev.',
+          'Sync failed: HTTP 405 Method Not Allowed — the endpoint rejected the request. '
+          'Verify the Apps Script is deployed as a Web App (Execute as: Me, Who has access: Anyone), '
+          'implements function doPost(e), and that you saved the /exec URL (not /dev).',
         );
       }
       throw CloudSyncException(
@@ -185,6 +172,13 @@ class CloudSyncService {
     }
   }
 
+  /// POSTs [body] as JSON, following redirects the way Apps Script requires.
+  ///
+  /// Apps Script Web App flow: the initial POST to script.google.com/.../exec
+  /// EXECUTES doPost and caches the response, then answers 302 with a
+  /// Location on script.googleusercontent.com that serves the cached body
+  /// and ONLY accepts GET. Re-POSTing there returns "405 Method Not Allowed",
+  /// so after the first hop we always switch to GET with no body.
   Future<http.Response> _postJsonWithRedirect({
     required http.Client client,
     required Uri uri,
@@ -193,42 +187,47 @@ class CloudSyncService {
   }) async {
     const maxHops = 5;
     Uri currentUri = uri;
+    var method = 'POST';
+    String? payload = body;
     for (var hop = 0; hop <= maxHops; hop++) {
-      final request = http.Request('POST', currentUri);
+      final request = http.Request(method, currentUri);
       request.headers.addAll(headers);
-      request.body = body;
+      if (payload != null) request.body = payload;
       request.followRedirects = false;
       final streamed = await client.send(request);
       final response = await http.Response.fromStream(streamed);
       final isRedirect = response.isRedirect ||
           (response.statusCode >= 301 && response.statusCode <= 308);
-      if (isRedirect) {
-        if (hop == maxHops) {
-          throw const CloudSyncException('Too many redirects');
-        }
-        final location = response.headers['location'];
-        if (location == null || location.isEmpty) {
-          throw const CloudSyncException('Redirect without Location header');
-        }
-        Uri nextUri = Uri.parse(location);
-        if (!nextUri.hasScheme) {
-          nextUri = currentUri.resolveUri(nextUri);
-        }
-        final host = nextUri.host.toLowerCase();
-        // Allow loopback for unit tests; production only follows google hosts.
-        final isLoopback = host == '127.0.0.1' ||
-            host == 'localhost' ||
-            host == '::1';
-        if (!(host.endsWith('.google.com') ||
-            host.endsWith('.googleusercontent.com') ||
-            isLoopback)) {
-          throw CloudSyncException(
-              'Refusing to follow redirect to $host');
-        }
-        currentUri = nextUri;
-        continue;
+      if (!isRedirect) {
+        return response;
       }
-      return response;
+      if (hop == maxHops) {
+        throw const CloudSyncException('Too many redirects');
+      }
+      final location = response.headers['location'];
+      if (location == null || location.isEmpty) {
+        throw const CloudSyncException('Redirect without Location header');
+      }
+      Uri nextUri = Uri.parse(location);
+      if (!nextUri.hasScheme) {
+        nextUri = currentUri.resolveUri(nextUri);
+      }
+      final host = nextUri.host.toLowerCase();
+      // Allow loopback for unit tests; production only follows google hosts.
+      final isLoopback = host == '127.0.0.1' ||
+          host == 'localhost' ||
+          host == '::1';
+      if (!(host.endsWith('.google.com') ||
+          host.endsWith('.googleusercontent.com') ||
+          isLoopback)) {
+        throw CloudSyncException(
+            'Refusing to follow redirect to $host');
+      }
+      // The script already ran on the initial POST; the redirect target only
+      // serves the cached response via GET.
+      method = 'GET';
+      payload = null;
+      currentUri = nextUri;
     }
     throw const CloudSyncException('Too many redirects');
   }

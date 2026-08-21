@@ -321,22 +321,28 @@ void main() {
     }
   });
 
-  test('POST body survives 302 redirect preserving method and body', () async {
+  test('POST follows Apps Script 302 with GET and still marks rows synced',
+      () async {
+    // Apps Script flow: the initial POST to /exec executes doPost, then a
+    // 302 points at a googleusercontent URL that ONLY accepts GET. The
+    // client must re-issue GET (no body) — re-POSTing there yields 405.
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    String? firstBody;
-    String? secondBody;
+    String? postBody;
+    var postMethod = '';
+    var followMethod = '';
     var hits = 0;
     server.listen((req) async {
       final body = await utf8.decoder.bind(req).join();
       hits++;
       if (req.uri.path == '/exec') {
-        firstBody = body;
+        postMethod = req.method;
+        postBody = body;
         req.response.statusCode = 302;
         req.response.headers
             .set('Location', 'http://127.0.0.1:${server.port}/redirected');
         await req.response.close();
       } else if (req.uri.path == '/redirected') {
-        secondBody = body;
+        followMethod = req.method;
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.write(jsonEncode({'ok': true}));
@@ -364,15 +370,18 @@ void main() {
           );
       final svc = CloudSyncService(db);
       final result = await svc.syncProject(projectId);
-      expect(result.responsesSynced, 1);
+
       expect(hits, 2);
-      expect(firstBody, isNotNull);
-      expect(secondBody, isNotNull);
-      expect(secondBody, equals(firstBody));
-      final decoded = jsonDecode(secondBody!) as Map<String, dynamic>;
+      expect(postMethod, 'POST');
+      expect(followMethod, 'GET',
+          reason: 'Apps Script redirect target only accepts GET; '
+              're-POSTing returns 405');
+      expect(postBody, isNotNull);
+      final decoded = jsonDecode(postBody!) as Map<String, dynamic>;
       expect(decoded['action'], 'sync_data');
       expect(decoded['apiKey'], 'test-key-123');
-      // Verify row was marked synced despite redirect
+
+      expect(result.responsesSynced, 1);
       final remaining = await svc.queryUnsyncedResponses(projectId);
       expect(remaining, isEmpty);
     } finally {
