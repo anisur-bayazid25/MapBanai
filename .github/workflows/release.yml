@@ -24,11 +24,26 @@ jobs:
 
       - name: Decode keystore and create key.properties
         run: |
-          echo "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
+          # Support both new (MAPBANAI_ prefix) and legacy secret names for base64
+          if [ -n "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" ]; then
+            printf '%s' "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
+          else
+            echo "ERROR: No keystore secret found (set MAPBANAI_KEYSTORE_BASE64 or KEYSTORE_BASE64)" >&2
+            exit 1
+          fi
+          if [ ! -s android/mapbanai-release.jks ]; then
+            echo "ERROR: Decoded keystore is empty — check base64 secret" >&2
+            ls -lh android/mapbanai-release.jks || true
+            exit 1
+          fi
+          echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes"
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=mapbanai-release.jks" >> android/key.properties
+          cat android/key.properties
 
       - name: Install dependencies
         run: flutter pub get
