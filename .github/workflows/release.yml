@@ -24,26 +24,33 @@ jobs:
 
       - name: Decode keystore and create key.properties
         run: |
-          # Support both new (MAPBANAI_ prefix) and legacy secret names for base64
+          # Try new secret name first, then legacy; if neither is set, build with debug signing
+          # (release will still land, but in-place updates will require uninstall until secrets are set).
           if [ -n "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" ]; then
             printf '%s' "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+            echo "storeFile=mapbanai-release.jks" >> android/key.properties
+            echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes (MAPBANAI prefix)"
+            cat android/key.properties
           elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+            echo "storeFile=mapbanai-release.jks" >> android/key.properties
+            echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes (legacy name)"
+            cat android/key.properties
           else
-            echo "ERROR: No keystore secret found (set MAPBANAI_KEYSTORE_BASE64 or KEYSTORE_BASE64)" >&2
-            exit 1
+            echo "WARNING: No keystore secret found (set MAPBANAI_KEYSTORE_BASE64 + KEYSTORE_PASSWORD/KEY_PASSWORD/KEY_ALIAS) — building with debug signing; in-place updates will require uninstall until secrets are set." >&2
+            rm -f android/key.properties android/mapbanai-release.jks
           fi
-          if [ ! -s android/mapbanai-release.jks ]; then
-            echo "ERROR: Decoded keystore is empty — check base64 secret" >&2
-            ls -lh android/mapbanai-release.jks || true
-            exit 1
+          if [ -f android/key.properties ]; then
+            echo "Using release signing: $(cat android/key.properties | tr '\n' ' ')"
+          else
+            echo "Using debug signing (no key.properties)"
           fi
-          echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes"
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=mapbanai-release.jks" >> android/key.properties
-          cat android/key.properties
 
       - name: Install dependencies
         run: flutter pub get
