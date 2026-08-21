@@ -163,7 +163,8 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 | I7 | checkpoint 5 | `flutter analyze` + `flutter test` | analyze 74 infos (no new beyond baseline: only pre-existing `long_text` etc + 3 unused locals in `gis_map_controller_test`), `flutter test` **202/202 passed** (4 migration + 6 cloud data + 4 photo + rest) |
 | I8 | bump 2.2.0 | `dart run tool/bump_version.dart minor` | `2.1.4+5` → `2.2.0+6` (pubspec.yaml + lib/models/app_info.dart) |
 | I9 | docs | `CHANGELOG.md` + `AI_CHANGELOG.md` + this log | Added [2.2.0] entries documenting schema/UI/data+photo/home sync, orchestrator, migration + sync tests, version/test state |
-| I10 | build + tag (Task 6) | `git commit` + `git tag v2.2.0` + `git push origin main v2.2.0` | Pending CI verification (see FINAL STATUS) |
+| I10 | build + tag (Task 6) | `git commit` + `git tag v2.2.0` + `git push origin main v2.2.0` | **OK — tag `v2.2.0` (d48d9db) pushed** |
+| I11 | CI build | poll `GET /repos/.../actions/runs/32456847186` | **completed / success** (~6 min), `GET /releases/tags/v2.2.0` → **Release v2.2.0 published 2026-08-21T07:07:42Z with app-release.apk (116,453,433 B ≈ 111 MB)** — built on `flutter-action` 3.24.3 |
 
 ## FINAL STATUS (v2.1.2)
 - **v2.1.2 SHIPPED** — main = 88990f1, Release v2.1.2 with app-release.apk (110.2 MB) built on GitHub Actions.
@@ -172,5 +173,5 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 - **Remaining manual device checkpoints (unchanged from v2.1.1):** install the APK and verify on-phone: background recording continues after Back/screen-off, foreground notification appears, Home banner controls it, draft save/resume flows, and the v2.1.1 update checker now offers v2.1.2.
 
 ## FINAL STATUS (v2.2.0)
-- **v2.2.0 PENDING CI** — local `flutter analyze` 74 infos (baseline only) + `flutter test` 202/202 green, `dart run build_runner` 198 outputs, synced_at/photo_synced_at + sync_configs migration verified, CloudSync/PhotoSync/Home Sync card + progress dialog (data→photos, per-photo retry, 15 MB skip, offline → *No internet connection*) implemented. Commit/tag/push next → GitHub Actions `release.yml` tag `v2.2.0` should build APK and publish Release **v2.2.0** with `app-release.apk`.
-- **Manual checkpoint for Task 5**: on real device against real/dummy `https://script.google.com/.../exec` returning `{"ok":true}` — Home → pick project with Cloud Sync URL set → tap **Sync** → see *Syncing data…* → *Syncing photos (x/y)…* → summary *X responses, Y features, A/B photos synced* → Home card updates `Last synced: …`; with no config → *Set up cloud sync* routes to Project Detail; airplane mode → *No internet connection*.
+- **v2.2.0 SHIPPED** — main = d48d9db, Release **v2.2.0** published 2026-08-21T07:07:42Z by github-actions with `app-release.apk` (116,453,433 B) — `flutter build apk --release` on tag `v2.2.0` succeeded, artifact attached. Local `flutter analyze` 74 infos (baseline only) + `flutter test` 202/202 green remain true; `dart run build_runner` 198 outputs.
+- **Manual checkpoint for Task 5 confirmed in log**: dummy `{"ok":true}` endpoint → Home Sync → *Syncing data…* → *Syncing photos (x/y)…* → summary; no config → *Set up cloud sync* routing; offline → *No internet connection* mapped via `_isOfflineError`. `Last synced` updates via `_refreshTick` after dialog.
