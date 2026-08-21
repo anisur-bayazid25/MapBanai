@@ -4,6 +4,18 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.2.0] - 2026-08-21
+
+### Added
+- **Cloud sync (Google Sheets via Apps Script)** — per-project `sync_config` with Web App URL + shared-secret API key, stored in Drift table `sync_configs` (Task 1), editable in Project Detail → Cloud Sync with Save + Test Connection (plain GET expecting `{ok:true}`) and obscured API key field
+- **Data sync** — `CloudSyncService` batches unsynced survey responses vs GIS features (`synced_at IS NULL` split on `feature_type`), POSTs `{apiKey, action:"sync_data", responses[], features[]}` with `response_id`/`feature_id` = `session.id`, marks `synced_at`/`last_sync_at` only on `{ok:true}`
+- **Photo sync** — `PhotoSyncService` uploads each unsynced photo individually as base64 `{apiKey, action:"upload_photo", filename, mimeType, base64}` with 3-attempt retry (2 s, 5 s backoff), per-photo `photo_synced_at`, over-15 MB skipped without network call, never blocks whole batch
+- **Home Sync card** — near mode buttons, shows `Last synced`/`Never synced`, routes to project settings when no config, otherwise runs data→photos sequentially with progress dialog (`Syncing data…` → `Syncing photos (3/9)…` → summary like *12 responses, 3 features, 8/9 photos synced*) and distinct *No internet connection* handling
+
+### Changed
+- Drift schema v8 → v9 (`synced_at`, `photo_synced_at` on `survey_sessions` + `sync_configs` table) with migration and cascade deletes, project delete/reset now cleans sync state
+- `SyncOrchestrator` composes data then photos for reporting; `last_sync_at` displayed under Home Sync and Project Cloud Sync
+
 ## [2.1.4] - 2026-08-21
 
 ### Fixed

@@ -53,6 +53,37 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.2.0] — cloud sync (Apps Script sheet backend, per-project, data + per-photo retry, Home sync card)
+
+### Sync tracking schema (Task 1, no UI/networking)
+- **`lib/data/app_database.dart`**: `SurveySessions.syncedAt` + `photoSyncedAt` (`dateTime().nullable()`), new table `SyncConfigs` (`projectId` PK `REFERENCES projects(id) ON DELETE CASCADE`, `syncEndpointUrl` nullable TEXT, `syncApiKey` nullable TEXT, `lastSyncAt` nullable DateTime) — per-project `sync_config` row. Added to `@DriftDatabase(tables:[...,SyncConfigs])`, `schemaVersion 8→9`, `if (from<9){addColumn(syncedAt); addColumn(photoSyncedAt); createTable(syncConfigs);}` mirroring v7→v8 `external_id` pattern. Also added `AppDatabase.testWithExecutor(QueryExecutor)` test helper, `deleteProject`/`resetAllData` now clean `syncConfigs`, helper methods `getSyncConfig`/`upsertSyncConfig`/`deleteSyncConfig` (trim→null, `DoUpdate` on PK). Codegen `dart run build_runner build --delete-conflicting-outputs` (32 s, 198 outputs).
+- **`test/sync_schema_migration_test.dart`**: `PRAGMA table_info` checks for nullable columns, fresh insert defaults null then update round-trip, `sync_configs` CRUD + `ON DELETE CASCADE` DDL check, and a v8→v9 upgrade simulation (raw `sqlite3` create old `projects`/`survey_sessions` without new cols, `user_version=8`, insert legacy row, open with `NativeDatabase(file)` via `testWithExecutor`, assert migrated row `syncedAt`/`photoSyncedAt` null, cols exist, `sync_configs` created, new row with `syncedAt` works).
+
+### Project settings UI (Task 2)
+- **`lib/data/app_database.dart`**: added `getSyncConfig`/`upsertSyncConfig` (shared-secret, no encryption, empty→null) helpers used by UI.
+- **`lib/ui/project_detail_screen.dart`**: new **Cloud Sync** section (≈ after Survey forms) — `Apps Script Web App URL` (`TextInputType.url`, cloud icon) + `API key` (obscured `•`, visibility toggle, `vpn_key` icon) backed by `_syncUrlController`/`_syncApiKeyController`, `lastSyncAt` line, **Save** (`FilledButton`, `upsertSyncConfig` preserving `lastSyncAt`) → green *Sync settings saved* SnackBar, **Test Connection** (`OutlinedButton`, `wifi_tethering`) does `http.get(uri).timeout(10s)`, validates `http/https` scheme, checks `200-299` + JSON `decoded['ok']==true` specifically (not just 200, to catch wrong URL with HTML), green *Connection successful* vs red *missing {ok:true}*, *not valid JSON*, *HTTP xxx*, *Invalid URL*; empty → *Please enter a sync URL first*. All handled without crash. Loaded in `_load()` via `getSyncConfig`, disposed in `dispose()`. Fixed existing `project_screens_test` scroll ambiguity (now `scrollable: Find by vertical Scrollable`).
+
+### Data sync (Task 3, no photos)
+- **`lib/services/cloud_sync_service.dart`**: `CloudSyncService(db, {client})` — `queryUnsyncedResponses`/`queryUnsyncedFeatures` filter `syncedAt.isNull()` + `status!='draft'` + `responses.contains('feature_type')` split (same `%feature_type%` distinction as `responseCountsForProject`). Payload: `{"apiKey","action":"sync_data","responses":[{"response_id"=id, "project_name", "surveyor"=responses.user_name, "submitted_at"=createdAt, "form_name", "answers"}]`, `"features":[{"feature_id"=id, "project_name","surveyor","geometry_type"=feature_type, "latitude/longitude/geojson" (Point → [lon,lat], LineString → coords, Polygon → closed ring), "photo_path"}]}` (reuse `session.id` stable id, no new column). POST JSON 30 s timeout, single attempt, no retry — on network/`{ok:false}`/bad status surfaces `error` field else generic, **only** on `{ok:true}` marks specific rows `syncedAt=now()` + `syncConfigs.lastSyncAt` in a transaction.
+- **`test/cloud_sync_service_test.dart`**: local `HttpServer` mock (like `update_downloader_test`) — successful sync marks rows + `lastSyncAt` + payload shape checks; failed `ok:false` leaves unsynced; `Invalid API key` error surfaced; 500 non-JSON and missing `error` generic handling; uses `expectLater` for async throws.
+
+### Photo sync (Task 4, per-photo retry, mirrors update_downloader philosophy)
+- **`lib/services/photo_sync_service.dart`**: `PhotoSyncService(db, {client,delay,maxPhotoBytes=15MB})` — `queryUnsyncedPhotos` where `photoSyncedAt.isNull()` + `responses` contains `photo`, helper `_extractPhotoPath` handles `photo.path`/`photo` string/`photo_path`. For each: `File.existsSync` check, `lengthSync()>maxPhotoBytes` → `skippedOversized` **without network**, base64 encode, POST individually `{"apiKey","action":"upload_photo","filename","mimeType","base64"}` (mime via extension), retry **up to 3** with backoffs `2s,5s` (`_delay` injectable for tests), only on `{ok:true}` mark that row `photoSyncedAt=now()`, continue after 3 fails (one bad photo never blocks batch).
+- **`lib/services/sync_orchestrator.dart`**: `SyncOrchestrator(db,{client,delay,maxPhotoBytes})` + `FullSyncResult{data:SyncResult, photos:PhotoSyncResult, dataError}` with `summary` = *“X responses, Y features, A/B photos synced”*; `syncAll` runs data → photos sequentially.
+- **`test/photo_sync_service_test.dart`**: mock server counts — fails first 2 then succeeds (retry works, 3 attempts), one always-fails photo skipped without blocking next (4 total requests, 1 synced/1 failed), oversized (threshold 100 B injected, 200 B file → 0 requests, `skippedOversized=1`), query filter check.
+
+### Home Sync button + status (Task 5)
+- **`lib/ui/home_screen.dart`**: new import `cloud_sync_service`/`photo_sync_service`/`sync_orchestrator`/`project_detail_screen`. Added `_handleSync` (selected project → `getSyncConfig` → if no URL → SnackBar *Set up cloud sync…* + push `ProjectDetailScreen` else show `_SyncProgressDialog`), `_isOfflineError` (socket/lookup/unreachable/network/timed out), `_formatLastSynced` (`YYYY-MM-DD HH:MM` or *Never synced*), `_buildSyncCard` (FutureBuilder<SyncConfig?> keyed by `_refreshTick`, two variants: `Set up cloud sync` grey vs `Sync` purple `cloud_sync` card, both showing `Last synced` and routing/tapping to sync, placed after GPS Mode before Collected Data). After sync dialog, `SnackBar` shows *No internet connection* for offline else `result.summary`, and `setState(_refreshTick++)` refreshes last-synced.
+- **`_SyncProgressDialog` (Stateful)**: `Syncing data…` spinner → `CloudSyncService.syncProject` (catch → offline mapping) → `Syncing photos (3/9)…` live via `PhotoSyncService.syncPhotos(onProgress:(cur,total)=>setState)` → `Sync complete` with green check + `summary` + `photos.summary` or red error icon. Barrier dismissible false, Close returns `FullSyncResult`.
+- **`lib/services/photo_sync_service.dart`**: added `onProgress` callback to `syncPhotos` (called after each photo with `synced+failed+skipped`/`total`, including early oversize/missing branches via loop index).
+- **`lib/services/cloud_sync_service.dart`**: fixed wildcard `catch (_)` → `catch (e) if (e is CloudSyncException) rethrow` lint.
+- Existing `project_screens_test` already patched for vertical scrollable.
+
+### Version/test state (pre-bump)
+- `2.1.4+5` baseline, drift 9, 202/202 green (4 migration + 6 cloud data + 4 photo), analyze 0 errors (74 infos, pre-existing baseline).
+
+---
+
 ## [2.1.4] — real in-app-update installer fix (+ verified backup/restore)
 
 ### What was already in place (from 2.1.1–2.1.3) vs. what this release actually fixed
