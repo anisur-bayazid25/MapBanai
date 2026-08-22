@@ -232,7 +232,8 @@ title: const drift.Value('Draft line • 2 pts'),
     // Drafts appear in their own section; the saved one is grouped by project.
     expect(find.text('Drafts (2)'), findsOneWidget);
     expect(find.text('Culvert near bridge'), findsOneWidget);
-    expect(find.text('River Basin'), findsWidgets);
+    // Collapsible project header now includes the session count.
+    expect(find.textContaining('River Basin'), findsWidgets);
     expect(find.textContaining('draft'), findsWidgets);
 
     // Delete the GIS draft (identified by its card, regardless of order).

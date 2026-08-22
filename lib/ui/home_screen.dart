@@ -520,8 +520,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return l10n != null ? l10n.syncLastSynced(date) : 'Last synced: $date';
   }
 
-  Widget _buildSyncCard(BuildContext context, String selected) {
-    if (selected.isEmpty) return const SizedBox.shrink();
+  Widget _buildSyncSquare(BuildContext context, String selected) {
+    if (selected.isEmpty) {
+      return const _SquareModeCard(
+        title: 'Cloud Sync',
+        color: Color(0xFF6A1B9A),
+        icon: Icons.cloud_off_outlined,
+        onTap: null,
+        subtitle: 'No project selected',
+      );
+    }
     int? projectId;
     for (final p in _projects) {
       if (p.name == selected) {
@@ -529,9 +537,17 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       }
     }
-    if (projectId == null) return const SizedBox.shrink();
+    if (projectId == null) {
+      return const _SquareModeCard(
+        title: 'Cloud Sync',
+        color: Color(0xFF6A1B9A),
+        icon: Icons.cloud_off_outlined,
+        onTap: null,
+        subtitle: 'No project selected',
+      );
+    }
     return FutureBuilder<SyncConfig?>(
-      key: ValueKey('syncCard_${_refreshTick}_$selected'),
+      key: ValueKey('syncSquare_${_refreshTick}_$selected'),
       future: _database.getSyncConfig(projectId),
       builder: (context, snapshot) {
         AppLocalizations? l10n;
@@ -542,118 +558,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final hasConfig = cfg != null &&
             cfg.syncEndpointUrl != null &&
             cfg.syncEndpointUrl!.trim().isNotEmpty;
-        final lastText = _formatLastSynced(cfg?.lastSyncAt, l10n);
-        if (!hasConfig) {
-          return Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            child: InkWell(
-              onTap: _handleSync,
-              borderRadius: BorderRadius.circular(18),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(Icons.cloud_off_outlined,
-                          color: Colors.grey.shade700, size: 30),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            l10n?.syncSetupTitle ?? 'Set up cloud sync',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            l10n != null ? l10n.syncSetupSubtitle(selected) : 'Configure sync for "$selected"',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(color: Colors.grey.shade700),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            lastText,
-                            style:
-                                TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, color: Colors.grey.shade600),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          child: InkWell(
-            onTap: _handleSync,
-            borderRadius: BorderRadius.circular(18),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6A1B9A).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(Icons.cloud_sync_outlined,
-                        color: Color(0xFF6A1B9A), size: 30),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n?.syncTitle ?? 'Sync',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          l10n?.syncSubtitle ?? 'Upload responses & photos to cloud',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          lastText,
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade600),
-                ],
-              ),
-            ),
-          ),
+        return _SquareModeCard(
+          title: l10n?.syncTitle ?? 'Cloud Sync',
+          color: const Color(0xFF6A1B9A),
+          icon: hasConfig ? Icons.cloud_sync_outlined : Icons.cloud_off_outlined,
+          onTap: hasConfig || !hasConfig ? _handleSync : null,
+          subtitle: hasConfig ? _formatLastSynced(cfg.lastSyncAt, l10n) : (l10n?.syncSetupTitle ?? 'Set up sync'),
         );
       },
     );
@@ -748,6 +658,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      appBar: AppBar(
+        centerTitle: false,
+        title: Image.asset(
+          'assets/logo/MapBanai_logo.png',
+          height: 28,
+          fit: BoxFit.contain,
+        ),
+        actions: [
+          IconButton(
+            tooltip: l10n?.settings ?? 'Settings',
+            icon: const Icon(Icons.menu),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(database: _database),
+                ),
+              );
+              _loadProjects();
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: ScreenLayout.maxWidthAlign(
@@ -757,11 +689,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 12),
-                Image.asset(
-                  'assets/logo/MapBanai_logo.png',
-                  width: 260,
-                ),
+                const SizedBox(height: 8),
                 const SizedBox(height: 8),
                 Text(
                   l10n?.homeSubtitle ?? 'Offline field data collection',
@@ -774,87 +702,105 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildGpsRecordingBanner(context),
                 _buildProjectSelector(context, projectState, selected),
                 const SizedBox(height: 16),
-                _ModeCard(
-                  title: l10n?.surveyModeTitle ?? 'Survey Mode',
-                  subtitle: l10n?.surveyModeSubtitle ?? 'Simple form-based field capture',
-                  color: const Color(0xFF2E7D32),
-                  icon: Icons.assignment_turned_in_outlined,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SurveyScreen(projectName: selected),
+                // 4 modes as square tiles — 2×2 grid fits without scrolling
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.surveyModeTitle ?? 'Survey Mode',
+                        color: const Color(0xFF2E7D32),
+                        icon: Icons.assignment_turned_in_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SurveyScreen(projectName: selected),
+                            ),
+                          );
+                          _loadProjects();
+                        },
                       ),
-                    );
-                    _loadProjects();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _ModeCard(
-                  title: l10n?.gisModeTitle ?? 'GIS Mode',
-                  subtitle: l10n?.gisModeSubtitle ?? 'Map-based spatial editing and layers',
-                  color: const Color(0xFF1565C0),
-                  icon: Icons.map_outlined,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => GisModeScreen(projectName: selected),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.gisModeTitle ?? 'GIS Mode',
+                        color: const Color(0xFF1565C0),
+                        icon: Icons.map_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => GisModeScreen(projectName: selected),
+                            ),
+                          );
+                          _loadProjects();
+                        },
                       ),
-                    );
-                    _loadProjects();
-                  },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _ModeCard(
-                  title: l10n?.gpsModeTitle ?? 'GPS Mode',
-                  subtitle: l10n?.gpsModeSubtitle ?? 'Live GPS readings and coordinate logging',
-                  color: const Color(0xFF00695C),
-                  icon: Icons.my_location_outlined,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const GpsModeScreen()),
-                    );
-                    _loadProjects();
-                  },
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.gpsModeTitle ?? 'GPS Mode',
+                        color: const Color(0xFF00695C),
+                        icon: Icons.my_location_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const GpsModeScreen()),
+                          );
+                          _loadProjects();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.studyAreaModeTitle ?? 'Study Area Mode',
+                        color: const Color(0xFFE65100),
+                        icon: Icons.explore_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const StudyAreaModeScreen()),
+                          );
+                          _loadProjects();
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _ModeCard(
-                  title: l10n?.studyAreaModeTitle ?? 'Study Area Mode',
-                  subtitle: l10n?.studyAreaModeSubtitle ?? 'Site visits with status tracking & navigation',
-                  color: const Color(0xFFE65100),
-                  icon: Icons.explore_outlined,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const StudyAreaModeScreen()),
-                    );
-                    _loadProjects();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _ModeCard(
-                  title: l10n?.gpsCsvViewerTitle ?? 'GPS CSV Viewer',
-                  subtitle: l10n?.gpsCsvViewerSubtitle ?? 'View logs & project tracks on WebMap',
-                  color: const Color(0xFF283593),
-                  icon: Icons.table_chart_outlined,
-                  onTap: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const GpsCsvViewerScreen()),
-                    );
-                    _loadProjects();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildSyncCard(context, selected),
-                const SizedBox(height: 16),
-                // WebMap generator — placed on Home (global, covers all projects' data) rather than GIS toolbar,
-                // since it aggregates both GIS features and survey geopoints.
-                _ModeCard(
-                  title: l10n?.webMapTitle ?? 'WebMap',
-                  subtitle: l10n?.webMapSubtitle ?? 'Offline HTML map with filters and popups',
-                  color: const Color(0xFF4A148C),
-                  icon: Icons.public_outlined,
-                  onTap: _generateAndOpenWebMap,
+                const SizedBox(height: 12),
+                // Utility row: GPS CSV Viewer · Cloud Sync · WebMap — 3×1 squares
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.gpsCsvViewerTitle ?? 'GPS CSV Viewer',
+                        color: const Color(0xFF283593),
+                        icon: Icons.table_chart_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const GpsCsvViewerScreen()),
+                          );
+                          _loadProjects();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: _buildSyncSquare(context, selected)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _SquareModeCard(
+                        title: l10n?.webMapTitle ?? 'WebMap',
+                        color: const Color(0xFF4A148C),
+                        icon: Icons.public_outlined,
+                        onTap: _generateAndOpenWebMap,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
                 _buildCollectedData(projectState, selected),
@@ -1010,8 +956,10 @@ Widget _buildProjectSelector(
     try {
       l10n = AppLocalizations.of(context);
     } catch (_) {}
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.blue.shade50,
+      color: isDark ? cs.surfaceContainerHighest : Colors.blue.shade50,
       elevation: 1,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -1086,21 +1034,24 @@ Widget _buildProjectSelector(
   }
 
   Widget _buildCollectedData(ProjectState projectState, String selected) {
+    final cs = Theme.of(context).colorScheme;
     AppLocalizations? l10n;
     try {
       l10n = AppLocalizations.of(context);
     } catch (_) {}
     if (selected.isEmpty) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.green.shade50,
+          color: isDark ? cs.surfaceContainerHighest : Colors.green.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green.shade200),
+          border: Border.all(
+              color: isDark ? Colors.green.shade800 : Colors.green.shade200),
         ),
         child: Text(
           l10n?.collectedDataHint ?? 'Select a project above to see its collected data.',
-          style: const TextStyle(color: Colors.green),
+          style: TextStyle(color: isDark ? Colors.green.shade300 : Colors.green),
         ),
       );
     }
@@ -1117,12 +1068,13 @@ Widget _buildProjectSelector(
       future: _database.responseCountsForProject(projectId ?? 0),
       builder: (context, snapshot) {
         final counts = snapshot.data;
+        final isDark2 = Theme.of(context).brightness == Brightness.dark;
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.green.shade50,
+            color: isDark2 ? cs.surfaceContainerHighest : Colors.green.shade50,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.green.shade200),
+            border: Border.all(color: isDark2 ? Colors.green.shade800 : Colors.green.shade200),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1176,12 +1128,14 @@ Widget _buildProjectSelector(
     required String value,
     required IconData icon,
   }) {
+    final isDark3 = Theme.of(context).brightness == Brightness.dark;
+    final cs3 = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark3 ? cs3.surface : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green.shade200),
+        border: Border.all(color: isDark3 ? Colors.green.shade800 : Colors.green.shade200),
       ),
       child: Row(
         children: [
@@ -1365,67 +1319,70 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
   }
 }
 
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
+class _SquareModeCard extends StatelessWidget {
+  const _SquareModeCard({
     required this.title,
-    required this.subtitle,
     required this.color,
     required this.icon,
     required this.onTap,
+    this.subtitle,
   });
 
   final String title;
-  final String subtitle;
   final Color color;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(16),
+    return AspectRatio(
+      aspectRatio: 0.92,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 28),
                 ),
-                child: Icon(icon, color: color, size: 30),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    height: 1.15,
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade600),
-            ],
+                if (subtitle != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle!,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

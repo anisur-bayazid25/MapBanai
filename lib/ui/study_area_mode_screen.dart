@@ -185,7 +185,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<void> _importSites() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['csv', 'geojson', 'json', 'kml', 'gpkg', 'xlsx'],
+      allowedExtensions: ['csv', 'geojson', 'json', 'kml', 'kmz', 'gpkg', 'xlsx'],
       withData: false,
     );
     if (result == null || result.files.isEmpty) return;
@@ -224,6 +224,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       } else if (ext == 'kml') {
         final text = await ioFile.readAsString();
         imported = StudyAreaService.parseKml(text);
+      } else if (ext == 'kmz') {
+        final bytes = await ioFile.readAsBytes();
+        imported = StudyAreaService.parseKmzBytes(bytes);
       } else if (ext == 'gpkg') {
         imported = await StudyAreaService.parseGeoPackage(ioFile);
       } else if (ext == 'xlsx') {
@@ -465,12 +468,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         actions: [
           IconButton(
             tooltip: 'Import sites',
-            icon: const Icon(Icons.file_upload_outlined),
+            icon: const Icon(Icons.file_download_outlined, color: Color(0xFF1565C0)),
             onPressed: _importSites,
           ),
           IconButton(
-            tooltip: 'Export',
-            icon: const Icon(Icons.ios_share_outlined),
+            tooltip: 'Export sites',
+            icon: const Icon(Icons.file_upload_outlined, color: Color(0xFF2E7D32)),
             onPressed: _exportSites,
           ),
           IconButton(
@@ -530,14 +533,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Import site locations from CSV, GeoJSON, KML or GeoPackage to get started.',
+                        'Import site locations from CSV, GeoJSON, KML/KMZ, GeoPackage or Excel to get started.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
                         onPressed: _importSites,
-                        icon: const Icon(Icons.file_upload_outlined),
+                        icon: const Icon(Icons.file_download_outlined),
                         label: const Text('Import sites'),
                       ),
                     ],
@@ -661,8 +664,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               ),
             ),
             IconButton(
-              tooltip: 'Export',
-              icon: const Icon(Icons.ios_share_outlined, size: 20),
+              tooltip: 'Export sites',
+              icon: const Icon(Icons.file_upload_outlined, size: 20, color: Color(0xFF2E7D32)),
               onPressed: _exportSites,
             ),
           ],

@@ -53,6 +53,80 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.4.0] — UX batch: home grid, collapsible history, real compass, KMZ, dark-mode fixes
+
+### Home screen (`lib/ui/home_screen.dart`)
+- **AppBar added**: logo as `title` (height 28), single `actions` IconButton
+  `Icons.menu` (standard 3-bar) → `SettingsScreen`; the bottom Settings
+  OutlinedButton was removed. Logo inline in body replaced by `SizedBox(8)`.
+- **2×2 mode grid**: Survey/GIS/GPS/StudyArea rendered as two `Row`s of two
+  `Expanded` `_SquareModeCard`s (new widget: `AspectRatio(0.92)` card,
+  centered icon chip 52 + bold title maxLines 2 + optional tiny subtitle;
+  `onTap` nullable for disabled tiles). Old list-style `_ModeCard` deleted.
+- **3×1 utility row** under the grid: GPS CSV Viewer / Cloud Sync / WebMap.
+  `_buildSyncCard` (wide FutureBuilder card) replaced by `_buildSyncSquare`
+  returning a `_SquareModeCard` titled *Cloud Sync* with subtitle =
+  `_formatLastSynced(...)` when configured else *Set up sync*; no-project →
+  disabled tile "No project selected". Tap still calls `_handleSync`
+  (which routes to ProjectDetailScreen when unconfigured).
+- **Dark mode**: project selector Material now
+  `isDark ? colorScheme.surfaceContainerHighest : Colors.blue.shade50`;
+  both collected-data containers use surfaceContainerHighest/green.shade800
+  borders in dark; `_statTile` uses `colorScheme.surface`. Text colors stay
+  theme-default so nothing washes out.
+
+### History (`lib/ui/survey_history_screen.dart`)
+- State: `Set<String> _collapsedProjects`, `Set<String> _collapsedDates`
+  (keys `"project|yyyy-mm-dd"`), `bool _draftsCollapsed`.
+- `_sectionHeader` replaced by `_collapsibleHeader({icon,title,count,color,
+  collapsed,onTap,dense})`: InkWell row, title `"$title ($count)"`,
+  trailing chevron in `AnimatedRotation(turns: collapsed? -0.25 : 0)`.
+  Drafts section collapsible; date headers/sessions indented 12 and only
+  built when parent expanded. Dark-mode draft cards:
+  `Color(0xFF4E342E)` bg / orange.shade800 border instead of orange.shade50.
+
+### GPS compass (`lib/ui/gps_mode_screen.dart`)
+- `_buildCompassCard` rewritten: header row (explore icon + "Compass" +
+  pill showing `NNN° CARDINAL` or *No heading*), 200×200 `CustomPaint`
+  (`_CompassPainter`) + centered overlay Column with degrees + "from North",
+  footer hint line. Added `dart:math` import and
+  `_cardinalFromDegrees` (8-wind).
+- **`_CompassPainter`**: outer ring teal.shade100 stroke on white fill;
+  ticks every 15° (longer every 30°, cardinal ticks teal+thick); N/E/S/W
+  labels via `TextPainter` at radius−22 (north red w900 size15);
+  NE/SE/SW/NW at radius−20 grey size9; needle = filled red triangle
+  rotated to heading (`sin/cos`, base radius 14 at ±2.6 rad offset),
+  teal center dot + white inner dot; grey dot when heading null.
+  `shouldRepaint` compares headingDeg.
+
+### Study Area KMZ (`lib/services/study_area_service.dart`, `lib/ui/study_area_mode_screen.dart`)
+- `parseKmzBytes(Uint8List)`: ZipDecoder → pick `doc.kml` (or first `.kml`)
+  → utf8 allowMalformed → existing `parseKml`. Dispatcher gained
+  `case 'kmz'`; unknown-extension fallback now tries KMZ before XLSX for
+  PK\x03\x04 signatures. FilePicker allowedExtensions adds `'kmz'`; screen
+  dispatch handles `ext == 'kmz'` via bytes.
+- **Button distinction**: AppBar Import =
+  `Icons.file_download_outlined` blue (0xFF1565C0), Export =
+  `Icons.file_upload_outlined` green (0xFF2E7D32); empty-state button uses
+  download icon too; header-card export matches green upload icon. Empty
+  state copy mentions KML/KMZ + Excel.
+
+### WebMap layers icon (`lib/services/webmap_generator.dart`)
+- Inline `<style>` override appended after Leaflet CSS:
+  `.leaflet-control-layers-toggle` gets an inline SVG data-URI
+  (Feather-style stacked layers, stroke `%23333`) with `!important`,
+  white bg, 36px rounded box-shadow — replaces Leaflet's default
+  white-on-white toggle image.
+
+### Tests
+- `test/study_area_service_test.dart`: new KMZ test builds zip via
+  `ZipEncoder`/`ArchiveFile.string('doc.kml', …)` → parse back 1 site.
+- `test/drafts_history_test.dart`: `find.text('River Basin')` →
+  `find.textContaining('River Basin')` (header now carries count).
+- Suite 222→223 green; analyze 0 errors (99 infos, pre-existing style lints).
+
+---
+
 ## [2.2.0] — cloud sync (Apps Script sheet backend, per-project, data + per-photo retry, Home sync card)
 
 ### Sync tracking schema (Task 1, no UI/networking)

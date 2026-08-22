@@ -4,6 +4,48 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.4.0] - 2026-08-23
+
+### Added
+- **KMZ import (Study Area Mode)** — zipped KML (.kmz) files are now accepted:
+  the archive is unpacked in-memory, `doc.kml` (or any `.kml` member) is parsed,
+  and placemark points become sites. KMZ is also detected by content when the
+  extension is unknown.
+- **Real compass in GPS Mode** — the compass card is now a full compass rose:
+  N/E/S/W labels (north highlighted red), NE/SE/SW/NW intercardinals, degree
+  tick marks every 15°, and a red needle that rotates with the GPS heading.
+  The heading is displayed as degrees-from-north plus cardinal direction both
+  in a pill at the top and inside the dial.
+
+### Changed
+- **Home screen layout** — the four collection modes (Survey, GIS, GPS, Study
+  Area) are square tiles in a **2×2 grid** so every mode is visible without
+  scrolling; below them a **3×1 row** of square utility tiles: GPS CSV Viewer,
+  Cloud Sync and WebMap. The Cloud Sync tile shows the last-synced time (or
+  "Set up sync") as its subtitle and keeps the existing tap behavior.
+- **Settings moved to the top-right** — Home now has an AppBar with the logo
+  on the left and a standard ☰ menu icon opening Settings; the bottom Settings
+  button was removed.
+- **History is collapsible** — Drafts, project (folder) groups and per-date
+  groups can each be expanded/collapsed by tapping their header; headers show
+  item counts and an animated chevron.
+- **WebMap basemap switcher icon fixed** — Leaflet's default white layers
+  toggle (invisible on light tiles) is replaced with a dark standard
+  stacked-layers SVG icon via CSS override.
+- **Dark mode contrast fixes** — the project selector, "Collected data" panel,
+  stat tiles and history draft cards now use theme-aware surface colors
+  instead of hard-coded light tints that washed out text in dark theme.
+- Study Area import/export buttons are visually distinct: Import = blue
+  download-tray icon, Export = green upload icon (app bar, empty state card
+  and header card).
+
+### Tests
+- `test/study_area_service_test.dart` — new KMZ test: builds a zip containing
+  `doc.kml`, parses it back into sites.
+- `test/drafts_history_test.dart` — updated for collapsible headers
+  (`River Basin` header now includes its count).
+- Suite: 223 tests green.
+
 ## [2.3.0] - 2026-08-22
 
 ### Added

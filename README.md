@@ -8,7 +8,7 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.3.0](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
+**Latest release: [v2.4.0](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
 ---
@@ -26,13 +26,17 @@ No account, no registration, no internet needed.
 
 ## Home screen
 
+- **Mode tiles** — Survey, GIS, GPS and Study Area as a 2×2 grid of square
+  cards; below them GPS CSV Viewer, Cloud Sync and WebMap in one row.
+- **Settings** — the ☰ menu icon in the top-right corner.
 - **Open** — create, rename, archive or delete projects; open the selected
   project.
 - **History** — past survey sessions, captured features and **drafts**
-  (unfinished forms / drawings you can resume).
+  (unfinished forms / drawings you can resume). Groups are **collapsible**:
+  tap a project (folder) or date header to fold/unfold it.
 - **Export** — export collected data (CSV / GeoJSON).
-- **Settings** — language, user name, About, update checks, **danger zone**
-  (reset data requires typing your name to confirm).
+- **Settings** — language, theme, user name, About, update checks,
+  **danger zone** (reset data requires typing your name to confirm).
 
 ## Survey mode
 
@@ -54,6 +58,9 @@ No account, no registration, no internet needed.
 - **Save Point**: capture a precise point from the live position (saved to
   CSV). Track and point CSVs land in the device's `Export/<project>/`
   folder, shareable from the app.
+- **Compass** (v2.4.0+): full compass rose — N/E/S/W marked, NE/SE/SW/NW
+  intercardinals, degree ticks and a red needle showing live heading as
+  degrees from North.
 
 ## Drafts (v2.1.2+)
 
@@ -78,12 +85,13 @@ No account, no registration, no internet needed.
 
 ## Study Area mode (v2.3.0+)
 
-- Import a list of sites from **CSV, GeoJSON, KML, GeoPackage (.gpkg) or
-  Excel (.xlsx)** and see them on the map as colored circles — red =
+- Import a list of sites from **CSV, GeoJSON, KML, KMZ, GeoPackage (.gpkg)
+  or Excel (.xlsx)** and see them on the map as colored circles — red =
   pending, green = completed.
 - Tap a site for live GPS **distance + bearing** guidance to walk there,
   then mark it **Completed/Pending**.
-- Export the site list back out as **CSV or Excel**.
+- Export the site list back out as **CSV or Excel** (Import = blue download
+  icon, Export = green upload icon in the app bar).
 
 ## GPS CSV viewer (v2.3.0+)
 

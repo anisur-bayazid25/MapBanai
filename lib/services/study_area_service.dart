@@ -507,6 +507,36 @@ class StudyAreaService {
     return sites;
   }
 
+  // ── KMZ (zipped KML) ─────────────────────────────────────────────
+
+  static List<StudyAreaSite> parseKmzBytes(Uint8List bytes) {
+    Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (_) {
+      throw FormatException('Invalid KMZ file (not a valid ZIP)');
+    }
+    ArchiveFile? kmlFile;
+    for (final f in archive.files) {
+      if (!f.isFile) continue;
+      final lower = f.name.toLowerCase();
+      if (lower.endsWith('.kml')) {
+        // Prefer doc.kml but take first match otherwise.
+        if (lower == 'doc.kml' || lower.endsWith('/doc.kml')) {
+          kmlFile = f;
+          break;
+        }
+        kmlFile ??= f;
+      }
+    }
+    if (kmlFile == null) {
+      throw FormatException('KMZ does not contain a KML file');
+    }
+    final raw = kmlFile.content as List<int>;
+    final text = utf8.decode(raw, allowMalformed: true);
+    return parseKml(text);
+  }
+
   // ── GeoPackage ───────────────────────────────────────────────────
 
   /// Parses a GeoPackage file on disk. Supports point layers stored as
@@ -721,6 +751,8 @@ class StudyAreaService {
         return parseCsvBytes(bytes);
       case 'kml':
         return parseKml(utf8.decode(bytes, allowMalformed: true));
+      case 'kmz':
+        return parseKmzBytes(bytes);
       case 'gpkg':
       case 'geopackage':
       case 'sqlite':
@@ -743,9 +775,13 @@ class StudyAreaService {
             return parseGeoJson(text);
           } catch (_) {}
         }
-        // Try zip signature for gpkg confusion
+        // Try zip signature - could be KMZ, XLSX, or zipped gpkg confusion
         if (bytes.length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B) {
-          // ZIP - maybe xlsx, not gpkg
+          // Try KMZ first (ZIP containing KML)
+          try {
+            return parseKmzBytes(bytes);
+          } catch (_) {}
+          // Then XLSX
           try {
             return parseXlsxBytes(bytes);
           } catch (_) {}

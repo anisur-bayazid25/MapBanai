@@ -85,6 +85,19 @@ $css
   table.popup-table th, table.popup-table td { border:1px solid #ddd; padding:4px 6px; text-align:left; }
   table.popup-table th { background:#f5f5f5; }
   img.thumb { max-width:200px; max-height:150px; display:block; margin-top:6px; border-radius:4px; }
+  /* Fix invisible white layers toggle - use standard dark stacked-layers icon */
+  .leaflet-control-layers-toggle {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polyline points='2 17 12 22 22 17'/><polyline points='2 12 12 17 22 12'/></svg>") !important;
+    background-size: 22px 22px !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-color: white !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 6px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  }
+  .leaflet-control-layers { border-radius: 8px; }
 </style>
 </head>
 <body>

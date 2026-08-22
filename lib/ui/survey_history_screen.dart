@@ -23,6 +23,9 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   List<SurveySession> _drafts = [];
   bool _loading = true;
   Map<int, String> _projectNames = {};
+  final Set<String> _collapsedProjects = {};
+  final Set<String> _collapsedDates = {};
+  bool _draftsCollapsed = false;
 
   @override
   void initState() {
@@ -295,12 +298,15 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
       padding: const EdgeInsets.all(12),
       children: [
         if (_drafts.isNotEmpty) ...[
-          _sectionHeader(
+          _collapsibleHeader(
             icon: Icons.edit_note,
-            title: 'Drafts (${_drafts.length})',
+            title: 'Drafts',
+            count: _drafts.length,
             color: Colors.orange.shade800,
+            collapsed: _draftsCollapsed,
+            onTap: () => setState(() => _draftsCollapsed = !_draftsCollapsed),
           ),
-          for (final draft in _drafts) _draftCard(draft),
+          if (!_draftsCollapsed) for (final draft in _drafts) _draftCard(draft),
           const SizedBox(height: 12),
         ],
         if (projects.isEmpty)
@@ -315,19 +321,29 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           )
         else
           for (final projectName in sortedProjects) ...[
-            _sectionHeader(
+            _collapsibleHeader(
               icon: Icons.folder_outlined,
               title: projectName,
+              count: projects[projectName]!.length,
               color: Colors.blue.shade700,
+              collapsed: _collapsedProjects.contains(projectName),
+              onTap: () => setState(() {
+                if (_collapsedProjects.contains(projectName)) {
+                  _collapsedProjects.remove(projectName);
+                } else {
+                  _collapsedProjects.add(projectName);
+                }
+              }),
             ),
-            ..._buildDates(projects[projectName]!),
+            if (!_collapsedProjects.contains(projectName))
+              ..._buildDates(projectName, projects[projectName]!),
             const SizedBox(height: 12),
           ],
       ],
     );
   }
 
-  List<Widget> _buildDates(List<SurveySession> sessions) {
+  List<Widget> _buildDates(String projectName, List<SurveySession> sessions) {
     final byDate = <String, List<SurveySession>>{};
     for (final session in sessions) {
       byDate.putIfAbsent(_dateKey(session.createdAt), () => []).add(session);
@@ -337,15 +353,37 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
 
     final widgets = <Widget>[];
     for (final date in sortedDates) {
+      final dateKey = '$projectName|$date';
+      final collapsed = _collapsedDates.contains(dateKey);
       widgets.add(
-        _sectionHeader(
-          icon: Icons.calendar_today_outlined,
-          title: _friendlyDate(date),
-          color: Colors.teal.shade700,
+        Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: _collapsibleHeader(
+            icon: Icons.calendar_today_outlined,
+            title: _friendlyDate(date),
+            count: byDate[date]!.length,
+            color: Colors.teal.shade700,
+            collapsed: collapsed,
+            dense: true,
+            onTap: () => setState(() {
+              if (collapsed) {
+                _collapsedDates.remove(dateKey);
+              } else {
+                _collapsedDates.add(dateKey);
+              }
+            }),
+          ),
         ),
       );
-      for (final session in byDate[date]!) {
-        widgets.add(_sessionCard(session));
+      if (!collapsed) {
+        for (final session in byDate[date]!) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: _sessionCard(session),
+            ),
+          );
+        }
       }
     }
     return widgets;
@@ -365,36 +403,53 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     return '$d $month $y';
   }
 
-  Widget _sectionHeader({
+  Widget _collapsibleHeader({
     required IconData icon,
     required String title,
+    required int count,
     required Color color,
+    required bool collapsed,
+    required VoidCallback onTap,
+    bool dense = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(4, dense ? 8 : 12, 4, dense ? 4 : 6),
+        child: Row(
+          children: [
+            Icon(icon, size: dense ? 16 : 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$title ($count)',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: dense ? 13 : 15,
+                ),
+              ),
             ),
-          ),
-        ],
+            AnimatedRotation(
+              turns: collapsed ? -0.25 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: Icon(Icons.expand_more, size: dense ? 18 : 20, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _draftCard(SurveySession draft) {
     final isGis = _isGisDraft(draft);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      color: Colors.orange.shade50,
+      color: isDark ? const Color(0xFF4E342E) : Colors.orange.shade50,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: Colors.orange.shade200),
+        side: BorderSide(color: isDark ? Colors.orange.shade800 : Colors.orange.shade200),
       ),
       child: ListTile(
         leading: Icon(

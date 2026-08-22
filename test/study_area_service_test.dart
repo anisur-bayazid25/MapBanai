@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mapbanai/services/study_area_service.dart';
 
@@ -47,6 +49,23 @@ id,latitude,longitude,status,name,notes
     final sites = StudyAreaService.parseKml(kml);
     expect(sites.length, 2);
     expect(sites[1].status, StudyAreaStatus.completed);
+  });
+
+  test('parseKmzBytes unzips doc.kml and extracts placemarks', () {
+    const kml = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Placemark><name>KMZ Site</name><Point><coordinates>90.4125,23.8103,0</coordinates></Point></Placemark>
+</Document></kml>
+''';
+    final archive = ZipEncoder().encode(
+      Archive()..addFile(ArchiveFile.string('doc.kml', kml)),
+    );
+    final sites = StudyAreaService.parseKmzBytes(
+        Uint8List.fromList(archive!));
+    expect(sites.length, 1);
+    expect(sites.single.displayName, 'KMZ Site');
+    expect(sites.single.latitude, closeTo(23.8103, 1e-6));
   });
 
   test('bearing and distance calculations', () {

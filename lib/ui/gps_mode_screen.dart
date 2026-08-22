@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
@@ -597,41 +598,87 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
 
   Widget _buildCompassCard() {
     final heading = _latest?.heading;
-    final hasHeading = heading != null && !heading.isNaN;
+    final hasHeading = heading != null && !heading.isNaN && _latest != null;
+    final deg = hasHeading ? (heading % 360) : 0.0;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.teal.shade100),
       ),
-      child: ExpansionTile(
-        leading: Icon(Icons.explore_outlined, color: Colors.teal.shade700),
-        title: const Text('Compass', style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(hasHeading ? '${heading.toStringAsFixed(0)}°' : 'No heading'),
-        initiallyExpanded: false,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
               children: [
-                if (hasHeading)
-                  Transform.rotate(
-                    angle: (heading * 3.1415926535 / 180),
-                    child: Icon(Icons.navigation, size: 64, color: Colors.teal.shade700),
-                  )
-                else
-                  const Text('Waiting for heading…', style: TextStyle(color: Colors.grey)),
-                const SizedBox(height: 8),
-                Text(
-                  hasHeading ? '${heading.toStringAsFixed(1)}°' : '—',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                Icon(Icons.explore_outlined, color: Colors.teal.shade700),
+                const SizedBox(width: 8),
+                const Text('Compass', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: hasHeading ? Colors.teal.shade50 : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: hasHeading ? Colors.teal.shade200 : Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    hasHeading ? '${deg.toStringAsFixed(0)}° ${ _cardinalFromDegrees(deg)}' : 'No heading',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: hasHeading ? Colors.teal.shade800 : Colors.grey.shade600,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: 200,
+              height: 200,
+              child: CustomPaint(
+                painter: _CompassPainter(headingDeg: hasHeading ? deg : null),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        hasHeading ? '${deg.toStringAsFixed(0)}°' : '—',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: hasHeading ? Colors.teal.shade900 : Colors.grey.shade500,
+                        ),
+                      ),
+                      Text(
+                        hasHeading ? 'from North' : 'Waiting for heading…',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hasHeading
+                  ? 'Heading ${deg.toStringAsFixed(1)}°  •  ${_cardinalFromDegrees(deg)}'
+                  : 'Move with GPS to get a heading fix',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _cardinalFromDegrees(double deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    final idx = ((deg + 22.5) / 45).floor() % 8;
+    return dirs[idx];
   }
 
   Widget _buildReadoutCard() {
@@ -1028,6 +1075,109 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     return '${time.year}-${two(time.month)}-${two(time.day)} '
         '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
+}
+
+class _CompassPainter extends CustomPainter {
+  final double? headingDeg;
+  _CompassPainter({this.headingDeg});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 6;
+    final outerPaint = Paint()
+      ..color = Colors.teal.shade100
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawCircle(center, radius, outerPaint);
+    final fillPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius - 1, fillPaint);
+    // Degree ticks every 30°, longer at N/E/S/W
+    final tickPaint = Paint()
+      ..color = Colors.grey.shade400
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+    final cardinalPaint = Paint()
+      ..color = Colors.teal.shade700
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    for (int deg = 0; deg < 360; deg += 15) {
+      final isCardinal = deg % 90 == 0;
+      final isMajor = deg % 30 == 0;
+      final rad = deg * math.pi / 180;
+      final inner = isCardinal ? radius - 14 : isMajor ? radius - 10 : radius - 6;
+      final outer = radius - 2;
+      final p1 = Offset(center.dx + inner * math.sin(rad), center.dy - inner * math.cos(rad));
+      final p2 = Offset(center.dx + outer * math.sin(rad), center.dy - outer * math.cos(rad));
+      canvas.drawLine(p1, p2, isCardinal ? cardinalPaint : tickPaint);
+    }
+    // N/E/S/W labels
+    const labels = ['N', 'E', 'S', 'W'];
+    const labelDegs = [0, 90, 180, 270];
+    for (int i = 0; i < labels.length; i++) {
+      final deg = labelDegs[i];
+      final rad = deg * math.pi / 180;
+      final r = radius - 22;
+      final pos = Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
+      final isNorth = labels[i] == 'N';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: labels[i],
+          style: TextStyle(
+            color: isNorth ? Colors.red.shade700 : Colors.teal.shade800,
+            fontWeight: isNorth ? FontWeight.w900 : FontWeight.w700,
+            fontSize: isNorth ? 15 : 13,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
+    }
+    // Intercardinal labels NE, SE, SW, NW smaller
+    const inter = ['NE', 'SE', 'SW', 'NW'];
+    const interDegs = [45, 135, 225, 315];
+    for (int i = 0; i < inter.length; i++) {
+      final rad = interDegs[i] * math.pi / 180;
+      final r = radius - 20;
+      final pos = Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
+      final tp = TextPainter(
+        text: TextSpan(
+          text: inter[i],
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 9, fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
+    }
+    // Needle - heading from north clockwise
+    if (headingDeg != null) {
+      final h = headingDeg! % 360;
+      final rad = h * math.pi / 180;
+      // Needle triangle pointing to heading
+      final tip = Offset(center.dx + (radius - 10) * math.sin(rad), center.dy - (radius - 10) * math.cos(rad));
+      final baseLeftRad = rad + 2.6;
+      final baseRightRad = rad - 2.6;
+      final baseR = 14.0;
+      final baseLeft = Offset(center.dx + baseR * math.sin(baseLeftRad), center.dy - baseR * math.cos(baseLeftRad));
+      final baseRight = Offset(center.dx + baseR * math.sin(baseRightRad), center.dy - baseR * math.cos(baseRightRad));
+      final needlePaint = Paint()
+        ..color = Colors.red.shade600
+        ..style = PaintingStyle.fill;
+      final path = Path()..moveTo(tip.dx, tip.dy)..lineTo(baseLeft.dx, baseLeft.dy)..lineTo(baseRight.dx, baseRight.dy)..close();
+      canvas.drawPath(path, needlePaint);
+      // Center dot
+      canvas.drawCircle(center, 4, Paint()..color = Colors.teal.shade800);
+      canvas.drawCircle(center, 2.2, Paint()..color = Colors.white);
+    } else {
+      // No heading: faint center dot
+      canvas.drawCircle(center, 4, Paint()..color = Colors.grey.shade400);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompassPainter old) => old.headingDeg != headingDeg;
 }
 
 class _WaypointDialog extends StatefulWidget {

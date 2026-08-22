@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4e — v2.3.0 release batch (Complete — tests green, APK built 2026-08-22)  
-**Last Updated:** 2026-08-22  
-**Version:** 2.3.0
+**Status:** Phase 4f — v2.4.0 UX batch (Complete — tests green, APK built 2026-08-23)  
+**Last Updated:** 2026-08-23  
+**Version:** 2.4.0
 
 ---
 
@@ -817,6 +817,22 @@ the GPS Mode copy flow.
 - [x] `flutter test` — 222/222 pass (incl. new study_area_service_test.dart + gps_csv_service_test.dart)
 - [x] `flutter build apk --release` — succeeded
 - [x] Documentation updated: CHANGELOG.md, README.md, TODO.md
+
+---
+
+## PHASE 4f: V2.4.0 UX BATCH (2026-08-23) — Complete, tests green
+
+- [x] KMZ import (Study Area Mode) — `parseKmzBytes` unzips doc.kml/any .kml member; picker accepts .kmz; content-guess fallback tries KMZ for zip signatures; regression test added
+- [x] Study Area import/export buttons visually distinct — Import = blue download-tray icon, Export = green upload icon (app bar, empty-state card, header card)
+- [x] History collapsible — Drafts / project (folder) / per-date headers tappable with counts + animated chevron; date rows indented under projects
+- [x] GPS compass rebuilt as full compass rose — N/E/S/W labels (north red), NE/SE/SW/NW, 15° ticks, red heading needle, degrees-from-north readout + cardinal pill (`_CompassPainter`)
+- [x] WebMap basemap layers toggle fixed — dark standard stacked-layers SVG via CSS override (was invisible white Leaflet default)
+- [x] Dark-mode contrast — project selector / collected-data panels / stat tiles / history draft cards now theme-aware surface colors
+- [x] Settings moved to top-right ☰ AppBar menu on Home (bottom button removed)
+- [x] Home 2×2 square mode grid (Survey/GIS/GPS/Study Area) + 3×1 utility squares (GPS CSV Viewer / Cloud Sync / WebMap); `_SquareModeCard` replaces `_ModeCard`
+- [x] USER_GUIDE.md created; CHANGELOG/AI_CHANGELOG/README/TODO updated
+- [x] Version 2.4.0+17 (bump tool minor)
+- [x] `flutter analyze` — 0 errors; `flutter test` — 223/223 pass; release APK built
 
 ---
 
