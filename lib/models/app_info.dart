@@ -6,7 +6,7 @@ class AppInfo {
   AppInfo._();
 
   static const String name = 'MapBanai';
-  static const String version = '2.2.7+13';
+  static const String version = '2.2.8+14';
   static const String tagline = 'Offline-first field data collection GIS';
   static const String creator = 'Anisur Rahman Bayazid';
   static const String description =

@@ -413,6 +413,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _generateAndOpenWebMap() async {
+    final projectState = context.read<ProjectState>();
+    final selected = projectState.selectedProject;
+    if (selected.isEmpty) {
+      _showSnack('Select a project first');
+      return;
+    }
+    final project = await _database.getProjectByName(selected);
+    if (project == null) {
+      _showSnack('Project not found: $selected');
+      return;
+    }
     // Show loading indicator while generating (can take a moment for large datasets)
     if (!mounted) return;
     showDialog(
@@ -423,14 +434,15 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final dataService = WebMapDataService(_database);
       final generator = WebMapGenerator(dataService: dataService);
-      // Check feature count first for empty-data and large-dataset handling
-      final featureCollection = await dataService.buildFeatureCollection();
+      // Project-wise: only this project's data
+      final featureCollection =
+          await dataService.buildFeatureCollectionForProject(project.id);
       final count = (featureCollection['features'] as List).length;
       if (count == 0) {
         if (!mounted) return;
         Navigator.of(context).pop(); // close loading
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No data to map yet — collect some survey responses or GIS features first.')),
+          SnackBar(content: Text('No data to map yet for "$selected" — collect some survey responses or GIS features first.')),
         );
         return;
       }

@@ -124,7 +124,11 @@ void main() {
     ));
 
     final service = WebMapDataService(db);
-    final geojson = await service.buildFeatureCollection();
+    // Project-wise: only this project's data
+    final geojson = await service.buildFeatureCollectionForProject(projectId);
+    // Also verify legacy all-projects still works (same count when only one project exists)
+    final allGeojson = await service.buildFeatureCollection();
+    expect((allGeojson['features'] as List), hasLength(4));
 
     expect(geojson['type'], 'FeatureCollection');
     final features = geojson['features'] as List;
@@ -208,5 +212,42 @@ void main() {
     final originalB64 = base64Encode(originalBytes);
     expect(thumbB64, isNot(equals(originalB64)), reason: 'should be thumbnail, not full file');
     expect(thumbBytes.isNotEmpty, isTrue);
+  });
+
+  test('project-wise generation isolates data per project', () async {
+    final projA = await db.into(db.projects).insert(ProjectsCompanion.insert(name: 'ProjA'));
+    final projB = await db.into(db.projects).insert(ProjectsCompanion.insert(name: 'ProjB'));
+
+    await db.insertSurveySession(SurveySessionsCompanion(
+      projectId: drift.Value(projA),
+      title: const drift.Value('A point'),
+      status: const drift.Value('saved'),
+      responses: drift.Value(jsonEncode({
+        'feature_type': 'point',
+        'latitude': 1,
+        'longitude': 1,
+      })),
+    ));
+    await db.insertSurveySession(SurveySessionsCompanion(
+      projectId: drift.Value(projB),
+      title: const drift.Value('B point'),
+      status: const drift.Value('saved'),
+      responses: drift.Value(jsonEncode({
+        'feature_type': 'point',
+        'latitude': 2,
+        'longitude': 2,
+      })),
+    ));
+
+    final svc = WebMapDataService(db);
+    final geoA = await svc.buildFeatureCollectionForProject(projA);
+    final geoB = await svc.buildFeatureCollectionForProject(projB);
+    final geoAll = await svc.buildFeatureCollection();
+
+    expect((geoA['features'] as List), hasLength(1));
+    expect((geoB['features'] as List), hasLength(1));
+    expect((geoAll['features'] as List), hasLength(2));
+    expect(((geoA['features'] as List).first as Map)['properties']['project_name'], 'ProjA');
+    expect(((geoB['features'] as List).first as Map)['properties']['project_name'], 'ProjB');
   });
 }

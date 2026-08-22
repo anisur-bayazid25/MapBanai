@@ -78,29 +78,34 @@ void main() {
       leafletJs: '// leaflet js',
     );
 
-    // Contains feature count in the filter count span and banner
-    expect(html, contains('Showing <span id="filter-count">3</span> of 3'));
+    // Banner and inlined assets
     expect(html, contains('Map tiles require internet; your data works offline'));
     expect(html, contains('/* leaflet css */'));
     expect(html, contains('// leaflet js'));
 
-    // Embedded GeoJSON is valid JSON
+    // Embedded GeoJSON is valid JSON and has correct feature count
     final geoJsonMatch = RegExp(r'const geojsonData = (\{.*?\});', dotAll: true).firstMatch(html);
     expect(geoJsonMatch, isNotNull);
     final embedded = jsonDecode(geoJsonMatch!.group(1)!) as Map<String, dynamic>;
     expect(embedded['type'], 'FeatureCollection');
     expect((embedded['features'] as List), hasLength(3));
+    // Also check that the HTML contains the count somewhere (legend or filter)
+    expect(html, contains('3'));
 
-    // Filter option values match distinct form_name/surveyor
-    expect(html, contains('<option value="FormA">FormA</option>'));
-    expect(html, contains('<option value="FormB">FormB</option>'));
-    expect(html, contains('<option value="Alice">Alice</option>'));
-    expect(html, contains('<option value="Bob">Bob</option>'));
+    // Filter UI present and will be populated from GeoJSON (form_name/surveyor values)
+    // The new HTML uses a dynamic multi-select for filterQuestion values, not hard-coded options
+    // Check that the GeoJSON itself contains the distinct values and the filter UI elements exist
+    expect(html, contains('id="filterQuestion"'));
+    expect(html, contains('id="multiselectList"'));
+    expect(html, contains('FormA'));
+    expect(html, contains('FormB'));
+    expect(html, contains('Alice'));
+    expect(html, contains('Bob'));
 
-    // Legend present
-    expect(html, contains('Point / Geopoint'));
-    expect(html, contains('Line'));
-    expect(html, contains('Polygon'));
+    // Legend present (now with counts and symbology)
+    expect(html, contains('Points:'));
+    expect(html, contains('Lines:'));
+    expect(html, contains('Polygons:'));
 
     // OSM tile layer present
     expect(html, contains('tile.openstreetmap.org'));

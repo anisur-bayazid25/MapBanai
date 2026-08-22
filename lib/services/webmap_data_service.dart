@@ -18,11 +18,16 @@ class WebMapDataService {
 
   WebMapDataService(this.db);
 
-  /// Returns a GeoJSON FeatureCollection map (ready for jsonEncode).
-  Future<Map<String, dynamic>> buildFeatureCollection() async {
-    final sessions = await (db.select(db.surveySessions)
-          ..where((t) => t.status.isNotValue('draft')))
-        .get();
+  /// Returns a GeoJSON FeatureCollection for a single project.
+  /// If [projectId] is null, returns for all projects (legacy, not used for UI).
+  Future<Map<String, dynamic>> buildFeatureCollectionForProject(
+      int? projectId) async {
+    final query = db.select(db.surveySessions)
+      ..where((t) => t.status.isNotValue('draft'));
+    if (projectId != null) {
+      query.where((t) => t.projectId.equals(projectId));
+    }
+    final sessions = await query.get();
 
     final features = <Map<String, dynamic>>[];
     for (final s in sessions) {
@@ -36,6 +41,10 @@ class WebMapDataService {
       'generated_at': DateTime.now().toUtc().toIso8601String(),
     };
   }
+
+  /// Legacy: all projects combined. Prefer [buildFeatureCollectionForProject].
+  Future<Map<String, dynamic>> buildFeatureCollection() =>
+      buildFeatureCollectionForProject(null);
 
   Future<Map<String, dynamic>?> _sessionToFeature(SurveySession s) async {
     Map<String, dynamic> resp;
