@@ -92,20 +92,19 @@ void main() {
     // Also check that the HTML contains the count somewhere (legend or filter)
     expect(html, contains('3'));
 
-    // Filter UI present and will be populated from GeoJSON (form_name/surveyor values)
-    // The new HTML uses a dynamic multi-select for filterQuestion values, not hard-coded options
-    // Check that the GeoJSON itself contains the distinct values and the filter UI elements exist
-    expect(html, contains('id="filterQuestion"'));
-    expect(html, contains('id="multiselectList"'));
-    expect(html, contains('FormA'));
-    expect(html, contains('FormB'));
-    expect(html, contains('Alice'));
-    expect(html, contains('Bob'));
+    // Filter UI present — simple version has Form/Type and Surveyor dropdowns with hard-coded options, plus smart search
+    expect(html, contains('id="filter-form"'));
+    expect(html, contains('id="filter-surveyor"'));
+    expect(html, contains('id="searchBox"'));
+    expect(html, contains('<option value="FormA">FormA</option>'));
+    expect(html, contains('<option value="FormB">FormB</option>'));
+    expect(html, contains('<option value="Alice">Alice</option>'));
+    expect(html, contains('<option value="Bob">Bob</option>'));
 
-    // Legend present (now with counts and symbology)
-    expect(html, contains('Points:'));
-    expect(html, contains('Lines:'));
-    expect(html, contains('Polygons:'));
+    // Legend present
+    expect(html, contains('Point / Geopoint'));
+    expect(html, contains('Line'));
+    expect(html, contains('Polygon'));
 
     // OSM tile layer present
     expect(html, contains('tile.openstreetmap.org'));
