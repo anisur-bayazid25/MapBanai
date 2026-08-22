@@ -659,12 +659,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        centerTitle: false,
-        title: Image.asset(
-          'assets/logo/MapBanai_logo.png',
-          height: 28,
-          fit: BoxFit.contain,
-        ),
         actions: [
           IconButton(
             tooltip: l10n?.settings ?? 'Settings',
@@ -689,7 +683,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
+                Center(
+                  child: Image.asset(
+                    'assets/logo/MapBanai_logo.png',
+                    width: 260,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   l10n?.homeSubtitle ?? 'Offline field data collection',
@@ -816,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _loadProjects();
                         },
                         icon: const Icon(Icons.folder_open_rounded),
-                        label: Text(l10n?.open ?? 'Open'),
+                        label: Text(l10n?.projectSettings ?? 'Project settings'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -854,19 +854,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: _startImportFlow,
                   icon: const Icon(Icons.file_download_outlined),
                   label: Text(l10n?.importProject ?? 'Import Project'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SettingsScreen(database: _database),
-                      ),
-                    );
-                    _loadProjects();
-                  },
-                  icon: const Icon(Icons.settings_outlined),
-                  label: Text(l10n?.settings ?? 'Settings'),
                 ),
               ],
             ),
@@ -998,7 +985,9 @@ Widget _buildProjectSelector(
     ProjectState projectState,
   ) async {
     if (_projects.isEmpty) {
-      _showSnack('Create a project first (Home → Open → New project)');
+      _showSnack(
+          'No projects yet — open Project Settings to create one, or use '
+          'Import Project to import a .mbproj file');
       return;
     }
     final selected = await showDialog<String>(

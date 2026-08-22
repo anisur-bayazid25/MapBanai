@@ -22,8 +22,53 @@ id,latitude,longitude,status,name,notes
     expect(sites[1].attributes['name'], 'Site B');
   });
 
-  test('parseGeoJson extracts Point features', () {
-    const geojson = '''
+  test('parseCsv recognizes X/Y synonym columns', () {
+    const csv = 'id,x,y,name\nA,90.4125,23.8103,Dhaka\n';
+    final sites = StudyAreaService.parseCsv(csv);
+    expect(sites.length, 1);
+    expect(sites.single.latitude, closeTo(23.8103, 1e-6));
+    expect(sites.single.longitude, closeTo(90.4125, 1e-6));
+  });
+
+  test('parseCsv accepts WKT geometry column without lat/lon', () {
+    const csv = 'id,wkt,status\n'
+        '1,"POINT (90.41 23.81)",completed\n'
+        '2,POINT Z (90.42 23.82 5),\n';
+    final sites = StudyAreaService.parseCsv(csv);
+    expect(sites.length, 2);
+    expect(sites[0].status, StudyAreaStatus.completed);
+    expect(sites[0].latitude, closeTo(23.81, 1e-6));
+    expect(sites[1].longitude, closeTo(90.42, 1e-6));
+  });
+
+  test('parseGeoJson falls back to WKT stored in properties', () {
+    const geojson = '{"type":"FeatureCollection","features":['
+        '{"type":"Feature","properties":{"name":"W","wkt":"POINT(90.43 23.83)"}}'
+        ']}';
+    final sites = StudyAreaService.parseGeoJson(geojson);
+    expect(sites.length, 1);
+    expect(sites.single.displayName, 'W');
+    expect(sites.single.latitude, closeTo(23.83, 1e-6));
+  });
+
+  test('parseShapefileBytes reads Point records', () {
+    final header = Uint8List(100);
+    final rh = ByteData(8)
+      ..setInt32(0, 1, Endian.big) // record number
+      ..setInt32(4, 10, Endian.big); // content length in 16-bit words
+    final rc = ByteData(20)
+      ..setInt32(0, 1, Endian.little) // shape type: point
+      ..setFloat64(4, 90.4125, Endian.little)
+      ..setFloat64(12, 23.8103, Endian.little);
+    final bytes =
+        Uint8List.fromList([...header, ...rh.buffer.asUint8List(), ...rc.buffer.asUint8List()]);
+    final sites = StudyAreaService.parseShapefileBytes(bytes);
+    expect(sites.length, 1);
+    expect(sites.single.latitude, closeTo(23.8103, 1e-9));
+    expect(sites.single.longitude, closeTo(90.4125, 1e-9));
+  });
+
+  test('parseGeoJson extracts Point features', () {    const geojson = '''
 {
   "type": "FeatureCollection",
   "features": [

@@ -8,7 +8,7 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.4.0](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
+**Latest release: [v2.4.1](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
 ---
@@ -29,8 +29,8 @@ No account, no registration, no internet needed.
 - **Mode tiles** — Survey, GIS, GPS and Study Area as a 2×2 grid of square
   cards; below them GPS CSV Viewer, Cloud Sync and WebMap in one row.
 - **Settings** — the ☰ menu icon in the top-right corner.
-- **Open** — create, rename, archive or delete projects; open the selected
-  project.
+- **Project settings** — create, rename, archive or delete projects (the
+  former "Open" button).
 - **History** — past survey sessions, captured features and **drafts**
   (unfinished forms / drawings you can resume). Groups are **collapsible**:
   tap a project (folder) or date header to fold/unfold it.
@@ -58,9 +58,9 @@ No account, no registration, no internet needed.
 - **Save Point**: capture a precise point from the live position (saved to
   CSV). Track and point CSVs land in the device's `Export/<project>/`
   folder, shareable from the app.
-- **Compass** (v2.4.0+): full compass rose — N/E/S/W marked, NE/SE/SW/NW
-  intercardinals, degree ticks and a red needle showing live heading as
-  degrees from North.
+- **Compass** (v2.4.0+): collapsible compass rose — N/E/S/W marked, degree
+  ticks, and a smooth-rotating dial with the red needle fixed on the
+  direction the phone faces; heading shown as degrees from North.
 
 ## Drafts (v2.1.2+)
 
@@ -85,9 +85,12 @@ No account, no registration, no internet needed.
 
 ## Study Area mode (v2.3.0+)
 
-- Import a list of sites from **CSV, GeoJSON, KML, KMZ, GeoPackage (.gpkg)
-  or Excel (.xlsx)** and see them on the map as colored circles — red =
+- Import sites from **CSV, GeoJSON, KML, KMZ, SHP, GeoPackage (.gpkg) or
+  Excel (.xlsx)** and see them on the map as colored circles — red =
   pending, green = completed.
+- Flexible columns: `latitude/longitude`, `lat/lon`, `x/y`, `point_x/
+  point_y` etc. are all recognized — or supply a **WKT** geometry column
+  (`POINT (lon lat)`).
 - Tap a site for live GPS **distance + bearing** guidance to walk there,
   then mark it **Completed/Pending**.
 - Export the site list back out as **CSV or Excel** (Import = blue download

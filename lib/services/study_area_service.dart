@@ -118,9 +118,17 @@ class StudyAreaService {
     'lat',
     'y',
     'y_coord',
+    'ycoord',
     'lat_deg',
+    'latdd',
+    'lat_dd',
     'latitude_deg',
+    'latitude_dd',
     'lat_decimal',
+    'decimal_latitude',
+    'dd_lat',
+    'point_y',
+    'northing_lat',
   ];
   static const List<String> _lonAliases = [
     'longitude',
@@ -129,11 +137,134 @@ class StudyAreaService {
     'long',
     'x',
     'x_coord',
+    'xcoord',
     'lon_deg',
+    'londd',
+    'lon_dd',
     'longitude_deg',
+    'longitude_dd',
     'long_deg',
     'lng_deg',
+    'decimal_longitude',
+    'dd_lon',
+    'dd_long',
+    'point_x',
+    'easting_lon',
   ];
+  /// Column names that typically hold WKT geometry strings.
+  static const List<String> _wktAliases = [
+    'wkt',
+    'wkt_geometry',
+    'geometry_wkt',
+    'geometry',
+    'geom',
+    'the_geom',
+    'shape',
+    'shape_wkt',
+    'point',
+    'wkt_point',
+  ];
+  static final RegExp _wktPointRegex = RegExp(
+    r'POINT\s*Z?M?\s*\(\s*([-+]?\d+(?:\.\d+)?)\s+([-+]?\d+(?:\.\d+)?)',
+    caseSensitive: false,
+  );
+
+  /// Extracts `[lon, lat]` from common WKT point forms:
+  /// `POINT (90.41 23.81)`, `POINT Z (90.41 23.81 12)`, `POINT ZM (...)`.
+  /// Returns null when [input] is not a WKT point.
+  static List<double>? parseWktPoint(String input) {
+    final m = _wktPointRegex.firstMatch(input.trim());
+    if (m == null) return null;
+    final lon = double.tryParse(m.group(1)!);
+    final lat = double.tryParse(m.group(2)!);
+    if (lon == null || lat == null) return null;
+    return [lon, lat];
+  }
+
+  /// True when [name] is one of the known WKT/geometry column names
+  /// (case-insensitive).
+  static bool isWktColumn(String name) =>
+      _wktAliases.contains(name.trim().toLowerCase());
+
+  /// Shared per-row site builder used by CSV/XLSX parsers so both accept
+  /// plain lat/lon columns, synonym column names, or a WKT geometry column.
+  static StudyAreaSite? _siteFromRow({
+    required List<String> headers,
+    required int latCol,
+    required int lonCol,
+    required int statusCol,
+    required int wktCol,
+    required String Function(int col) cell,
+    required String idPrefix,
+    required int rowNumber,
+  }) {
+    String latStr = latCol >= 0 ? cell(latCol).trim() : '';
+    String lonStr = lonCol >= 0 ? cell(lonCol).trim() : '';
+    double? lat = double.tryParse(latStr);
+    double? lon = double.tryParse(lonStr);
+
+    // Fallback 1: lat/lon cells may themselves hold a WKT string.
+    if ((lat == null || lon == null)) {
+      final fromCell = parseWktPoint('$latStr $lonStr');
+      if (fromCell != null) {
+        lon = fromCell[0];
+        lat = fromCell[1];
+      }
+    }
+    // Fallback 2: dedicated WKT/geometry column.
+    if (lat == null || lon == null) {
+      if (wktCol >= 0) {
+        final fromWkt = parseWktPoint(cell(wktCol));
+        if (fromWkt != null) {
+          lon = fromWkt[0];
+          lat = fromWkt[1];
+        }
+      }
+    }
+    if (lat == null ||
+        lon == null ||
+        lat < -90 ||
+        lat > 90 ||
+        lon < -180 ||
+        lon > 180) {
+      return null;
+    }
+
+    final attrs = <String, String>{};
+    for (int c = 0; c < headers.length; c++) {
+      if (c == latCol || c == lonCol || c == wktCol) continue;
+      final key = headers[c].trim();
+      if (key.isEmpty) continue;
+      attrs[key] = cell(c).trim();
+    }
+
+    String rawStatus =
+        statusCol >= 0 ? cell(statusCol).trim() : (attrs['status'] ?? '');
+    if (rawStatus.isEmpty) {
+      for (final entry in attrs.entries) {
+        if (_statusAliases.contains(entry.key.toLowerCase())) {
+          rawStatus = entry.value;
+          break;
+        }
+      }
+    }
+    final status = StudyAreaStatusX.fromString(rawStatus);
+    final idVal = attrs['id'] ??
+        attrs['site_id'] ??
+        attrs['site'] ??
+        attrs['fid'] ??
+        '$idPrefix$rowNumber';
+    final id = idVal.trim().isEmpty
+        ? '${idPrefix}${rowNumber}_${lat}_$lon'
+        : idVal.trim();
+    return StudyAreaSite(
+      id: id,
+      latitude: lat,
+      longitude: lon,
+      attributes: attrs,
+      status: status,
+    );
+  }
   static const List<String> _statusAliases = [
     'status',
     'state',
@@ -215,17 +346,19 @@ class StudyAreaService {
     int latCol = -1;
     int lonCol = -1;
     int statusCol = -1;
+    int wktCol = -1;
 
     for (int i = 0; i < lowerHeaders.length; i++) {
       final h = lowerHeaders[i];
       if (latCol == -1 && _latAliases.contains(h)) latCol = i;
       if (lonCol == -1 && _lonAliases.contains(h)) lonCol = i;
       if (statusCol == -1 && _statusAliases.contains(h)) statusCol = i;
+      if (wktCol == -1 && _wktAliases.contains(h)) wktCol = i;
     }
     // Fallback: look for headers containing lat/lon substrings.
     if (latCol == -1) {
       for (int i = 0; i < lowerHeaders.length; i++) {
-        if (lowerHeaders[i].contains('lat')) {
+        if (i != wktCol && lowerHeaders[i].contains('lat')) {
           latCol = i;
           break;
         }
@@ -234,16 +367,19 @@ class StudyAreaService {
     if (lonCol == -1) {
       for (int i = 0; i < lowerHeaders.length; i++) {
         final h = lowerHeaders[i];
-        if (h.contains('lon') || h.contains('lng') || h == 'x') {
+        if ((h.contains('lon') || h.contains('lng') || h == 'x') &&
+            i != wktCol) {
           lonCol = i;
           break;
         }
       }
     }
 
-    if (latCol == -1 || lonCol == -1) {
+    // A WKT geometry column alone is enough.
+    if ((latCol == -1 || lonCol == -1) && wktCol == -1) {
       throw FormatException(
-          'CSV must contain latitude and longitude columns (found: ${headers.join(', ')})');
+          'CSV must contain latitude and longitude columns (or a WKT '
+          'geometry column). Found: ${headers.join(', ')}');
     }
 
     final sites = <StudyAreaSite>[];
@@ -252,50 +388,18 @@ class StudyAreaService {
       if (row.every((c) => c.trim().isEmpty)) continue;
       // Pad row to headers length.
       while (row.length < headers.length) row.add('');
-      final latStr = row.length > latCol ? row[latCol].trim() : '';
-      final lonStr = row.length > lonCol ? row[lonCol].trim() : '';
-      final lat = double.tryParse(latStr);
-      final lon = double.tryParse(lonStr);
-      if (lat == null || lon == null) continue;
-      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
-
-      final attrs = <String, String>{};
-      for (int c = 0; c < headers.length; c++) {
-        if (c == latCol || c == lonCol) continue;
-        final key = headers[c].trim();
-        if (key.isEmpty) continue;
-        final val = c < row.length ? row[c].trim() : '';
-        attrs[key] = val;
-      }
-
-      String rawStatus = '';
-      if (statusCol != -1 && statusCol < row.length) {
-        rawStatus = row[statusCol];
-      } else {
-        // Look for any attribute that looks like status.
-        for (final entry in attrs.entries) {
-          if (_statusAliases.contains(entry.key.toLowerCase())) {
-            rawStatus = entry.value;
-            break;
-          }
-        }
-      }
-      final status = StudyAreaStatusX.fromString(rawStatus);
-
-      final idVal = attrs['id'] ??
-          attrs['site_id'] ??
-          attrs['site'] ??
-          attrs['fid'] ??
-          'site_${r}';
-      final id = idVal.trim().isEmpty ? 'site_${r}_${lat}_${lon}' : idVal.trim();
-
-      sites.add(StudyAreaSite(
-        id: id,
-        latitude: lat,
-        longitude: lon,
-        attributes: attrs,
-        status: status,
-      ));
+      String cell(int c) => c < row.length ? row[c] : '';
+      final site = _siteFromRow(
+        headers: headers,
+        latCol: latCol,
+        lonCol: lonCol,
+        statusCol: statusCol,
+        wktCol: wktCol,
+        cell: cell,
+        idPrefix: 'site_',
+        rowNumber: r,
+      );
+      if (site != null) sites.add(site);
     }
     return sites;
   }
@@ -376,16 +480,6 @@ class StudyAreaService {
     for (int idx = 0; idx < features.length; idx++) {
       final f = features[idx];
       if (f is! Map) continue;
-      final geom = f['geometry'];
-      if (geom is! Map) continue;
-      final type = geom['type']?.toString();
-      if (type != 'Point') continue;
-      final coords = geom['coordinates'];
-      if (coords is! List || coords.length < 2) continue;
-      final lon = (coords[0] as num?)?.toDouble();
-      final lat = (coords[1] as num?)?.toDouble();
-      if (lon == null || lat == null) continue;
-      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
 
       final props = f['properties'] is Map
           ? Map<String, dynamic>.from(f['properties'] as Map)
@@ -394,6 +488,35 @@ class StudyAreaService {
       if (f['id'] != null && !props.containsKey('id')) {
         props['id'] = f['id'];
       }
+
+      double? lon;
+      double? lat;
+      // Preferred: real GeoJSON Point geometry.
+      final geom = f['geometry'];
+      if (geom is Map) {
+        final type = geom['type']?.toString();
+        final coords = geom['coordinates'];
+        if ((type == 'Point' ||
+                (type == null && coords is List)) &&
+            coords is List &&
+            coords.length >= 2) {
+          lon = (coords[0] as num?)?.toDouble();
+          lat = (coords[1] as num?)?.toDouble();
+        }
+      }
+      // Fallback: a WKT point stored in a property (e.g. "wkt", "geom").
+      if (lat == null || lon == null) {
+        for (final v in props.values) {
+          final fromWkt = parseWktPoint(v?.toString() ?? '');
+          if (fromWkt != null) {
+            lon = fromWkt[0];
+            lat = fromWkt[1];
+            break;
+          }
+        }
+      }
+      if (lat == null || lon == null) continue;
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
 
       final attrs = <String, String>{};
       String rawStatus = '';
@@ -445,34 +568,13 @@ class StudyAreaService {
     int idx = 0;
     for (final pm in placemarks) {
       idx++;
-      // Extract coordinates from Point or any Geometry.
-      XmlElement? point = pm.findElements('Point').firstOrNull;
-      // Also search recursively for Point if not direct child.
-      if (point == null) {
-        final points = pm.findAllElements('Point');
-        if (points.isNotEmpty) point = points.first;
-      }
-      if (point == null) continue;
-      final coordEl = point.findElements('coordinates').firstOrNull;
-      if (coordEl == null) continue;
-      final coordText = coordEl.innerText.trim();
-      if (coordText.isEmpty) continue;
-      // KML coordinates may have multiple points (LineString) but for Point take first.
-      final firstCoord = coordText.split(RegExp(r'\s+')).first;
-      final parts = firstCoord.split(',');
-      if (parts.length < 2) continue;
-      final lon = double.tryParse(parts[0].trim());
-      final lat = double.tryParse(parts[1].trim());
-      if (lon == null || lat == null) continue;
-      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
-
+      // Attributes first (needed for both display and the WKT fallback).
       final name = pm.findElements('name').firstOrNull?.innerText.trim() ?? '';
-      final desc = pm.findElements('description').firstOrNull?.innerText.trim() ?? '';
-
+      final desc =
+          pm.findElements('description').firstOrNull?.innerText.trim() ?? '';
       final attrs = <String, String>{};
       if (name.isNotEmpty) attrs['name'] = name;
       if (desc.isNotEmpty) attrs['description'] = desc;
-
       // ExtendedData Data elements.
       for (final data in pm.findAllElements('Data')) {
         final key = data.getAttribute('name') ?? '';
@@ -483,6 +585,49 @@ class StudyAreaService {
         final key = simple.getAttribute('name') ?? '';
         final val = simple.innerText;
         if (key.isNotEmpty) attrs[key] = val;
+      }
+
+      // Extract coordinates from a Point geometry...
+      double? lon;
+      double? lat;
+      XmlElement? point = pm.findElements('Point').firstOrNull;
+      if (point == null) {
+        final points = pm.findAllElements('Point');
+        if (points.isNotEmpty) point = points.first;
+      }
+      if (point != null) {
+        final coordEl = point.findElements('coordinates').firstOrNull;
+        if (coordEl != null) {
+          final coordText = coordEl.innerText.trim();
+          if (coordText.isNotEmpty) {
+            final firstCoord = coordText.split(RegExp(r'\s+')).first;
+            final parts = firstCoord.split(',');
+            if (parts.length >= 2) {
+              lon = double.tryParse(parts[0].trim());
+              lat = double.tryParse(parts[1].trim());
+            }
+          }
+        }
+      }
+      // ...or from a WKT string inside the attributes (some tools embed
+      // "POINT (lon lat)" in ExtendedData instead of real geometry).
+      if (lat == null || lon == null) {
+        for (final entry in attrs.entries) {
+          final fromWkt = parseWktPoint(entry.value);
+          if (fromWkt != null) {
+            lon = fromWkt[0];
+            lat = fromWkt[1];
+            break;
+          }
+        }
+      }
+      if (lat == null ||
+          lon == null ||
+          lat < -90 ||
+          lat > 90 ||
+          lon < -180 ||
+          lon > 180) {
+        continue;
       }
 
       String rawStatus = '';
@@ -535,6 +680,94 @@ class StudyAreaService {
     final raw = kmlFile.content as List<int>;
     final text = utf8.decode(raw, allowMalformed: true);
     return parseKml(text);
+  }
+
+  // ── Shapefile (.shp geometry only) ──────────────────────────────
+
+  /// Minimal ESRI Shapefile reader: extracts one site per record using the
+  /// first vertex of each shape (Point/PolyLine/Polygon/MultiPoint, incl. Z/M
+  /// variants). The attribute table (.dbf) is NOT read yet — name the sites
+  /// afterwards in the app if needed.
+  static List<StudyAreaSite> parseShapefile(File file) {
+    if (!file.existsSync()) {
+      throw FileSystemException('Shapefile file not found', file.path);
+    }
+    return parseShapefileBytes(file.readAsBytesSync());
+  }
+
+  static List<StudyAreaSite> parseShapefileBytes(Uint8List bytes) {
+    if (bytes.length < 108) {
+      throw FormatException('Invalid .shp file (too small)');
+    }
+    final bd = ByteData.sublistView(bytes);
+    int beInt32(int o) =>
+        (bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) |
+            bytes[o + 3];
+    final sites = <StudyAreaSite>[];
+    int off = 100; // skip the 100-byte file header
+    int idx = 0;
+    while (off + 8 <= bytes.length) {
+      final recNum = beInt32(off);
+      final contentLen = beInt32(off + 4) * 2; // words → bytes
+      if (contentLen < 4 || off + 8 + contentLen > bytes.length) break;
+      final recOff = off + 8;
+      final shapeType = bd.getInt32(recOff, Endian.little);
+      idx++;
+      double? lon;
+      double? lat;
+      switch (shapeType) {
+        case 1: // Point
+        case 11: // PointZ
+        case 21: // PointM
+          if (contentLen >= 20) {
+            lon = bd.getFloat64(recOff + 4, Endian.little);
+            lat = bd.getFloat64(recOff + 12, Endian.little);
+          }
+          break;
+        case 8: // MultiPoint
+        case 18: // MultiPointZ
+        case 28: // MultiPointM
+          final numPoints = bd.getInt32(recOff + 36, Endian.little);
+          if (numPoints > 0 && contentLen >= 40 + 16) {
+            lon = bd.getFloat64(recOff + 40, Endian.little);
+            lat = bd.getFloat64(recOff + 48, Endian.little);
+          }
+          break;
+        case 3: // PolyLine
+        case 13:
+        case 23:
+        case 5: // Polygon
+        case 15:
+        case 25:
+          final numParts = bd.getInt32(recOff + 36, Endian.little);
+          final numPoints = bd.getInt32(recOff + 40, Endian.little);
+          final pointsStart = recOff + 44 + numParts * 4;
+          if (numPoints > 0 &&
+              numParts > 0 &&
+              pointsStart + 16 <= recOff + contentLen) {
+            lon = bd.getFloat64(pointsStart, Endian.little);
+            lat = bd.getFloat64(pointsStart + 8, Endian.little);
+          }
+          break;
+        default:
+          break;
+      }
+      if (lon != null &&
+          lat != null &&
+          lat >= -90 &&
+          lat <= 90 &&
+          lon >= -180 &&
+          lon <= 180) {
+        sites.add(StudyAreaSite(
+          id: 'shp_${recNum != 0 ? recNum : idx}',
+          latitude: lat,
+          longitude: lon,
+          attributes: const {},
+        ));
+      }
+      off += 8 + contentLen;
+    }
+    return sites;
   }
 
   // ── GeoPackage ───────────────────────────────────────────────────
@@ -753,6 +986,11 @@ class StudyAreaService {
         return parseKml(utf8.decode(bytes, allowMalformed: true));
       case 'kmz':
         return parseKmzBytes(bytes);
+      case 'shp':
+        if (file != null) {
+          return parseShapefile(file);
+        }
+        return parseShapefileBytes(bytes);
       case 'gpkg':
       case 'geopackage':
       case 'sqlite':
@@ -814,15 +1052,17 @@ class StudyAreaService {
       int latCol = -1;
       int lonCol = -1;
       int statusCol = -1;
+      int wktCol = -1;
       for (int i = 0; i < lowerHeaders.length; i++) {
         final h = lowerHeaders[i];
         if (latCol == -1 && _latAliases.contains(h)) latCol = i;
         if (lonCol == -1 && _lonAliases.contains(h)) lonCol = i;
         if (statusCol == -1 && _statusAliases.contains(h)) statusCol = i;
+        if (wktCol == -1 && _wktAliases.contains(h)) wktCol = i;
       }
       if (latCol == -1) {
         for (int i = 0; i < lowerHeaders.length; i++) {
-          if (lowerHeaders[i].contains('lat')) {
+          if (i != wktCol && lowerHeaders[i].contains('lat')) {
             latCol = i;
             break;
           }
@@ -831,15 +1071,18 @@ class StudyAreaService {
       if (lonCol == -1) {
         for (int i = 0; i < lowerHeaders.length; i++) {
           final h = lowerHeaders[i];
-          if (h.contains('lon') || h.contains('lng') || h == 'x') {
+          if ((h.contains('lon') || h.contains('lng') || h == 'x') &&
+              i != wktCol) {
             lonCol = i;
             break;
           }
         }
       }
-      if (latCol == -1 || lonCol == -1) {
+      // A WKT geometry column alone is enough.
+      if ((latCol == -1 || lonCol == -1) && wktCol == -1) {
         throw FormatException(
-            'XLSX must contain latitude and longitude columns (found: ${headers.join(', ')})');
+            'XLSX must contain latitude and longitude columns (or a WKT '
+            'geometry column). Found: ${headers.join(', ')}');
       }
       final sites = <StudyAreaSite>[];
       for (int r = 1; r < table.rows.length; r++) {
@@ -848,43 +1091,17 @@ class StudyAreaService {
         String cell(int idx) => idx < row.length
             ? (row[idx]?.value?.toString().trim() ?? '')
             : '';
-        final latStr = cell(latCol);
-        final lonStr = cell(lonCol);
-        final lat = double.tryParse(latStr);
-        final lon = double.tryParse(lonStr);
-        if (lat == null || lon == null) continue;
-        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
-        final attrs = <String, String>{};
-        for (int c = 0; c < headers.length; c++) {
-          if (c == latCol || c == lonCol) continue;
-          final key = headers[c].trim();
-          if (key.isEmpty) continue;
-          attrs[key] = cell(c);
-        }
-        String rawStatus = statusCol != -1 ? cell(statusCol) : '';
-        if (rawStatus.isEmpty) {
-          for (final e in attrs.entries) {
-            if (_statusAliases.contains(e.key.toLowerCase())) {
-              rawStatus = e.value;
-              break;
-            }
-          }
-        }
-        final status = StudyAreaStatusX.fromString(rawStatus);
-        final idVal = attrs['id'] ??
-            attrs['site_id'] ??
-            attrs['site'] ??
-            'xlsx_${r}';
-        final id = idVal.trim().isEmpty
-            ? 'xlsx_${r}_${lat}_${lon}'
-            : idVal.trim();
-        sites.add(StudyAreaSite(
-          id: id,
-          latitude: lat,
-          longitude: lon,
-          attributes: attrs,
-          status: status,
-        ));
+        final site = _siteFromRow(
+          headers: headers,
+          latCol: latCol,
+          lonCol: lonCol,
+          statusCol: statusCol,
+          wktCol: wktCol,
+          cell: cell,
+          idPrefix: 'xlsx_',
+          rowNumber: r,
+        );
+        if (site != null) sites.add(site);
       }
       return sites;
     } catch (e) {

@@ -44,7 +44,8 @@ void main() {
     expect(find.text('Offline field data collection'), findsOneWidget);
     expect(find.text('Survey Mode'), findsOneWidget);
     expect(find.text('GIS Mode'), findsOneWidget);
-    expect(find.text('Open'), findsOneWidget);
+    // "Open" was renamed to "Project Settings" in v2.4.1.
+    expect(find.text('Project settings'), findsOneWidget);
   });
 
   test('survey session save persists a project relationship', () async {

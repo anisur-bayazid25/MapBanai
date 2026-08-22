@@ -41,6 +41,31 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Timer? _gnssTimer;
   double? _groundRefAltitude;
 
+  /// Unwrapped heading (no 359→0 jumps) used to animate the compass dial
+  /// smoothly across consecutive fixes.
+  double? _continuousHeading;
+
+  /// Feeds [heading] into the continuous/unwrapped accumulator so the
+  /// compass dial can rotate through the shortest path instead of spinning
+  /// backwards when crossing north.
+  void _noteHeading(double? heading) {
+    if (heading == null || heading.isNaN) return;
+    final deg = ((heading % 360) + 360) % 360;
+    final prev = _continuousHeading;
+    if (prev == null) {
+      _continuousHeading = deg;
+      return;
+    }
+    var next = deg;
+    while (next - prev > 180) {
+      next -= 360;
+    }
+    while (next - prev < -180) {
+      next += 360;
+    }
+    _continuousHeading = next;
+  }
+
   List<GpsLog> _logs = [];
   Map<int, int> _counts = {};
   Map<int, DateTime?> _lastReadings = {};
@@ -105,6 +130,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       await _subscription?.cancel();
       _subscription = null;
       if (!mounted) return;
+      _noteHeading(bg.latest?.heading);
       setState(() {
         _permissionGranted = true;
         _recordingLogId = bg.activeLogId;
@@ -136,6 +162,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       (position) {
         if (!mounted) return;
         if (BackgroundGps.instance.isRecording) return;
+        _noteHeading(position.heading);
         setState(() {
           _latest = position;
           _groundRefAltitude ??= position.altitude;
@@ -163,6 +190,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         _streamError = false;
       }
     });
+    if (bg.isRecording) _noteHeading(bg.latest?.heading);
     _refreshCountsThrottled();
   }
 
@@ -598,79 +626,88 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
 
   Widget _buildCompassCard() {
     final heading = _latest?.heading;
-    final hasHeading = heading != null && !heading.isNaN && _latest != null;
-    final deg = hasHeading ? (heading % 360) : 0.0;
+    final hasHeading = heading != null && !heading.isNaN;
+    final deg = hasHeading ? ((heading % 360) + 360) % 360 : 0.0;
+    // The dial rotates to -heading (shortest path via unwrapped value);
+    // the red needle stays fixed pointing up — where the phone faces.
+    final dialTurns =
+        hasHeading ? -((_continuousHeading ?? deg) / 360) : 0.0;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.teal.shade100),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
+      child: ExpansionTile(
+        leading: Icon(Icons.explore_outlined, color: Colors.teal.shade700),
+        title: const Text('Compass', style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          hasHeading
+              ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} (from North)'
+              : 'No heading yet',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        initiallyExpanded: false,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
               children: [
-                Icon(Icons.explore_outlined, color: Colors.teal.shade700),
-                const SizedBox(width: 8),
-                const Text('Compass', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: hasHeading ? Colors.teal.shade50 : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: hasHeading ? Colors.teal.shade200 : Colors.grey.shade300),
-                  ),
-                  child: Text(
-                    hasHeading ? '${deg.toStringAsFixed(0)}° ${ _cardinalFromDegrees(deg)}' : 'No heading',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: hasHeading ? Colors.teal.shade800 : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: 200,
-              height: 200,
-              child: CustomPaint(
-                painter: _CompassPainter(headingDeg: hasHeading ? deg : null),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Text(
-                        hasHeading ? '${deg.toStringAsFixed(0)}°' : '—',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: hasHeading ? Colors.teal.shade900 : Colors.grey.shade500,
-                        ),
+                      // Rotating dial: degree ring + direction labels.
+                      AnimatedRotation(
+                        turns: dialTurns,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                        child: const CustomPaint(painter: _CompassDialPainter()),
                       ),
-                      Text(
-                        hasHeading ? 'from North' : 'Waiting for heading…',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                      // Fixed needle: always points up = phone facing.
+                      const CustomPaint(painter: _CompassNeedlePainter()),
+                      // Degrees-from-north readout below the hub.
+                      Align(
+                        alignment: const Alignment(0, 0.55),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              hasHeading ? '${deg.toStringAsFixed(0)}°' : '—',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: hasHeading
+                                    ? Colors.teal.shade900
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                            Text(
+                              hasHeading ? 'from North' : 'Waiting…',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  hasHeading
+                      ? 'Red needle shows where the phone is facing • '
+                          '${deg.toStringAsFixed(1)}° ${_cardinalFromDegrees(deg)}'
+                      : 'Move with GPS to get a heading fix',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              hasHeading
-                  ? 'Heading ${deg.toStringAsFixed(1)}°  •  ${_cardinalFromDegrees(deg)}'
-                  : 'Move with GPS to get a heading fix',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1077,24 +1114,27 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   }
 }
 
-class _CompassPainter extends CustomPainter {
-  final double? headingDeg;
-  _CompassPainter({this.headingDeg});
+/// Static dial of the compass: ring, degree ticks and N/E/S/W +
+/// NE/SE/SW/NW labels. Never repaints — rotation is done by AnimatedRotation,
+/// which keeps the compass smooth even at 1 Hz GPS updates.
+class _CompassDialPainter extends CustomPainter {
+  const _CompassDialPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) / 2 - 6;
-    final outerPaint = Paint()
-      ..color = Colors.teal.shade100
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius, outerPaint);
-    final fillPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius - 1, fillPaint);
-    // Degree ticks every 30°, longer at N/E/S/W
+    canvas.drawCircle(center, radius - 1,
+        Paint()..color = Colors.white..style = PaintingStyle.fill);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = Colors.teal.shade100
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    // Degree ticks every 15°.
     final tickPaint = Paint()
       ..color = Colors.grey.shade400
       ..strokeWidth = 1.2
@@ -1107,20 +1147,38 @@ class _CompassPainter extends CustomPainter {
       final isCardinal = deg % 90 == 0;
       final isMajor = deg % 30 == 0;
       final rad = deg * math.pi / 180;
-      final inner = isCardinal ? radius - 14 : isMajor ? radius - 10 : radius - 6;
+      final inner =
+          isCardinal ? radius - 14 : isMajor ? radius - 10 : radius - 6;
       final outer = radius - 2;
-      final p1 = Offset(center.dx + inner * math.sin(rad), center.dy - inner * math.cos(rad));
-      final p2 = Offset(center.dx + outer * math.sin(rad), center.dy - outer * math.cos(rad));
+      final p1 = Offset(
+          center.dx + inner * math.sin(rad), center.dy - inner * math.cos(rad));
+      final p2 = Offset(
+          center.dx + outer * math.sin(rad), center.dy - outer * math.cos(rad));
       canvas.drawLine(p1, p2, isCardinal ? cardinalPaint : tickPaint);
     }
-    // N/E/S/W labels
+    // Degree numbers every 90° (N/E/S/W positions carry letters instead).
+    for (final deg in [30, 60, 120, 150, 210, 240, 300, 330]) {
+      final rad = deg * math.pi / 180;
+      final r = radius - 24;
+      final pos =
+          Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '$deg',
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 8),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
+    }
+    // Cardinal labels.
     const labels = ['N', 'E', 'S', 'W'];
     const labelDegs = [0, 90, 180, 270];
     for (int i = 0; i < labels.length; i++) {
-      final deg = labelDegs[i];
-      final rad = deg * math.pi / 180;
+      final rad = labelDegs[i] * math.pi / 180;
       final r = radius - 22;
-      final pos = Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
+      final pos =
+          Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
       final isNorth = labels[i] == 'N';
       final tp = TextPainter(
         text: TextSpan(
@@ -1135,49 +1193,60 @@ class _CompassPainter extends CustomPainter {
       )..layout();
       tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
     }
-    // Intercardinal labels NE, SE, SW, NW smaller
+    // Intercardinal labels.
     const inter = ['NE', 'SE', 'SW', 'NW'];
     const interDegs = [45, 135, 225, 315];
     for (int i = 0; i < inter.length; i++) {
       final rad = interDegs[i] * math.pi / 180;
       final r = radius - 20;
-      final pos = Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
+      final pos =
+          Offset(center.dx + r * math.sin(rad), center.dy - r * math.cos(rad));
       final tp = TextPainter(
         text: TextSpan(
           text: inter[i],
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 9, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 9,
+              fontWeight: FontWeight.w600),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
     }
-    // Needle - heading from north clockwise
-    if (headingDeg != null) {
-      final h = headingDeg! % 360;
-      final rad = h * math.pi / 180;
-      // Needle triangle pointing to heading
-      final tip = Offset(center.dx + (radius - 10) * math.sin(rad), center.dy - (radius - 10) * math.cos(rad));
-      final baseLeftRad = rad + 2.6;
-      final baseRightRad = rad - 2.6;
-      final baseR = 14.0;
-      final baseLeft = Offset(center.dx + baseR * math.sin(baseLeftRad), center.dy - baseR * math.cos(baseLeftRad));
-      final baseRight = Offset(center.dx + baseR * math.sin(baseRightRad), center.dy - baseR * math.cos(baseRightRad));
-      final needlePaint = Paint()
-        ..color = Colors.red.shade600
-        ..style = PaintingStyle.fill;
-      final path = Path()..moveTo(tip.dx, tip.dy)..lineTo(baseLeft.dx, baseLeft.dy)..lineTo(baseRight.dx, baseRight.dy)..close();
-      canvas.drawPath(path, needlePaint);
-      // Center dot
-      canvas.drawCircle(center, 4, Paint()..color = Colors.teal.shade800);
-      canvas.drawCircle(center, 2.2, Paint()..color = Colors.white);
-    } else {
-      // No heading: faint center dot
-      canvas.drawCircle(center, 4, Paint()..color = Colors.grey.shade400);
-    }
   }
 
   @override
-  bool shouldRepaint(covariant _CompassPainter old) => old.headingDeg != headingDeg;
+  bool shouldRepaint(covariant _CompassDialPainter oldDelegate) => false;
+}
+
+/// Fixed needle overlay: the red arrow always points UP — the direction the
+/// phone is facing — while the dial rotates underneath it.
+class _CompassNeedlePainter extends CustomPainter {
+  const _CompassNeedlePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 6;
+    // Red triangle pointing up.
+    final tip = Offset(center.dx, center.dy - (radius - 12));
+    final baseLeft = Offset(center.dx - 7, center.dy + 4);
+    final baseRight = Offset(center.dx + 7, center.dy + 4);
+    final notch = Offset(center.dx, center.dy + 1);
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(baseLeft.dx, baseLeft.dy)
+      ..lineTo(notch.dx, notch.dy)
+      ..lineTo(baseRight.dx, baseRight.dy)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.red.shade600);
+    // Hub dot on top.
+    canvas.drawCircle(center, 5, Paint()..color = Colors.teal.shade800);
+    canvas.drawCircle(center, 2.6, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompassNeedlePainter oldDelegate) => false;
 }
 
 class _WaypointDialog extends StatefulWidget {

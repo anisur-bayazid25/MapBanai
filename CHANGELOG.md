@@ -4,6 +4,46 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.4.1] - 2026-08-23
+
+### Fixed
+- **Home logo restored** — the large top-centred MapBanai logo (260 px) is
+  back on the home body; the AppBar now holds only the ☰ Settings menu.
+- **Redundant bottom Settings button removed** — Settings lives solely in the
+  top-right ☰ menu.
+
+### Changed
+- **"Open" renamed to "Project settings"** (button label uses the existing
+  l10n key; English/Bangla strings unchanged in Bangla). Empty-project hints
+  in Home and GIS Mode now say to open *Project settings* to create a project
+  or use *Import Project* for a `.mbproj` file.
+- **Compass reworked (GPS Mode)** — back to a collapsible card that opens
+  instantly. The dial is now a static painting (ring, degree ticks every 15°,
+  numbered degrees every 30°, N/E/S/W red-north labels, intercardinals) that
+  rotates with `AnimatedRotation` through the shortest path (heading is
+  unwrapped so crossing north never spins backwards); the red needle is
+  fixed pointing up — the direction the phone faces — like standard phone
+  compasses. Repaint cost per GPS fix dropped to zero (painters are constant,
+  `shouldRepaint: false`), fixing the lag.
+- **Study Area imports accept WKT and coordinate synonyms**:
+  - CSV/XLSX columns `x/y`, `lon/lng/long`, `lat_dd`, `dd_lat`, `point_x/
+    point_y`, etc. all recognized; a dedicated geometry column (`wkt`,
+    `geometry`, `geom`, `the_geom`, `shape`, …) works even without lat/lon
+    columns, and cells holding `POINT (lon lat)` / `POINT Z (…)` are parsed
+    as fallback.
+  - GeoJSON features without Point geometry fall back to a WKT string stored
+    in their properties.
+  - KML/KMZ placemarks without `<Point>` fall back to a WKT string embedded
+    in ExtendedData/SimpleData attributes.
+- **Shapefile (.shp) import (Study Area Mode)** — minimal binary reader
+  extracts one site per record from Point/PointZ/PointM and the first vertex
+  of PolyLine/Polygon/MultiPoint shapes (.dbf attributes not read yet).
+
+### Tests
+- New: CSV X/Y synonyms, CSV WKT-column-only, GeoJSON WKT property fallback,
+  binary .shp Point parsing, plus existing suites.
+- Suite: 227 tests green.
+
 ## [2.4.0] - 2026-08-23
 
 ### Added

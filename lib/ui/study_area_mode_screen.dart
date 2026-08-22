@@ -185,7 +185,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<void> _importSites() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['csv', 'geojson', 'json', 'kml', 'kmz', 'gpkg', 'xlsx'],
+      allowedExtensions: [
+        'csv', 'geojson', 'json', 'kml', 'kmz', 'gpkg', 'xlsx', 'shp',
+      ],
       withData: false,
     );
     if (result == null || result.files.isEmpty) return;
@@ -227,6 +229,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       } else if (ext == 'kmz') {
         final bytes = await ioFile.readAsBytes();
         imported = StudyAreaService.parseKmzBytes(bytes);
+      } else if (ext == 'shp') {
+        imported = StudyAreaService.parseShapefile(ioFile);
       } else if (ext == 'gpkg') {
         imported = await StudyAreaService.parseGeoPackage(ioFile);
       } else if (ext == 'xlsx') {
@@ -533,7 +537,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Import site locations from CSV, GeoJSON, KML/KMZ, GeoPackage or Excel to get started.',
+                        'Import sites from CSV, GeoJSON, KML/KMZ, SHP, GeoPackage or Excel. Lat/Lon, X/Y and WKT columns are recognized.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),

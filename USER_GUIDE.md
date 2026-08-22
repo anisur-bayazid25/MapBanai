@@ -21,23 +21,24 @@ No account, no registration, no internet needed for data collection.
 
 | Element | What it does |
 |---|---|
+| Logo + tagline | Large MapBanai logo, top-centre |
 | Project selector | Tap to pick the project you are collecting data for |
 | **Survey / GIS / GPS / Study Area** | The four collection modes, shown as a 2×2 grid of square tiles |
 | **GPS CSV Viewer · Cloud Sync · WebMap** | Utility row under the mode tiles |
 | Collected data | Survey-response and GIS-feature counts of the selected project |
-| Open · History · Export | Project management, past records, and file export |
+| Project settings · History · Export | Project management, past records, and file export |
 | ☰ (top-right) | Opens **Settings** |
 
 Everything works offline; tiles open instantly and data stays on the device.
 
 ## 3. Projects
 
-- **Home → Open → New project**: name + description.
+- **Home → Project settings → New project**: name + description.
 - The selected project appears in the selector at the top of Home.
 - Each project keeps its own survey forms, fields, GIS features and
   cloud-sync configuration.
-- Archive/restore or delete projects from **Open**; deleting removes all its
-  collected data (confirm first!).
+- Archive/restore or delete projects from **Project settings**; deleting
+  removes all its collected data (confirm first!).
 
 ## 4. Survey Mode
 
@@ -69,9 +70,11 @@ Everything works offline; tiles open instantly and data stays on the device.
 - **Save Point**: capture one precise fix with an optional note.
 - Live readouts: latitude/longitude (7 dp), UTC + Dhaka time, accuracy,
   elevation (relative to first fix), speed, satellites in use/view.
-- **Compass**: full compass rose — N/E/S/W marked (north in red), degree
-  ticks, and a red needle showing your heading as **degrees from North**
-  plus cardinal direction (e.g., *135° SE*).
+- **Compass**: collapsible card — tap to open a full compass rose with
+  N/E/S/W marked, degree ticks and a smooth-rotating dial. The red needle
+  stays fixed pointing up (the direction the phone faces) while the dial
+  turns underneath, like standard phone compasses. The heading is shown as
+  **degrees from North** plus cardinal direction (e.g., *135° SE*).
 - Logs can be viewed as CSV, shared, renamed, deleted, or projected onto the
   WebMap.
 
@@ -80,7 +83,11 @@ Everything works offline; tiles open instantly and data stays on the device.
 Site visits with status tracking and walk-to navigation:
 
 1. **Import sites** (blue download icon): CSV, GeoJSON, KML, **KMZ**,
-   GeoPackage (.gpkg) or Excel (.xlsx). Choose *Replace all* or *Append*.
+   **SHP**, GeoPackage (.gpkg) or Excel (.xlsx). Choose *Replace all* or
+   *Append*.
+   - Column names are flexible: `latitude/longitude`, `lat/lon`, `x/y`,
+     `point_x/point_y` and similar synonyms all work — or provide a WKT
+     geometry column (`POINT (lon lat)`).
 2. Sites render as circles: red = pending, green = completed.
 3. Tap a site: the panel shows distance and bearing from your live GPS with
    an arrow pointing the way. **Center on site** jumps the map there.

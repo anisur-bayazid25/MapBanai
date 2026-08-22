@@ -1260,7 +1260,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _showProjectPicker() async {
     final projects = _projects;
     if (projects.isEmpty) {
-      _showSnack('Create a project first (Home → Open → New project)');
+      _showSnack(
+          'No projects yet — open Project Settings on Home to create one, '
+          'or use Import Project to import a .mbproj file');
       return;
     }
     final selected = await showDialog<Project>(

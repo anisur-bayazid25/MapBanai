@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4f — v2.4.0 UX batch (Complete — tests green, APK built 2026-08-23)  
+**Status:** Phase 4g — v2.4.1 fix batch (Complete — tests green, APK built 2026-08-23)  
 **Last Updated:** 2026-08-23  
-**Version:** 2.4.0
+**Version:** 2.4.1
 
 ---
 
@@ -833,6 +833,19 @@ the GPS Mode copy flow.
 - [x] USER_GUIDE.md created; CHANGELOG/AI_CHANGELOG/README/TODO updated
 - [x] Version 2.4.0+17 (bump tool minor)
 - [x] `flutter analyze` — 0 errors; `flutter test` — 223/223 pass; release APK built
+
+---
+
+## PHASE 4g: V2.4.1 FIX BATCH (2026-08-23) — Complete, tests green
+
+- [x] Home logo restored — large top-centred (260 px); AppBar keeps only ☰
+- [x] Redundant bottom Settings button removed (v2.4.0 scripted removal had silently failed)
+- [x] "Open" renamed "Project settings" (l10n key) + empty-project hints in Home & GIS Mode now point to Project settings / Import Project
+- [x] Compass: collapsible again, opens instantly; static dial painter (shouldRepaint false) + AnimatedRotation via unwrapped continuous heading (no north-crossing spin-back); fixed red needle = phone facing direction
+- [x] Imports: WKT support (`POINT (lon lat)` / `POINT Z`) in CSV cells, dedicated geometry columns, GeoJSON properties and KML/KMZ ExtendedData; coordinate synonyms expanded (x/y, lon/lng/long, lat_dd, dd_lat, point_x/point_y, …)
+- [x] SHP import: minimal binary reader (Point/Z/M full, first vertex of PolyLine/Polygon/MultiPoint; .dbf not read)
+- [x] Tests updated/added — suite 227/227 green; analyze clean
+- [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
 
 ---
 

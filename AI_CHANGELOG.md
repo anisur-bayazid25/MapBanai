@@ -53,6 +53,60 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.4.1] — logo/UX fixes + smooth fixed-needle compass + WKT/SHP imports
+
+### Home (`lib/ui/home_screen.dart`)
+- Logo (260 px, centred) restored in body; AppBar keeps only the ☰ action
+  (no title). Bottom Settings OutlinedButton removed (was still present —
+  the v2.4.0 scripted removal silently no-opped on indentation mismatch).
+- Open button label → `l10n.projectSettings` (pre-existing ARB key,
+  'Project settings' / 'প্রজেক্ট সেটিংস'). `_pickProject` empty hint now:
+  *No projects yet — open Project settings to create one, or use Import
+  Project to import a .mbproj file*. GIS Mode empty-project snack updated
+  likewise.
+
+### Compass (`lib/ui/gps_mode_screen.dart`)
+- Back inside `ExpansionTile` (collapsed by default; subtitle shows live
+  `NNN° CARDINAL`).
+- **Lag fix**: dial painting is static → `const _CompassDialPainter` with
+  `shouldRepaint => false`; ring/ticks(15°)/degree numbers(every 30° at
+  30..330)/N,E,S,W+intercardinal labels painted once. Rotation handled by
+  `AnimatedRotation(turns: -continuousHeading/360, 220 ms easeOut)` so GPS
+  setStates no longer relayout TextPainters.
+- **Fixed needle**: new `const _CompassNeedlePainter` draws an up-pointing
+  red kite + teal hub on top of the rotating dial (Stack: dial → needle →
+  readout `Align(0, 0.55)`).
+- **North-crossing**: `_noteHeading()` unwraps raw heading into
+  `_continuousHeading` (±180 shortest path) called from all three
+  `_latest` assignment sites (preview stream, bg-mirror branch of
+  `_startListening`, `_onBackgroundChange`).
+
+### Imports (`lib/services/study_area_service.dart`, `lib/ui/study_area_mode_screen.dart`)
+- Aliases expanded: lat += ycoord/latdd/lat_dd/latitude_dd/dd_lat/
+  decimal_latitude/point_y/northing_lat; lon += xcoord/londd/lon_dd/
+  longitude_dd/decimal_longitude/dd_lon/dd_long/point_x/easting_lon.
+- New `_wktAliases` (`wkt,wkt_geometry,geometry_wkt,geometry,geom,the_geom,
+  shape,shape_wkt,point,wkt_point`) + `_wktPointRegex`
+  (`POINT\s*Z?M?\s*\(\s*lon lat`) with public `parseWktPoint`/`isWktColumn`.
+- Shared `_siteFromRow({headers,latCol,lonCol,statusCol,wktCol,cell,
+  idPrefix,rowNumber})`: plain cells → per-cell WKT fallback → dedicated WKT
+  column; used by both CSV and XLSX parsers (WKT column alone suffices).
+- GeoJSON: Point geometry first, then scans property values for WKT.
+- KML/KMZ: attrs built before geometry check; placemarks without `<Point>`
+  fall back to WKT embedded in attributes.
+- **SHP**: `parseShapefile(Bytes)` walks 100-byte header + [recNum/contentLen]
+  BE record headers; shape types 1/11/21 full point, 8/18/28 MultiPoint first
+  vertex, 3/13/23/5/15/25 first vertex after parts table (.dbf not read).
+  Dispatcher `case 'shp'`, picker extensions + screen dispatch updated.
+
+### Tests / docs
+- study_area_service_test: X/Y synonyms, WKT-column CSV, GeoJSON WKT prop,
+  hand-built binary .shp Point record.
+- widget_test: expects 'Project settings'.
+- USER_GUIDE.md sections refreshed; CHANGELOG/TODO updated.
+
+---
+
 ## [2.4.0] — UX batch: home grid, collapsible history, real compass, KMZ, dark-mode fixes
 
 ### Home screen (`lib/ui/home_screen.dart`)
