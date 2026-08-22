@@ -8,7 +8,7 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.1.1](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
+**Latest release: [v2.3.0](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
 ---
@@ -68,13 +68,36 @@ No account, no registration, no internet needed.
 
 ## GIS mode
 
-- Live map with 5 built-in basemaps (OSM, OSM Humanitarian, CartoDB
-  Light/Dark, Esri Satellite).
+- Live map with 4 built-in basemaps (OSM, CartoDB Light/Dark, Esri
+  Satellite).
 - Capture **points, lines and polygons** directly on the map, with
   project-defined attribute fields and GPS accuracy filtering. While a line
   or polygon is being drawn, recording also runs in the background with a
   foreground notification so it survives screen-off.
 - Browse and delete captured features via the list/legend panel.
+
+## Study Area mode (v2.3.0+)
+
+- Import a list of sites from **CSV, GeoJSON, KML, GeoPackage (.gpkg) or
+  Excel (.xlsx)** and see them on the map as colored circles — red =
+  pending, green = completed.
+- Tap a site for live GPS **distance + bearing** guidance to walk there,
+  then mark it **Completed/Pending**.
+- Export the site list back out as **CSV or Excel**.
+
+## GPS CSV viewer (v2.3.0+)
+
+- Open any recorded GPS log to inspect its readings on an interactive map.
+- **Project a log onto the WebMap** to share tracks alongside survey data.
+
+## Language & theme (v2.3.0+)
+
+- **English / বাংলা (Bangla)** interface — switch in Settings → Language;
+  applies immediately across the app.
+- **System / Light / Dark theme** switch in Settings.
+- Multi-language **XLSForm** support: forms authored with ODK-style headers
+  (`label::English (en)`, `label::Bangla (bn)`) let enumerators pick the
+  label language while filling a survey.
 
 ## Data export
 
@@ -117,6 +140,8 @@ Done — the project appears in the project list, ready to collect data.
 - Project ⋮ menu → **QR code**: small projects can be sent as a **QR**
   (self-contained); if a project is too large, MapBanai says so and shows a
   **bootstrap QR** with the project information instead.
+- On the receiving phone, import via **camera scan**, **scan the QR from a
+  saved gallery image** (v2.3.0+), or paste the code text.
 - Receive side: paste the QR text or open the `mapbanai://` link → import
   instructions are recognized automatically.
 

@@ -2,6 +2,10 @@ import 'package:mapbanai/services/survey_logic.dart';
 
 /// Survey form schema and models for defining surveys with conditional logic
 /// Compatible with XLSForm/XForm concepts
+///
+/// Phase 4 adds ODK multi-language support: XLSForm headers such as
+/// `label::Bangla (bn)` or `label::English (en)` are captured into per-question
+/// translation maps so the renderer can switch languages at runtime.
 
 class SurveyForm {
   final String id;
@@ -10,13 +14,46 @@ class SurveyForm {
   final List<Question> questions;
   final int version;
 
+  /// Languages present in this form, e.g. `['en', 'bn']`.
+  /// Empty or `['default']` means a single-language form.
+  final List<String> languages;
+
+  /// Preferred default language code (e.g. 'en'). If null, renderer falls
+  /// back to the first entry in [languages] or 'en'.
+  final String? defaultLanguage;
+
   SurveyForm({
     required this.id,
     required this.name,
     required this.description,
     required this.questions,
     this.version = 1,
-  });
+    List<String>? languages,
+    this.defaultLanguage,
+  }) : languages = languages ?? const [];
+
+  /// True when this form defines more than one language.
+  bool get isMultiLanguage => languages.length > 1;
+
+  /// All language codes encountered across questions and choices, unioned.
+  /// Falls back to computing from questions when [languages] is empty (legacy JSON).
+  List<String> get effectiveLanguages {
+    if (languages.isNotEmpty) return languages;
+    final set = <String>{};
+    for (final q in questions) {
+      set.addAll(q.labelTranslations.keys);
+      set.addAll(q.hintTranslations.keys);
+      set.addAll(q.constraintMessageTranslations.keys);
+      if (q.choices != null) {
+        for (final c in q.choices!) {
+          set.addAll(c.labelTranslations.keys);
+        }
+      }
+    }
+    if (set.isEmpty) return const [];
+    final sorted = set.toList()..sort();
+    return sorted;
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -24,6 +61,8 @@ class SurveyForm {
     'description': description,
     'questions': questions.map((q) => q.toJson()).toList(),
     'version': version,
+    if (languages.isNotEmpty) 'languages': languages,
+    if (defaultLanguage != null) 'default_language': defaultLanguage,
   };
 
   factory SurveyForm.fromJson(Map<String, dynamic> json) => SurveyForm(
@@ -31,9 +70,11 @@ class SurveyForm {
     name: json['name'] ?? '',
     description: json['description'] ?? '',
     questions: (json['questions'] as List?)
-        ?.map((q) => Question.fromJson(q))
+        ?.map((q) => Question.fromJson(q as Map<String, dynamic>))
         .toList() ?? [],
     version: json['version'] ?? 1,
+    languages: (json['languages'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    defaultLanguage: json['default_language'] as String?,
   );
 }
 
@@ -51,6 +92,12 @@ class Question {
   final bool readOnly;
   final String? calculation; // e.g., "${width} * ${length}"
 
+  /// Language -> translation for label. Keys are lower-cased language codes
+  /// (e.g. 'en', 'bn'). May be empty for single-language forms.
+  final Map<String, String> labelTranslations;
+  final Map<String, String> hintTranslations;
+  final Map<String, String> constraintMessageTranslations;
+
   Question({
     required this.name,
     required this.label,
@@ -64,7 +111,40 @@ class Question {
     this.defaultValue,
     this.readOnly = false,
     this.calculation,
-  });
+    Map<String, String>? labelTranslations,
+    Map<String, String>? hintTranslations,
+    Map<String, String>? constraintMessageTranslations,
+  })  : labelTranslations = labelTranslations ?? const {},
+        hintTranslations = hintTranslations ?? const {},
+        constraintMessageTranslations = constraintMessageTranslations ?? const {};
+
+  /// Returns the label for [languageCode] (e.g. 'bn'), falling back to
+  /// the default [label] when no translation exists.
+  String labelFor(String? languageCode) {
+    if (languageCode == null || languageCode == 'default') return label;
+    final code = languageCode.toLowerCase();
+    return labelTranslations[code] ?? labelTranslations[code.toLowerCase()] ?? label;
+  }
+
+  String? hintFor(String? languageCode) {
+    if (languageCode == null) return hint;
+    final code = languageCode.toLowerCase();
+    if (hintTranslations.isEmpty) return hint;
+    return hintTranslations[code] ?? hint;
+  }
+
+  String? constraintMessageFor(String? languageCode) {
+    if (languageCode == null) return constraintMessage;
+    final code = languageCode.toLowerCase();
+    if (constraintMessageTranslations.isEmpty) return constraintMessage;
+    return constraintMessageTranslations[code] ?? constraintMessage;
+  }
+
+  bool get isMultiLanguage =>
+      labelTranslations.isNotEmpty ||
+      hintTranslations.isNotEmpty ||
+      constraintMessageTranslations.isNotEmpty ||
+      (choices != null && choices!.any((c) => c.labelTranslations.isNotEmpty));
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -79,24 +159,43 @@ class Question {
     'default': defaultValue,
     'read_only': readOnly,
     'calculation': calculation,
+    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
+    if (hintTranslations.isNotEmpty) 'hint_translations': hintTranslations,
+    if (constraintMessageTranslations.isNotEmpty)
+      'constraint_message_translations': constraintMessageTranslations,
   };
 
-  factory Question.fromJson(Map<String, dynamic> json) => Question(
-    name: json['name'] ?? '',
-    label: json['label'] ?? '',
-    type: _parseQuestionType(json['type']),
-    hint: json['hint'],
-    required: json['required'] ?? false,
-    relevance: json['relevance'],
-    constraint: json['constraint'],
-    constraintMessage: json['constraint_message'],
-    choices: (json['choices'] as List?)
-        ?.map((c) => Choice.fromJson(c))
-        .toList(),
-    defaultValue: json['default'],
-    readOnly: json['read_only'] ?? false,
-    calculation: json['calculation'],
-  );
+  factory Question.fromJson(Map<String, dynamic> json) {
+    Map<String, String> _readMap(String key) {
+      final raw = json[key];
+      if (raw is Map) {
+        return Map<String, String>.fromEntries(
+          raw.entries.map((e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
+        );
+      }
+      return const {};
+    }
+
+    return Question(
+      name: json['name'] ?? '',
+      label: json['label'] ?? '',
+      type: _parseQuestionType(json['type']),
+      hint: json['hint'],
+      required: json['required'] ?? false,
+      relevance: json['relevance'],
+      constraint: json['constraint'],
+      constraintMessage: json['constraint_message'],
+      choices: (json['choices'] as List?)
+          ?.map((c) => Choice.fromJson(c as Map<String, dynamic>))
+          .toList(),
+      defaultValue: json['default'],
+      readOnly: json['read_only'] ?? false,
+      calculation: json['calculation'],
+      labelTranslations: _readMap('label_translations'),
+      hintTranslations: _readMap('hint_translations'),
+      constraintMessageTranslations: _readMap('constraint_message_translations'),
+    );
+  }
 
   bool isRelevant(Map<String, dynamic> answers) {
     return SurveyLogic.evaluateRelevance(relevance, answers);
@@ -166,17 +265,38 @@ class Choice {
   final String name;
   final String label;
 
-  Choice({required this.name, required this.label});
+  /// Language -> translation for choice label.
+  final Map<String, String> labelTranslations;
+
+  Choice({required this.name, required this.label, Map<String, String>? labelTranslations})
+      : labelTranslations = labelTranslations ?? const {};
+
+  String labelFor(String? languageCode) {
+    if (languageCode == null) return label;
+    final code = languageCode.toLowerCase();
+    return labelTranslations[code] ?? label;
+  }
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'label': label,
+    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
   };
 
-  factory Choice.fromJson(Map<String, dynamic> json) => Choice(
-    name: json['name'] ?? '',
-    label: json['label'] ?? '',
-  );
+  factory Choice.fromJson(Map<String, dynamic> json) {
+    Map<String, String> map = const {};
+    final raw = json['label_translations'];
+    if (raw is Map) {
+      map = Map<String, String>.fromEntries(
+        raw.entries.map((e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
+      );
+    }
+    return Choice(
+      name: json['name'] ?? '',
+      label: json['label'] ?? '',
+      labelTranslations: map,
+    );
+  }
 }
 
 // Example survey definitions that users can reference

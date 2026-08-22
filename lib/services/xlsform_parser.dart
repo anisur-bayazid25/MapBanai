@@ -9,6 +9,11 @@ import 'package:mapbanai/services/xlsx_reader.dart';
 /// Supported: all core question types, select_one/select_multiple with list
 /// references, dropdown appearance, required, relevance, constraint,
 /// constraint_message, default, read_only and calculate rows.
+///
+/// Phase 4: ODK multi-language labels are parsed from headers like
+/// `label::English (en)` / `label::Bangla (bn)` / `label::bn`.
+/// Each question/choice keeps a `labelTranslations` map and a fallback
+/// default label (preferring `label`, then `label::en`, then first translation).
 class XlsFormParser {
   static const String _surveySheet = 'survey';
   static const String _choicesSheet = 'choices';
@@ -44,7 +49,6 @@ class XlsFormParser {
     final headers = _headers(rows.first);
     final typeCol = headers['type'];
     final nameCol = headers['name'];
-    final labelCol = _labelColumn(headers);
     if (typeCol == null || nameCol == null) {
       throw XlsFormParseException(
         'Survey sheet must have "type" and "name" columns',
@@ -53,6 +57,11 @@ class XlsFormParser {
 
     final settings = _readSettings(workbook.sheet(_settingsSheet));
     final choices = _readChoices(workbook.sheet(_choicesSheet));
+
+    // Localized column maps for the survey sheet.
+    final labelColMap = _localizedColumns(headers, 'label');
+    final hintColMap = _localizedColumns(headers, 'hint');
+    final constraintMsgColMap = _localizedColumns(headers, 'constraint_message');
 
     final questions = <Question>[];
     for (int i = 1; i < rows.length; i++) {
@@ -65,7 +74,9 @@ class XlsFormParser {
         headers: headers,
         typeCol: typeCol,
         nameCol: nameCol,
-        labelCol: labelCol,
+        labelColMap: labelColMap,
+        hintColMap: hintColMap,
+        constraintMsgColMap: constraintMsgColMap,
         rowIndex: i,
         choices: choices,
       );
@@ -74,6 +85,28 @@ class XlsFormParser {
 
     if (questions.isEmpty) {
       throw XlsFormParseException('No questions found in the survey sheet');
+    }
+
+    // Collect form-level languages from all questions + choices.
+    final languageSet = <String>{};
+    for (final q in questions) {
+      languageSet.addAll(q.labelTranslations.keys);
+      languageSet.addAll(q.hintTranslations.keys);
+      languageSet.addAll(q.constraintMessageTranslations.keys);
+      if (q.choices != null) {
+        for (final c in q.choices!) {
+          languageSet.addAll(c.labelTranslations.keys);
+        }
+      }
+    }
+    final languages = languageSet.toList()..sort();
+    String? defaultLang;
+    if (languages.isNotEmpty) {
+      if (languages.contains('en')) {
+        defaultLang = 'en';
+      } else {
+        defaultLang = languages.first;
+      }
     }
 
     return SurveyForm(
@@ -86,6 +119,8 @@ class XlsFormParser {
       description: (settings['form_description'] as String? ?? '').trim(),
       questions: questions,
       version: settings['version'] is int ? settings['version'] as int : 1,
+      languages: languages,
+      defaultLanguage: defaultLang,
     );
   }
 
@@ -107,6 +142,82 @@ class XlsFormParser {
     return map;
   }
 
+  /// Returns a map languageCode -> columnIndex for a localized field.
+  ///
+  /// E.g. headers containing `label`, `label::English (en)`, `label::Bangla (bn)`
+  /// produce `{default: 2, en: 3, bn: 4}`.
+  static Map<String, int> _localizedColumns(
+      Map<String, int> headers, String field) {
+    final map = <String, int>{};
+    for (final entry in headers.entries) {
+      final key = entry.key;
+      if (key == field) {
+        map['default'] = entry.value;
+      } else if (key.startsWith('$field::')) {
+        final code = _extractLanguageCode(key);
+        if (!map.containsKey(code)) {
+          map[code] = entry.value;
+        }
+      }
+    }
+    return map;
+  }
+
+  /// Extracts a normalized language code from a lower-cased header like
+  /// `label::english (en)` or `label::bangla (bn)` or `label::bn`.
+  static String _extractLanguageCode(String header) {
+    final sep = header.indexOf('::');
+    if (sep == -1) return 'default';
+    var suffix = header.substring(sep + 2).trim();
+    // Parentheses win: `english (en)` -> `en`
+    final paren = RegExp(r'\(([^)]+)\)').firstMatch(suffix);
+    if (paren != null) {
+      final inside = paren.group(1)!.trim().toLowerCase();
+      final cleaned = inside.replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (cleaned.isNotEmpty) return cleaned;
+      if (inside.isNotEmpty) return inside;
+    }
+    suffix = suffix.toLowerCase().trim();
+    if (suffix == 'english') return 'en';
+    if (suffix == 'bangla' || suffix == 'bengali') return 'bn';
+    // fallback: strip non-alphanumeric
+    suffix = suffix.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (suffix.isEmpty) return 'default';
+    return suffix;
+  }
+
+  /// Collects raw languageCode -> cell value for given column map and row.
+  static Map<String, String> _collectLocalizedRaw(
+      List<String?> row, Map<String, int> colMap) {
+    final result = <String, String>{};
+    for (final entry in colMap.entries) {
+      final value = _cell(row, entry.value);
+      if (value != null && value.isNotEmpty) {
+        result[entry.key] = value;
+      }
+    }
+    return result;
+  }
+
+  static String _pickDefaultLabel(Map<String, String> raw) {
+    if (raw.isEmpty) return '';
+    if (raw.containsKey('default')) return raw['default']!;
+    if (raw.containsKey('en')) return raw['en']!;
+    // Prefer first sorted key deterministic.
+    final keys = raw.keys.toList()..sort();
+    return raw[keys.first]!;
+  }
+
+  static Map<String, String> _translationsFromRaw(Map<String, String> raw) {
+    final out = <String, String>{};
+    for (final entry in raw.entries) {
+      if (entry.key == 'default') continue;
+      out[entry.key.toLowerCase()] = entry.value;
+    }
+    return out;
+  }
+
+  /// Legacy single-column lookup kept for backward compat / quick checks.
   /// Finds the column for a field, preferring the exact name, then common
   /// English forms (`label::English (en)`, `label::en`), then the first
   /// other localized variant (`label::*`).
@@ -176,17 +287,22 @@ class XlsFormParser {
     final headers = _headers(rows.first);
     final listCol = headers['list_name'];
     final nameCol = headers['name'];
-    final labelCol = _labelColumn(headers);
-    if (listCol == null || nameCol == null || labelCol == null) return result;
+    final labelColMap = _localizedColumns(headers, 'label');
+    if (listCol == null || nameCol == null || labelColMap.isEmpty) return result;
 
     for (int i = 1; i < rows.length; i++) {
       final listName = _cell(rows[i], listCol);
       final name = _cell(rows[i], nameCol);
-      final label = _cell(rows[i], labelCol);
-      if (listName == null || name == null || label == null) continue;
+      if (listName == null || name == null) continue;
+
+      final raw = _collectLocalizedRaw(rows[i], labelColMap);
+      if (raw.isEmpty) continue;
+      final defaultLabel = _pickDefaultLabel(raw);
+      if (defaultLabel.isEmpty) continue;
+      final translations = _translationsFromRaw(raw);
       result
           .putIfAbsent(listName, () => [])
-          .add(Choice(name: name, label: label));
+          .add(Choice(name: name, label: defaultLabel, labelTranslations: translations));
     }
     return result;
   }
@@ -198,13 +314,14 @@ class XlsFormParser {
     required Map<String, int> headers,
     required int typeCol,
     required int nameCol,
-    required int? labelCol,
+    required Map<String, int> labelColMap,
+    required Map<String, int> hintColMap,
+    required Map<String, int> constraintMsgColMap,
     required int rowIndex,
     required Map<String, List<Choice>> choices,
   }) {
     final typeRaw = _cell(row, typeCol) ?? '';
     final name = _cell(row, nameCol) ?? '';
-    final label = labelCol == null ? null : _cell(row, labelCol);
 
     if (_isStructuralOrMeta(typeRaw)) {
       // ODK group/repeat containers and auto-computed metadata rows
@@ -238,20 +355,50 @@ class XlsFormParser {
       }
     }
 
+    // Label handling (multi-language)
+    final labelRaw = _collectLocalizedRaw(row, labelColMap);
+    final defaultLabel = _pickDefaultLabel(labelRaw);
+    final labelTranslations = _translationsFromRaw(labelRaw);
+    final effectiveLabel = defaultLabel.isNotEmpty ? defaultLabel : name;
+
+    // Hint (optional, multi-language)
+    final hintRaw = _collectLocalizedRaw(row, hintColMap);
+    final hintDefault = hintRaw.isEmpty ? null : _pickDefaultLabel(hintRaw);
+    final hintTranslations = _translationsFromRaw(hintRaw);
+
+    // Constraint message (optional, multi-language)
+    final constraintRaw = _collectLocalizedRaw(row, constraintMsgColMap);
+    final constraintDefault =
+        constraintRaw.isEmpty ? null : _pickDefaultLabel(constraintRaw);
+    final constraintTranslations = _translationsFromRaw(constraintRaw);
+
+    // Fallback for single-column forms where localized map may be empty:
+    // keep previous simple column lookup for hint/constraint if needed.
+    String? fallbackHint;
+    String? fallbackConstraint;
+    if (hintDefault == null && hintColMap.isEmpty) {
+      fallbackHint = _cell(row, _hintColumn(headers) ?? -1);
+    }
+    if (constraintDefault == null && constraintMsgColMap.isEmpty) {
+      fallbackConstraint = _cell(row, _constraintMessageColumn(headers) ?? -1);
+    }
+
     return Question(
       name: name,
-      label: label ?? name,
+      label: effectiveLabel,
       type: type,
-      hint: _cell(row, _hintColumn(headers) ?? -1),
+      hint: hintDefault ?? fallbackHint,
       required: _parseBool(_cell(row, headers['required'] ?? -1)),
       relevance: _cell(row, headers['relevant'] ?? headers['relevance'] ?? -1),
       constraint: _cell(row, headers['constraint'] ?? -1),
-      constraintMessage:
-          _cell(row, _constraintMessageColumn(headers) ?? -1),
+      constraintMessage: constraintDefault ?? fallbackConstraint,
       choices: questionChoices,
       defaultValue: _cell(row, headers['default'] ?? -1),
       readOnly: _parseBool(_cell(row, headers['read_only'] ?? -1)),
       calculation: _cell(row, headers['calculation'] ?? -1),
+      labelTranslations: labelTranslations,
+      hintTranslations: hintTranslations,
+      constraintMessageTranslations: constraintTranslations,
     );
   }
 

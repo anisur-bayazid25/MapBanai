@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/l10n/app_localizations.dart';
 import 'package:mapbanai/models/app_info.dart';
 import 'package:mapbanai/services/measure_units.dart';
 import 'package:mapbanai/services/update_checker.dart';
+import 'package:mapbanai/state/app_settings_provider.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/common/section_header.dart';
 import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -21,19 +24,15 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   static const String _userNameKey = 'user_name';
-  static const String _languageKey = 'language';
+  static const String _languageKey = AppSettingsProvider.languageKey;
+  static const String _themeKey = AppSettingsProvider.themeKey;
   static const String _distanceUnitKey = 'distance_unit';
   static const String _areaUnitKey = 'area_unit';
-
-  static const List<({String code, String label})> _languages = [
-    (code: 'system', label: 'System default'),
-    (code: 'en', label: 'English'),
-    (code: 'bn', label: 'Bangla'),
-  ];
 
   final TextEditingController _nameController = TextEditingController();
   bool _loading = true;
   String _language = 'system';
+  String _themeMode = 'system';
   DistanceUnit _distanceUnit = DistanceUnit.auto;
   AreaUnit _areaUnit = AreaUnit.auto;
   String _appVersion = '';
@@ -48,8 +47,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final name = await widget.database.getSetting(_userNameKey);
     var language = await widget.database.getSetting(_languageKey) ?? 'system';
-    if (!_languages.any((l) => l.code == language)) {
+    if (!['system', 'en', 'bn'].contains(language)) {
       language = 'system';
+    }
+    var theme = await widget.database.getSetting(_themeKey) ?? 'system';
+    if (!['system', 'light', 'dark'].contains(theme)) {
+      theme = 'system';
     }
     _distanceUnit = DistanceUnit.fromSetting(
       await widget.database.getSetting(_distanceUnitKey),
@@ -68,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _nameController.text = name ?? '';
       _language = language;
+      _themeMode = theme;
       _appVersion = appVersion;
       _loading = false;
     });
@@ -85,11 +89,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _nameController.text.trim(),
     );
     await widget.database.setSetting(_languageKey, _language);
+    await widget.database.setSetting(_themeKey, _themeMode);
     await widget.database.setSetting(_distanceUnitKey, _distanceUnit.name);
     await widget.database.setSetting(_areaUnitKey, _areaUnit.name);
+
     if (!mounted) return;
+    // Push to provider so MaterialApp rebuilds immediately.
+    final provider = context.read<AppSettingsProvider>();
+    await provider.setLanguage(_language);
+    await provider.setThemeModeFromString(_themeMode);
+
+    final l10n = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings saved')),
+      SnackBar(content: Text(l10n.settingsSaved)),
     );
   }
 
@@ -105,8 +117,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (_) {
       if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not check for updates')),
+        SnackBar(content: Text(l10n.syncNoInternet)),
       );
     } finally {
       if (mounted) setState(() => _checkingUpdates = false);
@@ -114,13 +127,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _resetData() async {
+    final l10n = AppLocalizations.of(context);
     final userName = (await widget.database.getSetting(_userNameKey)) ?? '';
     if (userName.trim().isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Set a user name in Settings first â€” it is required to confirm '
+            'Set a user name in Settings first — it is required to confirm '
             'a data reset.',
           ),
         ),
@@ -130,12 +144,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final confirmed = await showTypeToConfirmDialog(
       context,
-      title: 'Final confirmation',
+      title: l10n.resetDataConfirmTitle,
       message: 'This permanently deletes all projects, survey responses, '
           'stored forms and GPS logs. Type your user name exactly as shown '
           'to confirm:',
       typeToConfirm: userName.trim(),
-      confirmText: 'Reset data',
+      confirmText: l10n.resetData,
     );
     if (!confirmed || !mounted) return;
 
@@ -144,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.database.resetAllData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All data has been reset')),
+        SnackBar(content: Text(l10n.syncNever)),
       );
     } catch (_) {
       if (!mounted) return;
@@ -158,9 +172,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = _loading ? null : AppLocalizations.of(context);
+    final provider = context.watch<AppSettingsProvider>();
+    // Keep local language/theme in sync if provider changed externally
+    // (e.g., immediate apply). Only sync when not loading.
+    if (!_loading && provider.isLoaded) {
+      if (_language != provider.language) {
+        // Schedule microtask to avoid setState during build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _language = provider.language);
+        });
+      }
+      final providerTheme = provider.themeModeString;
+      if (_themeMode != providerTheme) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _themeMode = providerTheme);
+        });
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(l10n?.settings ?? 'Settings'),
         actions: [
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -168,78 +201,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: FilledButton.icon(
                 onPressed: _loading ? null : _save,
                 icon: const Icon(Icons.save_outlined, size: 18),
-                label: const Text('Save'),
+                label: Text(l10n?.save ?? 'Save'),
               ),
             ),
           ),
         ],
       ),
-      body: _loading
+      body: _loading || l10n == null
           ? const AppLoadingIndicator()
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const SectionHeader(
-                  title: 'User',
-                  subtitle:
-                      'Your name is attached to every survey response, GPS log '
-                      'entry and export produced by the app.',
+                SectionHeader(
+                  title: l10n.settingsUserTitle,
+                  subtitle: l10n.settingsUserSubtitle,
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'User name',
-                    hintText: 'e.g., John Doe',
-                    prefixIcon: Icon(Icons.person_outline),
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.userNameLabel,
+                    hintText: l10n.userNameHint,
+                    prefixIcon: const Icon(Icons.person_outline),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Leave empty to clear.',
+                  l10n.userNameLeaveEmpty,
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
                 const Divider(height: 32),
-                const SectionHeader(
-                  title: 'Language',
-                  subtitle:
-                      'Applied in the Phase 6 i18n release; the preference is '
-                      'stored now.',
+                SectionHeader(
+                  title: l10n.languageSection,
+                  subtitle: l10n.languageSubtitle,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: _language,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Preferred language',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.preferredLanguage,
                   ),
                   items: [
-                    for (final language in _languages)
-                      DropdownMenuItem(
-                        value: language.code,
-                        child: Text(language.label),
-                      ),
+                    DropdownMenuItem(value: 'system', child: Text(l10n.systemDefault)),
+                    DropdownMenuItem(value: 'en', child: Text(l10n.english)),
+                    DropdownMenuItem(value: 'bn', child: Text(l10n.bangla)),
                   ],
-                  onChanged: (value) {
+                  onChanged: (value) async {
                     if (value != null) {
                       setState(() => _language = value);
+                      // Immediate apply for instant feedback
+                      await context.read<AppSettingsProvider>().setLanguage(value);
+                      await widget.database.setSetting(_languageKey, value);
                     }
                   },
                 ),
                 const Divider(height: 32),
-                const SectionHeader(
-                  title: 'Measurement units',
-                  subtitle:
-                      'Used by the GIS distance and area tools. Automatic '
-                      'picks metres/kilometres and square metres or hectares.',
+                SectionHeader(
+                  title: l10n.themeSection,
+                  subtitle: l10n.themeSubtitle,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _themeMode,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.preferredTheme,
+                  ),
+                  items: [
+                    DropdownMenuItem(value: 'system', child: Text(l10n.themeSystem)),
+                    DropdownMenuItem(value: 'light', child: Text(l10n.themeLight)),
+                    DropdownMenuItem(value: 'dark', child: Text(l10n.themeDark)),
+                  ],
+                  onChanged: (value) async {
+                    if (value != null) {
+                      setState(() => _themeMode = value);
+                      final mode = switch (value) {
+                        'light' => ThemeMode.light,
+                        'dark' => ThemeMode.dark,
+                        _ => ThemeMode.system,
+                      };
+                      await context.read<AppSettingsProvider>().setThemeMode(mode);
+                      await widget.database.setSetting(_themeKey, value);
+                    }
+                  },
+                ),
+                const Divider(height: 32),
+                SectionHeader(
+                  title: l10n.measurementSection,
+                  subtitle: l10n.measurementSubtitle,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<DistanceUnit>(
                   value: _distanceUnit,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Distance',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.distance,
                   ),
                   items: [
                     for (final unit in DistanceUnit.values)
@@ -257,9 +315,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<AreaUnit>(
                   value: _areaUnit,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Area',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.area,
                   ),
                   items: [
                     for (final unit in AreaUnit.values)
@@ -275,9 +333,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
                 const Divider(height: 32),
-                const SectionHeader(
-                  title: 'Data',
-                  subtitle: 'Delete all locally stored survey data.',
+                SectionHeader(
+                  title: l10n.dataSection,
+                  subtitle: l10n.dataSubtitle,
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -289,13 +347,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   onPressed: _resetData,
                   icon: const Icon(Icons.delete_forever_outlined),
-                  label: const Text('Reset data'),
+                  label: Text(l10n.resetData),
                 ),
                 const Divider(height: 32),
-                const SectionHeader(
-                  title: 'Updates',
-                  subtitle:
-                      'Checks the GitHub releases feed for a newer version.',
+                SectionHeader(
+                  title: l10n.updatesSection,
+                  subtitle: l10n.updatesSubtitle,
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -312,14 +369,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : const Icon(Icons.update),
                   label: Text(
                     _appVersion.isEmpty
-                        ? 'Check for updates'
-                        : 'Check for updates \u2014 v$_appVersion installed',
+                        ? l10n.checkForUpdates
+                        : l10n.checkForUpdatesWithVersion(_appVersion),
                   ),
                 ),
                 const Divider(height: 32),
-                const SectionHeader(
-                  title: 'About',
-                  subtitle: AppInfo.tagline,
+                SectionHeader(
+                  title: l10n.aboutSection,
+                  subtitle: l10n.aboutTagline,
                 ),
                 const SizedBox(height: 12),
                 Card(
@@ -335,10 +392,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Center(
+                        Center(
                           child: Text(
-                            'Version ${AppInfo.version}',
-                            style: TextStyle(
+                            l10n.versionLabel(AppInfo.version),
+                            style: const TextStyle(
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -366,9 +423,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           leading: const Icon(Icons.code, size: 20),
-                          title: const Text(
+                          title: Text(
                             'GitHub repository',
-                            style: TextStyle(fontSize: 14),
+                            style: const TextStyle(fontSize: 14),
                           ),
                           subtitle: Text(
                             AppInfo.githubUrl,
@@ -384,9 +441,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           leading: const Icon(Icons.mail_outline, size: 20),
-                          title: const Text(
+                          title: Text(
                             'Email',
-                            style: TextStyle(fontSize: 14),
+                            style: const TextStyle(fontSize: 14),
                           ),
                           subtitle: Text(
                             AppInfo.email,

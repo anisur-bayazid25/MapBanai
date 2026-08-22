@@ -4,6 +4,54 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.3.0] - 2026-08-22
+
+### Added
+- **Study Area Mode** (new mode card on Home) — import a list of sites from CSV,
+  GeoJSON, KML, GeoPackage (.gpkg) or Excel (.xlsx), see them as colored map
+  circles (red = pending, green = completed), tap a site for live GPS distance +
+  cardinal bearing navigation, mark sites completed/pending, and export the
+  site list back to CSV or Excel. Sites are stored per-device in
+  `documents/study_area/study_area_sites.json` (`StudyAreaStore`).
+- **GPS CSV viewer + WebMap projection** — GPS logs in GPS Mode now open in a
+  detail screen that renders every reading of the log CSV on an interactive
+  map, and any log can be projected onto the generated HTML WebMap
+  (`GpsCsvService` parses the `GpsLogStore` CSV format and feeds the webmap
+  generator).
+- **Bangla (বাংলা) app localization** — full English + Bangla ARB catalogs
+  (`lib/l10n/`) wired through `flutter_localizations`; Home, Settings, sync and
+  mode cards translate live when the language is changed.
+- **Theme setting** — Settings now offers System / Light / Dark; applied
+  immediately via the new `AppSettingsProvider` (persisted in `app_settings`
+  alongside the language preference).
+- **ODK multi-language XLSForm support** — headers like `label::English (en)` /
+  `label::Bangla (bn)` / `hint::bn` / `constraint_message::…` are parsed into
+  per-question/choice translation maps; multi-language forms expose their
+  language list + default and the survey renderer can switch label language at
+  runtime.
+- **QR import from gallery** — Import → Scan QR now also offers "Scan QR from
+  gallery", picking a saved QR image and decoding it via zxing
+  (`QrScanner.scanFromGallery`).
+
+### Changed
+- **WebMap** — the filter panel is now collapsible (collapsed by default) with
+  search / form-type / surveyor / date filters and a result count; GIS feature
+  exports now include the feature **Name** and **Notes** fields in the webmap
+  data.
+- **Area units** — new Square kilometers (km²) unit; areas ≥ 1 km² auto-format
+  to km² in the compact formatter.
+
+### Removed
+- **OSM Humanitarian basemap** — dropped from the basemap list (unreliable
+  tile host); OSM, Carto light/dark and Esri satellite/topo remain.
+
+### Tests
+- `test/study_area_service_test.dart` — status parsing, CSV/GeoJSON/KML/GPKG/
+  XLSX imports, geodesic distance/bearing math, CSV/Excel export round-trips.
+- `test/gps_csv_service_test.dart` — CSV header detection, row parsing and
+  webmap projection payload.
+- Suite: 222 tests green.
+
 ## [2.2.0] - 2026-08-21
 
 ### Added

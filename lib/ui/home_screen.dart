@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/l10n/app_localizations.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/services/background_gps_recorder.dart';
 import 'package:mapbanai/services/backup_service.dart';
@@ -20,11 +21,13 @@ import 'package:mapbanai/ui/data_export_screen.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/ui/common/update_dialog.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
+import 'package:mapbanai/ui/gps_csv_viewer_screen.dart';
 import 'package:mapbanai/ui/gps_mode_screen.dart';
 import 'package:mapbanai/ui/import_flow_dialogs.dart';
 import 'package:mapbanai/ui/project_detail_screen.dart';
 import 'package:mapbanai/ui/project_setup_screen.dart';
 import 'package:mapbanai/ui/settings_screen.dart';
+import 'package:mapbanai/ui/study_area_mode_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
 import 'package:mapbanai/ui/survey_screen.dart';
 import 'package:mapbanai/ui/webmap_viewer_screen.dart';
@@ -229,6 +232,12 @@ class _HomeScreenState extends State<HomeScreen> {
             subtitle: const Text('Open the camera to scan a project code'),
             onTap: () => Navigator.pop(context, 'scan'),
           ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Scan QR from gallery'),
+            subtitle: const Text('Pick a QR image from your gallery'),
+            onTap: () => Navigator.pop(context, 'gallery'),
+          ),
         ],
       ),
     );
@@ -287,6 +296,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
         if (shown ?? false) return; // pasted via the dialog
+        messenger.showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      } catch (error) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(content: Text(friendlyImportMessage(error))),
+        );
+      }
+      return;
+    }
+
+    if (source == 'gallery') {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        final payload = await QrScanner.scanFromGallery();
+        if (!mounted || payload.trim().isEmpty) return;
+        await _runProjectImport(qrPayload: payload.trim());
+      } on QrScanException catch (error) {
+        if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(content: Text(error.message)),
         );
@@ -479,15 +508,16 @@ class _HomeScreenState extends State<HomeScreen> {
         lower.contains('no internet');
   }
 
-  String _formatLastSynced(DateTime? dt) {
-    if (dt == null) return 'Never synced';
+  String _formatLastSynced(DateTime? dt, [AppLocalizations? l10n]) {
+    if (dt == null) return l10n?.syncNever ?? 'Never synced';
     final local = dt.toLocal();
     final y = local.year.toString().padLeft(4, '0');
     final m = local.month.toString().padLeft(2, '0');
     final d = local.day.toString().padLeft(2, '0');
     final hh = local.hour.toString().padLeft(2, '0');
     final mm = local.minute.toString().padLeft(2, '0');
-    return 'Last synced: $y-$m-$d $hh:$mm';
+    final date = '$y-$m-$d $hh:$mm';
+    return l10n != null ? l10n.syncLastSynced(date) : 'Last synced: $date';
   }
 
   Widget _buildSyncCard(BuildContext context, String selected) {
@@ -504,11 +534,15 @@ class _HomeScreenState extends State<HomeScreen> {
       key: ValueKey('syncCard_${_refreshTick}_$selected'),
       future: _database.getSyncConfig(projectId),
       builder: (context, snapshot) {
+        AppLocalizations? l10n;
+        try {
+          l10n = AppLocalizations.of(context);
+        } catch (_) {}
         final cfg = snapshot.data;
         final hasConfig = cfg != null &&
             cfg.syncEndpointUrl != null &&
             cfg.syncEndpointUrl!.trim().isNotEmpty;
-        final lastText = _formatLastSynced(cfg?.lastSyncAt);
+        final lastText = _formatLastSynced(cfg?.lastSyncAt, l10n);
         if (!hasConfig) {
           return Card(
             elevation: 2,
@@ -536,7 +570,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Set up cloud sync',
+                            l10n?.syncSetupTitle ?? 'Set up cloud sync',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleLarge
@@ -544,7 +578,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Configure sync for "$selected"',
+                            l10n != null ? l10n.syncSetupSubtitle(selected) : 'Configure sync for "$selected"',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -592,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Sync',
+                          l10n?.syncTitle ?? 'Sync',
                           style: Theme.of(context)
                               .textTheme
                               .titleLarge
@@ -600,7 +634,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Upload responses & photos to cloud',
+                          l10n?.syncSubtitle ?? 'Upload responses & photos to cloud',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
@@ -706,6 +740,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final projectState = context.watch<ProjectState>();
     final selected = projectState.selectedProject;
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -724,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Offline field data collection',
+                  l10n?.homeSubtitle ?? 'Offline field data collection',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.grey.shade700,
@@ -735,8 +775,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildProjectSelector(context, projectState, selected),
                 const SizedBox(height: 16),
                 _ModeCard(
-                  title: 'Survey Mode',
-                  subtitle: 'Simple form-based field capture',
+                  title: l10n?.surveyModeTitle ?? 'Survey Mode',
+                  subtitle: l10n?.surveyModeSubtitle ?? 'Simple form-based field capture',
                   color: const Color(0xFF2E7D32),
                   icon: Icons.assignment_turned_in_outlined,
                   onTap: () async {
@@ -750,8 +790,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 _ModeCard(
-                  title: 'GIS Mode',
-                  subtitle: 'Map-based spatial editing and layers',
+                  title: l10n?.gisModeTitle ?? 'GIS Mode',
+                  subtitle: l10n?.gisModeSubtitle ?? 'Map-based spatial editing and layers',
                   color: const Color(0xFF1565C0),
                   icon: Icons.map_outlined,
                   onTap: () async {
@@ -765,8 +805,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 _ModeCard(
-                  title: 'GPS Mode',
-                  subtitle: 'Live GPS readings and coordinate logging',
+                  title: l10n?.gpsModeTitle ?? 'GPS Mode',
+                  subtitle: l10n?.gpsModeSubtitle ?? 'Live GPS readings and coordinate logging',
                   color: const Color(0xFF00695C),
                   icon: Icons.my_location_outlined,
                   onTap: () async {
@@ -777,13 +817,41 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+                _ModeCard(
+                  title: l10n?.studyAreaModeTitle ?? 'Study Area Mode',
+                  subtitle: l10n?.studyAreaModeSubtitle ?? 'Site visits with status tracking & navigation',
+                  color: const Color(0xFFE65100),
+                  icon: Icons.explore_outlined,
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const StudyAreaModeScreen()),
+                    );
+                    _loadProjects();
+                  },
+                ),
+                const SizedBox(height: 16),
+                _ModeCard(
+                  title: l10n?.gpsCsvViewerTitle ?? 'GPS CSV Viewer',
+                  subtitle: l10n?.gpsCsvViewerSubtitle ?? 'View logs & project tracks on WebMap',
+                  color: const Color(0xFF283593),
+                  icon: Icons.table_chart_outlined,
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const GpsCsvViewerScreen()),
+                    );
+                    _loadProjects();
+                  },
+                ),
+                const SizedBox(height: 16),
                 _buildSyncCard(context, selected),
                 const SizedBox(height: 16),
                 // WebMap generator — placed on Home (global, covers all projects' data) rather than GIS toolbar,
                 // since it aggregates both GIS features and survey geopoints.
                 _ModeCard(
-                  title: 'WebMap',
-                  subtitle: 'Offline HTML map with filters and popups',
+                  title: l10n?.webMapTitle ?? 'WebMap',
+                  subtitle: l10n?.webMapSubtitle ?? 'Offline HTML map with filters and popups',
                   color: const Color(0xFF4A148C),
                   icon: Icons.public_outlined,
                   onTap: _generateAndOpenWebMap,
@@ -802,7 +870,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _loadProjects();
                         },
                         icon: const Icon(Icons.folder_open_rounded),
-                        label: const Text('Open'),
+                        label: Text(l10n?.open ?? 'Open'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -815,7 +883,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _loadProjects();
                         },
                         icon: const Icon(Icons.history_outlined),
-                        label: const Text('History'),
+                        label: Text(l10n?.history ?? 'History'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -830,7 +898,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           _loadProjects();
                         },
                         icon: const Icon(Icons.ios_share_outlined),
-                        label: const Text('Export'),
+                        label: Text(l10n?.export ?? 'Export'),
                       ),
                     ),
                   ],
@@ -839,7 +907,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 OutlinedButton.icon(
                   onPressed: _startImportFlow,
                   icon: const Icon(Icons.file_download_outlined),
-                  label: const Text('Import Project'),
+                  label: Text(l10n?.importProject ?? 'Import Project'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
@@ -852,7 +920,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _loadProjects();
                   },
                   icon: const Icon(Icons.settings_outlined),
-                  label: const Text('Settings'),
+                  label: Text(l10n?.settings ?? 'Settings'),
                 ),
               ],
             ),
@@ -866,6 +934,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildGpsRecordingBanner(BuildContext context) {
   final bg = BackgroundGps.instance;
   if (!bg.isRecording) return const SizedBox.shrink();
+  AppLocalizations? l10n;
+  try {
+    l10n = AppLocalizations.of(context);
+  } catch (_) {}
   return Container(
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.all(12),
@@ -883,7 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'GPS recording active — "${bg.activeLogName}"',
+                l10n != null ? l10n.gpsRecordingActive(bg.activeLogName) : 'GPS recording active — "${bg.activeLogName}"',
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -893,8 +965,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Logging continues with the screen off. Leave GPS Mode any time; '
-          'come back here to stop.',
+          l10n?.gpsRecordingHint ?? 'Logging continues with the screen off. Leave GPS Mode any time; come back here to stop.',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
         ),
         const SizedBox(height: 8),
@@ -911,7 +982,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   _loadProjects();
                 },
-                child: const Text('Open GPS Mode'),
+                child: Text(l10n?.openGpsMode ?? 'Open GPS Mode'),
               ),
             ),
             const SizedBox(width: 8),
@@ -920,7 +991,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () async {
                   await BackgroundGps.instance.stop();
                 },
-                child: const Text('Stop'),
+                child: Text(l10n?.stop ?? 'Stop'),
               ),
             ),
           ],
@@ -935,6 +1006,10 @@ Widget _buildProjectSelector(
     ProjectState projectState,
     String selected,
   ) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {}
     return Material(
       color: Colors.blue.shade50,
       elevation: 1,
@@ -954,8 +1029,8 @@ Widget _buildProjectSelector(
               Expanded(
                 child: Text(
                   selected.isEmpty
-                      ? 'No project selected — tap to choose one'
-                      : 'Current project: $selected',
+                      ? (l10n?.noProjectSelected ?? 'No project selected — tap to choose one')
+                      : (l10n != null ? l10n.projectSelectorTitle(selected) : 'Current project: $selected'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -1011,6 +1086,10 @@ Widget _buildProjectSelector(
   }
 
   Widget _buildCollectedData(ProjectState projectState, String selected) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {}
     if (selected.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -1019,9 +1098,9 @@ Widget _buildProjectSelector(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.green.shade200),
         ),
-        child: const Text(
-          'Select a project above to see its collected data.',
-          style: TextStyle(color: Colors.green),
+        child: Text(
+          l10n?.collectedDataHint ?? 'Select a project above to see its collected data.',
+          style: const TextStyle(color: Colors.green),
         ),
       );
     }
@@ -1057,7 +1136,7 @@ Widget _buildProjectSelector(
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Collected data — $selected',
+                    l10n != null ? l10n.collectedDataTitle(selected) : 'Collected data — $selected',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: Colors.green.shade700,
@@ -1070,7 +1149,7 @@ Widget _buildProjectSelector(
                 children: [
                   Expanded(
                     child: _statTile(
-                      label: 'Survey Responses',
+                      label: l10n?.surveyResponses ?? 'Survey Responses',
                       value: counts?.survey.toString() ?? '…',
                       icon: Icons.assignment_turned_in_outlined,
                     ),
@@ -1078,7 +1157,7 @@ Widget _buildProjectSelector(
                   const SizedBox(width: 12),
                   Expanded(
                     child: _statTile(
-                      label: 'GIS Features',
+                      label: l10n?.gisFeatures ?? 'GIS Features',
                       value: counts?.gis.toString() ?? '…',
                       icon: Icons.edit_location_alt_outlined,
                     ),

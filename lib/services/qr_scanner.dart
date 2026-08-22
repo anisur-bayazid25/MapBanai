@@ -39,6 +39,28 @@ class QrScanner {
     return decodeFromFile(File(shot.path));
   }
 
+  /// Opens the gallery to pick a stored QR code image.
+  static Future<String> scanFromGallery() async {
+    final XFile? shot;
+    try {
+      shot = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 100,
+      );
+    } catch (error) {
+      throw QrScanException(
+        'Could not open the gallery. Please paste the project code instead.',
+        error,
+      );
+    }
+    if (shot == null) {
+      throw const QrScanException('No image was selected.');
+    }
+    return decodeFromFile(File(shot.path));
+  }
+
   /// Decodes a QR payload from an image file. Pure Dart, unit-testable.
   static String decodeFromFile(File file) {
     final img.Image? image;

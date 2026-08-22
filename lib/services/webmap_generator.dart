@@ -91,24 +91,29 @@ $css
 <div id="banner">Map tiles require internet; your data works offline</div>
 <div id="map"></div>
 <div id="sidebar">
-  <h3>Filters</h3>
-  <label>Search
-    <input type="text" id="searchBox" placeholder="Search attributes..." oninput="renderFiltered()">
-  </label>
-  <label>Form / Type
-    <select id="filter-form"><option value="">All</option>
+  <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="document.getElementById('filter-options').style.display = document.getElementById('filter-options').style.display==='none' ? 'block' : 'none'">
+    <h3 style="margin:0;">Filters</h3>
+    <span style="font-size:10px; color:#666;">▼</span>
+  </div>
+  <div id="filter-options">
+    <label>Search
+      <input type="text" id="searchBox" placeholder="Search attributes..." oninput="renderFiltered()">
+    </label>
+    <label>Form / Type
+      <select id="filter-form"><option value="">All</option>
 $formOptions
-    </select>
-  </label>
-  <label>Surveyor
-    <select id="filter-surveyor"><option value="">All</option>
+      </select>
+    </label>
+    <label>Surveyor
+      <select id="filter-surveyor"><option value="">All</option>
 $surveyorOptions
-    </select>
-  </label>
-  <label>From <input type="date" id="filter-from"></label>
-  <label>To <input type="date" id="filter-to"></label>
-  <button id="filter-clear" style="margin-top:8px; width:100%;">Clear filters</button>
-  <div style="margin-top:8px; font-size:11px; color:#666;">Showing <span id="filter-count">${features.length}</span> of ${features.length}</div>
+      </select>
+    </label>
+    <label>From <input type="date" id="filter-from"></label>
+    <label>To <input type="date" id="filter-to"></label>
+    <button id="filter-clear" style="margin-top:8px; width:100%;">Clear filters</button>
+    <div style="margin-top:8px; font-size:11px; color:#666;">Showing <span id="filter-count">${features.length}</span> of ${features.length}</div>
+  </div>
  </div>
 <div id="legend">
   <div><span class="dot" style="background:#e53935"></span> Point / Geopoint</div>

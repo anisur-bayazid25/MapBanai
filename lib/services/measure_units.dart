@@ -28,7 +28,8 @@ enum AreaUnit {
   m2,
   ha,
   ac,
-  sqft;
+  sqft,
+  km2;
 
   static AreaUnit fromSetting(String? value) {
     return values.firstWhere(
@@ -43,6 +44,7 @@ enum AreaUnit {
         ha => 'Hectares (ha)',
         ac => 'Acres (ac)',
         sqft => 'Square feet (ft²)',
+        km2 => 'Square kilometers (km²)',
       };
 }
 
@@ -53,6 +55,7 @@ class MeasureUnits {
   static const double _m2PerHa = 10000;
   static const double _m2PerAc = 4046.8564224;
   static const double _m2PerSqFt = 0.09290304;
+  static const double _m2PerKm2 = 1000000;
 
   static String formatDistance(
     double meters, [
@@ -88,7 +91,12 @@ class MeasureUnits {
         return '${(squareMeters / _m2PerAc).toStringAsFixed(2)} ac';
       case AreaUnit.sqft:
         return '${(squareMeters / _m2PerSqFt).toStringAsFixed(0)} ft²';
+      case AreaUnit.km2:
+        return '${(squareMeters / _m2PerKm2).toStringAsFixed(2)} km²';
       case AreaUnit.auto:
+        if (squareMeters >= _m2PerKm2) {
+          return '${(squareMeters / _m2PerKm2).toStringAsFixed(2)} km²';
+        }
         if (squareMeters >= 10000) {
           return '${(squareMeters / _m2PerHa).toStringAsFixed(2)} ha';
         }

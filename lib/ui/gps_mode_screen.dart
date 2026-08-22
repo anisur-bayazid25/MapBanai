@@ -10,7 +10,10 @@ import 'package:mapbanai/services/coordinate_utils.dart';
 import 'package:mapbanai/services/gnss_service.dart';
 import 'package:mapbanai/services/gps_log_store.dart';
 import 'package:mapbanai/services/location_service.dart';
+import 'package:mapbanai/services/gps_csv_service.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
+import 'package:mapbanai/ui/gps_csv_viewer_screen.dart';
+import 'package:mapbanai/ui/webmap_viewer_screen.dart';
 import 'package:share_plus/share_plus.dart';
 
 class GpsModeScreen extends StatefulWidget {
@@ -410,6 +413,44 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     await _loadLogs();
   }
 
+  Future<void> _viewLog(GpsLog log) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => GpsCsvDetailScreen(log: log)),
+    );
+    _loadLogs();
+  }
+
+  Future<void> _projectLogOnWebMap(GpsLog log) async {
+    final path = await _store.filePath(log.id);
+    final readings = await GpsCsvService.parseFile(path);
+    if (readings.isEmpty) {
+      _showSnack('No readings in "${log.name}" to project');
+      return;
+    }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final file = await GpsCsvService.writeWebMapToFile(
+        readings,
+        logName: log.name,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+            builder: (_) => WebmapViewerScreen(htmlFile: file)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      _showSnack('WebMap failed: $e');
+    }
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -455,6 +496,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             ],
             const SizedBox(height: 12),
             _buildReadoutCard(),
+            const SizedBox(height: 12),
+            _buildCompassCard(),
             const SizedBox(height: 16),
             _buildLogsHeader(),
             const SizedBox(height: 8),
@@ -546,6 +589,45 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           TextButton(
             onPressed: () => _toggleRecording(log),
             child: const Text('Stop'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompassCard() {
+    final heading = _latest?.heading;
+    final hasHeading = heading != null && !heading.isNaN;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.teal.shade100),
+      ),
+      child: ExpansionTile(
+        leading: Icon(Icons.explore_outlined, color: Colors.teal.shade700),
+        title: const Text('Compass', style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(hasHeading ? '${heading.toStringAsFixed(0)}°' : 'No heading'),
+        initiallyExpanded: false,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                if (hasHeading)
+                  Transform.rotate(
+                    angle: (heading * 3.1415926535 / 180),
+                    child: Icon(Icons.navigation, size: 64, color: Colors.teal.shade700),
+                  )
+                else
+                  const Text('Waiting for heading…', style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 8),
+                Text(
+                  hasHeading ? '${heading.toStringAsFixed(1)}°' : '—',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -766,10 +848,25 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        FilledButton.icon(
-          onPressed: _createLog,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('Record Track'),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const GpsCsvViewerScreen()),
+                );
+              },
+              icon: const Icon(Icons.table_chart_outlined, size: 18),
+              label: const Text('Viewer'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _createLog,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Record Track'),
+            ),
+          ],
         ),
       ],
     );
@@ -841,15 +938,44 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                 PopupMenuButton<String>(
                   onSelected: (action) {
                     switch (action) {
+                      case 'view':
+                        _viewLog(log);
+                        break;
+                      case 'webmap':
+                        _projectLogOnWebMap(log);
+                        break;
                       case 'rename':
                         _renameLog(log);
+                        break;
                       case 'share':
                         _shareLog(log);
+                        break;
                       case 'delete':
                         _deleteLog(log);
+                        break;
                     }
                   },
                   itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(Icons.table_view_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('View CSV'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'webmap',
+                      child: Row(
+                        children: [
+                          Icon(Icons.public_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Project on WebMap'),
+                        ],
+                      ),
+                    ),
                     PopupMenuItem(
                       value: 'rename',
                       child: Row(

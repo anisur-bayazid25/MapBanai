@@ -1,0 +1,203 @@
+{
+  "@@locale": "en",
+  "appTitle": "MapBanai",
+  "@appTitle": {
+    "description": "Application title"
+  },
+  "homeTitle": "MapBanai",
+  "homeSubtitle": "Offline field data collection",
+  "surveyModeTitle": "Survey Mode",
+  "surveyModeSubtitle": "Simple form-based field capture",
+  "gisModeTitle": "GIS Mode",
+  "gisModeSubtitle": "Map-based spatial editing and layers",
+  "gpsModeTitle": "GPS Mode",
+  "gpsModeSubtitle": "Live GPS readings and coordinate logging",
+  "studyAreaModeTitle": "Study Area Mode",
+  "studyAreaModeSubtitle": "Site visits with status tracking & navigation",
+  "gpsCsvViewerTitle": "GPS CSV Viewer",
+  "gpsCsvViewerSubtitle": "View logs & project tracks on WebMap",
+  "syncTitle": "Sync",
+  "syncSubtitle": "Upload responses & photos to cloud",
+  "syncSetupTitle": "Set up cloud sync",
+  "syncSetupSubtitle": "Configure sync for \"{project}\"",
+  "@syncSetupSubtitle": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLastSynced": "Last synced: {date}",
+  "@syncLastSynced": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "syncNever": "Never synced",
+  "syncNoInternet": "No internet connection",
+  "webMapTitle": "WebMap",
+  "webMapSubtitle": "Offline HTML map with filters and popups",
+  "projectSelectorTitle": "Current project: {project}",
+  "@projectSelectorTitle": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "noProjectSelected": "No project selected — tap to choose one",
+  "selectProject": "Select project",
+  "collectedDataTitle": "Collected data — {project}",
+  "@collectedDataTitle": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "collectedDataHint": "Select a project above to see its collected data.",
+  "surveyResponses": "Survey Responses",
+  "gisFeatures": "GIS Features",
+  "open": "Open",
+  "history": "History",
+  "export": "Export",
+  "importProject": "Import Project",
+  "settings": "Settings",
+  "settingsUserTitle": "User",
+  "settingsUserSubtitle": "Your name is attached to every survey response, GPS log entry and export produced by the app.",
+  "userNameLabel": "User name",
+  "userNameHint": "e.g., John Doe",
+  "userNameLeaveEmpty": "Leave empty to clear.",
+  "languageSection": "Language",
+  "languageSubtitle": "Choose your preferred language. System default follows the device language.",
+  "preferredLanguage": "Preferred language",
+  "systemDefault": "System default",
+  "english": "English",
+  "bangla": "Bangla",
+  "themeSection": "Appearance",
+  "themeSubtitle": "Choose light, dark, or follow the system theme.",
+  "preferredTheme": "Theme",
+  "themeSystem": "System default",
+  "themeLight": "Light",
+  "themeDark": "Dark",
+  "measurementSection": "Measurement units",
+  "measurementSubtitle": "Used by the GIS distance and area tools. Automatic picks metres/kilometres and square metres or hectares.",
+  "distance": "Distance",
+  "area": "Area",
+  "dataSection": "Data",
+  "dataSubtitle": "Delete all locally stored survey data.",
+  "resetData": "Reset data",
+  "resetDataConfirmTitle": "Final confirmation",
+  "updatesSection": "Updates",
+  "updatesSubtitle": "Checks the GitHub releases feed for a newer version.",
+  "checkForUpdates": "Check for updates",
+  "checkForUpdatesWithVersion": "Check for updates — v{version} installed",
+  "@checkForUpdatesWithVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutSection": "About",
+  "aboutTagline": "Offline field data collection GIS",
+  "versionLabel": "Version {version}",
+  "@versionLabel": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "save": "Save",
+  "settingsSaved": "Settings saved",
+  "saveResponses": "Save responses",
+  "saveAsDraft": "Save as draft",
+  "gpsRecordingActive": "GPS recording active — \"{name}\"",
+  "@gpsRecordingActive": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "gpsRecordingHint": "Logging continues with the screen off. Leave GPS Mode any time; come back here to stop.",
+  "openGpsMode": "Open GPS Mode",
+  "stop": "Stop",
+  "surveyMode": "Survey Mode",
+  "selectSurveyForm": "Select a survey form",
+  "projectLabel": "Project: {project}",
+  "@projectLabel": {
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "myForms": "My forms",
+  "noFormsHint": "No forms yet for this project. Tap to build or import your first survey form.",
+  "startBuildingForm": "Start building survey form",
+  "formQuestionsCount": "{count} questions",
+  "@formQuestionsCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "buildOrImportForm": "Build or import a survey form",
+  "formLanguage": "Form language",
+  "formLanguageHint": "Switch between languages defined in the XLSForm",
+  "captureGps": "Capture",
+  "measureAccuracy": "Measure",
+  "attachPhoto": "Attach",
+  "replacePhoto": "Replace",
+  "tapToCaptureGps": "Tap to capture GPS location",
+  "tapToMeasureAccuracy": "Tap to measure accuracy",
+  "photoAttached": "Photo attached",
+  "geotaggedPhoto": "Geotagged photo attached",
+  "requiredField": "{label} is required",
+  "@requiredField": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "constraintError": "{label}: {error}",
+  "@constraintError": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "enterText": "Enter text",
+  "enterLongText": "Enter long text",
+  "enterNumber": "Enter number",
+  "enterDecimal": "Enter decimal number",
+  "selectOption": "Select an option",
+  "chooseOption": "Choose an option",
+  "selectDate": "Select date",
+  "selectTime": "Select time",
+  "selectDateTime": "Select date and time",
+  "yes": "Yes",
+  "no": "No",
+  "cancel": "Cancel",
+  "close": "Close",
+  "delete": "Delete",
+  "confirm": "Confirm",
+  "studyAreaTitle": "Study Area",
+  "projectTitle": "Project",
+  "projectSettings": "Project settings",
+  "renameProject": "Rename project",
+  "deleteProject": "Delete project",
+  "shareProject": "Share project",
+  "lightThemeApplied": "Light theme applied",
+  "darkThemeApplied": "Dark theme applied"
+}

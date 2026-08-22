@@ -22,12 +22,6 @@ class Basemap {
       attribution: '© OpenStreetMap contributors',
     ),
     Basemap(
-      id: 'osm_hot',
-      name: 'OSM Humanitarian',
-      url: 'https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-      attribution: '© OpenStreetMap contributors, Humanitarian OSM Team',
-    ),
-    Basemap(
       id: 'carto_light',
       name: 'CartoDB Light',
       url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',

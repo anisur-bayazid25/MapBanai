@@ -226,6 +226,16 @@ class WebMapDataService {
     final project = await db.getProjectById(s.projectId);
     final projectName = project?.name ?? '';
 
+    // Include GIS Name/Notes explicitly (they are top-level in GIS responses, not in answers)
+    final gisName = resp['name']?.toString() ?? '';
+    final gisNotes = resp['notes']?.toString() ?? '';
+    final gisFields = resp['fields'];
+    if (gisFields is Map) {
+      for (final e in gisFields.entries) {
+        flattened[e.key.toString()] = e.value;
+      }
+    }
+
     return {
       'id': s.externalId ?? s.id.toString(),
       'project_name': projectName,
@@ -233,6 +243,8 @@ class WebMapDataService {
       'submitted_at': s.createdAt.toIso8601String(),
       'form_name': resp['form_name']?.toString() ?? '',
       'geometry_type': geometryType,
+      'name': gisName,
+      'notes': gisNotes,
       'answers': flattened,
       if (photoPath.isNotEmpty) 'photo_path': p.basename(photoPath),
       if (photoPath.isNotEmpty) 'photo_relative_path': photoPath,

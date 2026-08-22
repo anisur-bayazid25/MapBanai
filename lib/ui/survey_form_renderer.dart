@@ -3,17 +3,27 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mapbanai/l10n/app_localizations.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/photo_store.dart';
 import 'package:mapbanai/services/survey_logic.dart';
 import 'package:mapbanai/ui/photo_capture_screen.dart';
 
+/// Renders a [SurveyForm] with ODK multi-language support.
+///
+/// If the form defines `label::Bangla (bn)` / `label::English (en)` etc.,
+/// a language switcher is shown at the top and all question labels, hints,
+/// constraint messages and choice labels switch accordingly.
 class SurveyFormRenderer extends StatefulWidget {
   final SurveyForm form;
   final VoidCallback? onComplete;
   final void Function(Map<String, dynamic> answers)? onSave;
   final void Function(Map<String, dynamic> answers)? onSaveDraft;
   final Map<String, dynamic>? initialAnswers;
+  /// Initial form language override (e.g. 'bn' or 'en'). If null, renderer
+  /// picks the app locale when available, else the form's defaultLanguage
+  /// or 'en' or first available language.
+  final String? initialLanguage;
 
   const SurveyFormRenderer({
     required this.form,
@@ -21,6 +31,7 @@ class SurveyFormRenderer extends StatefulWidget {
     this.onSave,
     this.onSaveDraft,
     this.initialAnswers,
+    this.initialLanguage,
     super.key,
   });
 
@@ -32,6 +43,8 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
   late Map<String, dynamic> _answers;
   late Map<String, TextEditingController> _controllers;
   late Set<String> _visibleQuestions;
+  late String _formLanguage;
+  late List<String> _availableLanguages;
 
   @override
   void initState() {
@@ -39,6 +52,28 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     _answers = Map.from(widget.initialAnswers ?? {});
     _controllers = {};
     _visibleQuestions = {};
+
+    // Determine available languages for this form.
+    _availableLanguages = widget.form.effectiveLanguages;
+    // Also consider widget.form.languages which is sorted.
+    if (_availableLanguages.isEmpty && widget.form.languages.isNotEmpty) {
+      _availableLanguages = List.from(widget.form.languages);
+    }
+
+    // Choose initial language: explicit prop > form default > 'en' if present > first.
+    if (widget.initialLanguage != null &&
+        _availableLanguages.contains(widget.initialLanguage!.toLowerCase())) {
+      _formLanguage = widget.initialLanguage!.toLowerCase();
+    } else if (widget.form.defaultLanguage != null &&
+        _availableLanguages.contains(widget.form.defaultLanguage!.toLowerCase())) {
+      _formLanguage = widget.form.defaultLanguage!.toLowerCase();
+    } else if (_availableLanguages.contains('en')) {
+      _formLanguage = 'en';
+    } else if (_availableLanguages.isNotEmpty) {
+      _formLanguage = _availableLanguages.first;
+    } else {
+      _formLanguage = 'default';
+    }
 
     // Initialize controllers for text-like fields
     for (final question in widget.form.questions) {
@@ -57,6 +92,31 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
 
     _updateVisibility();
     _updateCalculations();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If app locale is bn/en and form supports it, prefer it on first load
+    // unless user already manually switched (we only auto-switch once).
+    if (_availableLanguages.length > 1 && _formLanguage == 'en') {
+      try {
+        final appLocale = Localizations.localeOf(context).languageCode;
+        if (_availableLanguages.contains(appLocale) && appLocale != _formLanguage) {
+          // Don't force if form default is explicitly en; keep default.
+          // Only auto-switch when form default was not explicitly en?
+          // For simplicity, if app is bn and form has bn, switch to bn.
+          if (appLocale == 'bn') {
+            // Use microtask to avoid setState during build.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _formLanguage != 'bn') {
+                setState(() => _formLanguage = 'bn');
+              }
+            });
+          }
+        }
+      } catch (_) {}
+    }
   }
 
   @override
@@ -109,8 +169,87 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     });
   }
 
+  String _languageDisplay(String code) {
+    switch (code.toLowerCase()) {
+      case 'en':
+        return 'English';
+      case 'bn':
+        return 'Bangla';
+      default:
+        if (code == 'default') return 'Default';
+        // Capitalize
+        if (code.isEmpty) return code;
+        return code[0].toUpperCase() + code.substring(1);
+    }
+  }
+
+  Widget _buildLanguageSwitcher(AppLocalizations? l10n) {
+    if (_availableLanguages.length <= 1) return const SizedBox.shrink();
+    // Sort for stable order: en first, then bn, then others.
+    final sorted = List<String>.from(_availableLanguages);
+    sorted.sort((a, b) {
+      if (a == 'en') return -1;
+      if (b == 'en') return 1;
+      if (a == 'bn') return -1;
+      if (b == 'bn') return 1;
+      return a.compareTo(b);
+    });
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.translate_outlined, size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n?.formLanguage ?? 'Form language',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                if (l10n != null)
+                  Text(
+                    l10n.formLanguageHint,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey.shade600),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          DropdownButton<String>(
+            value: _formLanguage,
+            underline: const SizedBox.shrink(),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            onChanged: (value) {
+              if (value != null) setState(() => _formLanguage = value);
+            },
+            items: [
+              for (final code in sorted)
+                DropdownMenuItem(
+                  value: code,
+                  child: Text(_languageDisplay(code)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -129,7 +268,10 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
               color: Colors.grey.shade600,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          _buildLanguageSwitcher(l10n),
+          if (_availableLanguages.length > 1) const SizedBox(height: 16),
+          if (_availableLanguages.length <= 1) const SizedBox(height: 8),
           ..._buildQuestions(),
           const SizedBox(height: 24),
           SizedBox(
@@ -137,7 +279,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             child: FilledButton.icon(
               onPressed: _saveForm,
               icon: const Icon(Icons.save_outlined),
-              label: const Text('Save responses'),
+              label: Text(l10n?.saveResponses ?? 'Save responses'),
             ),
           ),
           if (widget.onSaveDraft != null) ...[
@@ -147,7 +289,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
               child: OutlinedButton.icon(
                 onPressed: _saveDraft,
                 icon: const Icon(Icons.edit_note),
-                label: const Text('Save as draft'),
+                label: Text(l10n?.saveAsDraft ?? 'Save as draft'),
               ),
             ),
           ],
@@ -169,6 +311,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       widgets.add(
         _QuestionWidget(
           question: question,
+          languageCode: _formLanguage,
           value: _answers[question.name],
           controller: _controllers[question.name],
           onChanged: (value) => _updateAnswer(question.name, value),
@@ -181,6 +324,12 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
   }
 
   void _saveForm() {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     // Validate required fields
     for (final question in widget.form.questions) {
       if (!_visibleQuestions.contains(question.name)) continue;
@@ -190,8 +339,9 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       }
 
       if (question.required && (_answers[question.name] == null || _answers[question.name].toString().isEmpty)) {
+        final label = question.labelFor(_formLanguage);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${question.label} is required')),
+          SnackBar(content: Text(l10n != null ? l10n.requiredField(label) : '$label is required')),
         );
         return;
       }
@@ -199,11 +349,12 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       final constraintError = SurveyLogic.evaluateConstraint(
         question.constraint,
         _answers[question.name],
-        question.constraintMessage,
+        question.constraintMessageFor(_formLanguage),
       );
       if (constraintError != null) {
+        final label = question.labelFor(_formLanguage);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${question.label}: $constraintError')),
+          SnackBar(content: Text(l10n != null ? l10n.constraintError(label, constraintError) : '$label: $constraintError')),
         );
         return;
       }
@@ -223,12 +374,14 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
 
 class _QuestionWidget extends StatelessWidget {
   final Question question;
+  final String languageCode;
   final dynamic value;
   final TextEditingController? controller;
   final ValueChanged<dynamic> onChanged;
 
   const _QuestionWidget({
     required this.question,
+    required this.languageCode,
     required this.value,
     required this.onChanged,
     this.controller,
@@ -236,6 +389,14 @@ class _QuestionWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayLabel = question.labelFor(languageCode);
+    final displayHint = question.hintFor(languageCode);
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -243,7 +404,7 @@ class _QuestionWidget extends StatelessWidget {
           text: TextSpan(
             children: [
               TextSpan(
-                text: question.label,
+                text: displayLabel,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -258,22 +419,22 @@ class _QuestionWidget extends StatelessWidget {
             ],
           ),
         ),
-        if (question.hint != null) ...[
+        if (displayHint != null) ...[
           const SizedBox(height: 4),
           Text(
-            question.hint!,
+            displayHint,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.grey.shade600,
             ),
           ),
         ],
         const SizedBox(height: 8),
-        _buildInputWidget(),
+        _buildInputWidget(l10n),
       ],
     );
   }
 
-  Widget _buildInputWidget() {
+  Widget _buildInputWidget(AppLocalizations? l10n) {
     switch (question.type) {
       case QuestionType.text:
         return TextField(
@@ -281,7 +442,7 @@ class _QuestionWidget extends StatelessWidget {
           onChanged: onChanged,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            hintText: 'Enter text',
+            hintText: l10n?.enterText ?? 'Enter text',
           ),
         );
 
@@ -292,7 +453,7 @@ class _QuestionWidget extends StatelessWidget {
           maxLines: 4,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            hintText: 'Enter long text',
+            hintText: l10n?.enterLongText ?? 'Enter long text',
             alignLabelWithHint: true,
           ),
         );
@@ -304,7 +465,7 @@ class _QuestionWidget extends StatelessWidget {
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            hintText: 'Enter number',
+            hintText: l10n?.enterNumber ?? 'Enter number',
           ),
         );
 
@@ -315,15 +476,15 @@ class _QuestionWidget extends StatelessWidget {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            hintText: 'Enter decimal number',
+            hintText: l10n?.enterDecimal ?? 'Enter decimal number',
           ),
         );
 
       case QuestionType.yes_no:
         return SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'yes', label: Text('Yes')),
-            ButtonSegment(value: 'no', label: Text('No')),
+          segments: [
+            ButtonSegment(value: 'yes', label: Text(l10n?.yes ?? 'Yes')),
+            ButtonSegment(value: 'no', label: Text(l10n?.no ?? 'No')),
           ],
           selected: {if (value != null) value.toString()},
           onSelectionChanged: (selection) => onChanged(selection.first),
@@ -333,14 +494,14 @@ class _QuestionWidget extends StatelessWidget {
         return DropdownButtonFormField<String>(
           value: value?.toString(),
           onChanged: (newValue) => onChanged(newValue),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Select an option',
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: l10n?.selectOption ?? 'Select an option',
           ),
           items: question.choices?.map((choice) {
             return DropdownMenuItem<String>(
               value: choice.name,
-              child: Text(choice.label),
+              child: Text(choice.labelFor(languageCode)),
             );
           }).toList() ?? [],
         );
@@ -349,14 +510,14 @@ class _QuestionWidget extends StatelessWidget {
         return DropdownButtonFormField<String>(
           value: value?.toString(),
           onChanged: (newValue) => onChanged(newValue),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Choose an option',
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: l10n?.chooseOption ?? 'Choose an option',
           ),
           items: question.choices?.map((choice) {
             return DropdownMenuItem<String>(
               value: choice.name,
-              child: Text(choice.label),
+              child: Text(choice.labelFor(languageCode)),
             );
           }).toList() ?? [],
         );
@@ -364,6 +525,7 @@ class _QuestionWidget extends StatelessWidget {
       case QuestionType.select_multiple:
         return _MultiSelectField(
           choices: question.choices ?? [],
+          languageCode: languageCode,
           selectedValues: (value as List?)?.cast<String>() ?? [],
           onChanged: onChanged,
         );
@@ -372,6 +534,7 @@ class _QuestionWidget extends StatelessWidget {
         return _DatePickerField(
           onChanged: onChanged,
           initialValue: value,
+          languageCode: languageCode,
         );
 
       case QuestionType.time:
@@ -390,16 +553,18 @@ class _QuestionWidget extends StatelessWidget {
         return _GpsCaptureField(
           value: value,
           onChanged: onChanged,
+          languageCode: languageCode,
         );
 
       case QuestionType.gps_accuracy:
         return _GpsAccuracyField(
           value: value,
           onChanged: onChanged,
+          languageCode: languageCode,
         );
 
       case QuestionType.image:
-        return _PhotoField(value: value, onChanged: onChanged);
+        return _PhotoField(value: value, onChanged: onChanged, languageCode: languageCode);
 
       case QuestionType.calculated:
         return Container(
@@ -438,7 +603,7 @@ class _QuestionWidget extends StatelessWidget {
             border: Border.all(color: Colors.blue.shade200),
           ),
           child: Text(
-            question.label,
+            question.labelFor(languageCode),
             style: TextStyle(color: Colors.blue.shade900),
           ),
         );
@@ -454,11 +619,13 @@ class _QuestionWidget extends StatelessWidget {
 
 class _MultiSelectField extends StatefulWidget {
   final List<Choice> choices;
+  final String languageCode;
   final List<String> selectedValues;
   final ValueChanged<List<String>> onChanged;
 
   const _MultiSelectField({
     required this.choices,
+    required this.languageCode,
     required this.selectedValues,
     required this.onChanged,
   });
@@ -488,7 +655,7 @@ class _MultiSelectFieldState extends State<_MultiSelectField> {
       children: [
         for (final choice in widget.choices)
           CheckboxListTile(
-            title: Text(choice.label),
+            title: Text(choice.labelFor(widget.languageCode)),
             value: _selected.contains(choice.name),
             onChanged: (checked) {
               setState(() {
@@ -510,14 +677,22 @@ class _MultiSelectFieldState extends State<_MultiSelectField> {
 class _DatePickerField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final dynamic initialValue;
+  final String languageCode;
 
   const _DatePickerField({
     required this.onChanged,
     this.initialValue,
+    this.languageCode = 'default',
   });
 
   @override
   Widget build(BuildContext context) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return GestureDetector(
       onTap: () async {
         final picked = await showDatePicker(
@@ -542,7 +717,7 @@ class _DatePickerField extends StatelessWidget {
             Text(
               initialValue != null
                   ? initialValue.toString().split('T')[0]
-                  : 'Select date',
+                  : (l10n?.selectDate ?? 'Select date'),
             ),
             const Icon(Icons.calendar_today_outlined),
           ],
@@ -563,6 +738,12 @@ class _TimePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return GestureDetector(
       onTap: () async {
         final picked = await showTimePicker(
@@ -583,7 +764,7 @@ class _TimePickerField extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              initialValue != null ? initialValue.toString() : 'Select time',
+              initialValue != null ? initialValue.toString() : (l10n?.selectTime ?? 'Select time'),
             ),
             const Icon(Icons.schedule_outlined),
           ],
@@ -604,6 +785,12 @@ class _DateTimePickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return GestureDetector(
       onTap: () async {
         final pickedDate = await showDatePicker(
@@ -639,7 +826,7 @@ class _DateTimePickerField extends StatelessWidget {
             Text(
               initialValue != null
                   ? DateTime.tryParse(initialValue.toString())?.toLocal().toString() ?? initialValue.toString()
-                  : 'Select date and time',
+                  : (l10n?.selectDateTime ?? 'Select date and time'),
             ),
             const Icon(Icons.event_outlined),
           ],
@@ -652,10 +839,12 @@ class _DateTimePickerField extends StatelessWidget {
 class _GpsCaptureField extends StatefulWidget {
   final dynamic value;
   final ValueChanged<String> onChanged;
+  final String languageCode;
 
   const _GpsCaptureField({
     required this.value,
     required this.onChanged,
+    this.languageCode = 'default',
   });
 
   @override
@@ -719,6 +908,12 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
   @override
   Widget build(BuildContext context) {
     final value = widget.value;
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -733,7 +928,7 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
             child: Text(
               value != null
                   ? _formatGpsValue(value.toString())
-                  : 'Tap to capture GPS location',
+                  : (l10n?.tapToCaptureGps ?? 'Tap to capture GPS location'),
               style: TextStyle(
                 color: value != null ? Colors.blue : Colors.grey,
               ),
@@ -747,7 +942,7 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Capture'),
+                : Text(l10n?.captureGps ?? 'Capture'),
           ),
         ],
       ),
@@ -758,10 +953,12 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
 class _GpsAccuracyField extends StatefulWidget {
   final dynamic value;
   final ValueChanged<String> onChanged;
+  final String languageCode;
 
   const _GpsAccuracyField({
     required this.value,
     required this.onChanged,
+    this.languageCode = 'default',
   });
 
   @override
@@ -811,6 +1008,12 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
   @override
   Widget build(BuildContext context) {
     final value = widget.value;
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -823,7 +1026,7 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              value != null ? 'Accuracy: $value m' : 'Tap to measure accuracy',
+              value != null ? 'Accuracy: $value m' : (l10n?.tapToMeasureAccuracy ?? 'Tap to measure accuracy'),
               style: TextStyle(
                 color: value != null ? Colors.blue : Colors.grey,
               ),
@@ -837,7 +1040,7 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Measure'),
+                : Text(l10n?.measureAccuracy ?? 'Measure'),
           ),
         ],
       ),
@@ -848,8 +1051,9 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
 class _PhotoField extends StatelessWidget {
   final dynamic value;
   final void Function(dynamic) onChanged;
+  final String languageCode;
 
-  const _PhotoField({required this.value, required this.onChanged});
+  const _PhotoField({required this.value, required this.onChanged, this.languageCode = 'default'});
 
   PhotoRecord? get _photo {
     if (value is PhotoRecord) return value as PhotoRecord;
@@ -883,6 +1087,12 @@ class _PhotoField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photo = _photo;
+    AppLocalizations? l10n;
+    try {
+      l10n = AppLocalizations.of(context);
+    } catch (_) {
+      l10n = null;
+    }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -918,8 +1128,8 @@ class _PhotoField extends StatelessWidget {
                   photo == null
                       ? 'Tap to attach photo (geotagged)'
                       : photo.isGeotagged
-                          ? 'Geotagged photo attached'
-                          : 'Photo attached (not geotagged)',
+                          ? (l10n?.geotaggedPhoto ?? 'Geotagged photo attached')
+                          : (l10n?.photoAttached ?? 'Photo attached (not geotagged)'),
                   style: TextStyle(
                     color: photo == null ? Colors.grey : Colors.blue.shade800,
                     fontSize: 13,
@@ -934,7 +1144,7 @@ class _PhotoField extends StatelessWidget {
                 ),
               ElevatedButton(
                 onPressed: () => _capture(context),
-                child: Text(photo == null ? 'Attach' : 'Replace'),
+                child: Text(photo == null ? (l10n?.attachPhoto ?? 'Attach') : (l10n?.replacePhoto ?? 'Replace')),
               ),
             ],
           ),

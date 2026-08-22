@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4c — Project isolation + file exports (Complete — tests green, APK built 2026-08-18)  
-**Last Updated:** 2026-08-18  
-**Version:** 2.1.0
+**Status:** Phase 4e — v2.3.0 release batch (Complete — tests green, APK built 2026-08-22)  
+**Last Updated:** 2026-08-22  
+**Version:** 2.3.0
 
 ---
 
@@ -798,6 +798,25 @@ the GPS Mode copy flow.
 - [x] `flutter analyze` — 0 errors/warnings (38 info, prior baseline)
 - [x] `flutter test` — 108/108 pass
 - [x] `flutter build apk --release` — succeeded (107.8 MB)
+
+---
+
+## PHASE 4e: V2.3.0 RELEASE BATCH (2026-08-22) — Complete, tests green
+
+- [x] Study Area Mode (new Home card) — import sites from CSV / GeoJSON / KML / GeoPackage (.gpkg) / Excel (.xlsx), colored map circles (red pending / green completed), tap-to-navigate with live GPS distance + cardinal bearing, status toggle, CSV/Excel export; sites persisted to `documents/study_area/study_area_sites.json` (`StudyAreaService`, `StudyAreaStore`, `StudyAreaModeScreen`)
+- [x] GPS CSV viewer — GPS Mode logs open in `GpsCsvDetailScreen`; readings rendered on an interactive map; any log can be projected onto the generated HTML WebMap (`GpsCsvService`)
+- [x] Bangla localization — `l10n.yaml` + en/bn ARBs (`lib/l10n/`), generated `AppLocalizations`, wired through MaterialApp; Home/Settings/sync/mode cards translate live
+- [x] Theme setting — System/Light/Dark in Settings, applied instantly via new `AppSettingsProvider` (`theme_mode` key in app_settings)
+- [x] ODK multi-language XLSForm — `label::English (en)` / `label::Bangla (bn)` / hint/constraint translations parsed into per-question maps; renderer switches label language at runtime
+- [x] QR import from gallery — "Scan QR from gallery" decodes a saved image (`QrScanner.scanFromGallery`)
+- [x] WebMap — collapsible filter panel (search/form/surveyor/date + result count); GIS Name & Notes fields now included in webmap data
+- [x] Area units — km² unit added; ≥1 km² auto-formats in compact display
+- [x] Basemaps — removed OSM Humanitarian (unreliable tile host)
+- [x] Version 2.3.0+16 (pubspec.yaml + AppInfo)
+- [x] `flutter analyze` — no errors/warnings (pre-existing info lints only)
+- [x] `flutter test` — 222/222 pass (incl. new study_area_service_test.dart + gps_csv_service_test.dart)
+- [x] `flutter build apk --release` — succeeded
+- [x] Documentation updated: CHANGELOG.md, README.md, TODO.md
 
 ---
 
