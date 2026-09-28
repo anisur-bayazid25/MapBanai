@@ -4,6 +4,39 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.4.2] - 2026-08-23
+
+### Fixed
+- **ODK forms with calculations now load correctly** — the expression engine
+  previously had no function support, so any `calculate` using `now()`,
+  `today()`, `format-date-time()`, `concat()`, … evaluated to null and the
+  question stuck at "Not computed yet". The engine now implements the ODK
+  function library: `now`, `today`, `date`, `time`, `format-date`,
+  `format-date-time`, `concat`, `join`, `if`, `coalesce`, `string-length`,
+  `substr`, `upper`, `lower`, `contains`, `starts-with`, `ends-with`,
+  `count-selected`, `selected-at`, `round`, `floor`, `ceil`, `abs`, `min`,
+  `max`, `pow`, `sqrt`, `number`, `int`, `string`, `boolean` (plus
+  hyphenated names like `format-date-time(...)` and legacy `selected(...)`).
+  Dates compare correctly in relevance/constraints, and date results are
+  stored as ISO strings.
+- **HTML in form labels is no longer shown raw** — tags like
+  `<span style="color:red">` are stripped (`<br>`/`</p>` become line breaks,
+  entities decoded) in question labels, hints, notes and the form
+  title/description.
+- **Dynamic note labels work** — `${question}` placeholders in labels (e.g.
+  `Interview date: ${date} | Start time: ${start_time}`) are substituted
+  live with current answers, for notes, hints, titles and descriptions.
+- Chained calculations keep evaluating in dependency order (fixpoint loop
+  already in the renderer now feeds on real function results), and unknown
+  functions fail safe (calculation → null, relevance → visible).
+
+### Tests
+- 17 new `survey_logic_test.dart` cases: date functions + chained
+  `date`→`format-date`, concat/join note building, if/coalesce, string and
+  math helpers, count/selected-at, date relevance, unknown-function safety,
+  HTML stripping, `${}` interpolation.
+- Suite: 244 tests green.
+
 ## [2.4.1] - 2026-08-23
 
 ### Fixed

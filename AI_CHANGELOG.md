@@ -53,6 +53,66 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.4.2] — ODK function library + HTML-strip + label interpolation
+
+### Problem (from device screenshot, UGGP Household Survey)
+- Labels showed raw HTML: `<span style="color:red;...">...`.
+- Note label `Interview date: ${date} | Start time: ${start_time}` unsubstituted.
+- `calculate` questions (`Interviewer Date`, `start_time`) stuck at
+  "Not computed yet" — their expressions use `now()`/`format-date-time()`,
+  which the engine evaluated to null (idents without parens handling;
+  parens left over → `_answers['now']` → null).
+
+### Engine (`lib/services/survey_logic.dart`)
+- `parsePrimary` ident branch now assembles hyphenated names
+  (`format-date-time`, `selected-at`, …): loops `-`+ident while next is
+  `lparen`-terminated; `selected` alone keeps legacy `_parseSelected`
+  (different arg grammar), everything else goes to `_parseFunctionCall`
+  (generic `name(parseOr(), ...)` arg list).
+- `_callFunction`: now/today/date/time (device-local), format-date/
+  format-date-time with ODK `%Y %y %m %d %e %H %M %S %b %h %B %a %A %p %%`,
+  concat/join (join flattens List args), string-length/substr (XPath
+  1-based)/upper/lower/contains/starts-with/ends-with, if (eager —
+  untaken-branch errors still null the whole expr, accepted),
+  coalesce (skips null/empty), count-selected/selected-at (List or
+  space-separated string, 0-based, OOB → ''), round (half-up, optional
+  decimals)/floor/ceil/abs/min/max, pow/sqrt via own exp/log/Newton
+  helpers (no dart:math import at top — actually file has no math import;
+  integer-exponent fast path + series fallback), number/int(truncate)/
+  string/boolean/true()/false(). Unknown names throw → caught → null /
+  fail-open. `_requireArgCount`, `_str` (num via `SurveyLogic._formatNumber`
+  — same library so private access OK), `_num`, `_toDateTime` (ISO or
+  `HH:MM[:SS]` against today), `_formatDateTime`.
+- `_compare`: numeric, then DateTime-aware (`_tryParseDate` only accepts
+  strings containing `- / T :` so plain words/numbers never miscompare),
+  then lexicographic. `_toString` normalizes DateTime → ISO (mixed
+  stored-ISO vs DateTime comparisons stay consistent).
+- `evaluateCalculation`: DateTime → ISO string, List → space-joined.
+- New statics: `stripHtml` (`<br>`/`</p>` → `\n`, strip tags, decode
+  `&amp; &lt; &gt; &quot; &#39; &apos; &nbsp;` + numeric entities, trim),
+  `interpolate` (`${name}` → answer, missing → '', List → comma-join,
+  DateTime → ISO). First version of the stripHtml edit accidentally merged
+  method bodies in the draft — verified clean in file, analyze green.
+
+### Renderer (`lib/ui/survey_form_renderer.dart`)
+- `_QuestionWidget` gains required `answers` map; header label + hint go
+  through `stripHtml` → `interpolate`. Note body same pipeline. Form
+  title stripped; description stripped + interpolated. (One edit duplicated
+  the `_QuestionWidget` class header — caught by line-count check and
+  repaired before analyze.)
+- One test-only behavior change: `widget_test` expects 'Project settings'
+  (v2.4.1 rename).
+
+### Tests
+- `survey_logic_test.dart` +17: date fns, chained date→format-date,
+  concat/join, if/coalesce, strings, math, count/selected-at, date
+  relevance, unknown-fn safety, stripHtml (tags/br/entities/passthrough),
+  interpolate (values/missing/lists). Caught real bug: `selected-at`
+  dispatched to legacy `selected()` parser (fixed dispatch order).
+- Suite 227→244 green.
+
+---
+
 ## [2.4.1] — logo/UX fixes + smooth fixed-needle compass + WKT/SHP imports
 
 ### Home (`lib/ui/home_screen.dart`)

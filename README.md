@@ -8,7 +8,7 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.4.1](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
+**Latest release: [v2.4.2](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
 ---
@@ -45,7 +45,10 @@ No account, no registration, no internet needed.
   builder (text, numbers, yes/no, choice lists, dates, photos, GPS points,
   calculated fields, conditional/relevant logic, validation constraints).
 - Run the survey: conditional questions appear automatically, calculations
-  update live, responses are saved as you go.
+  update live (ODK functions supported: `now()`, `today()`, `format-date()`,
+  `concat()`, `if()`, `count-selected()`, math/string helpers…; `${...}`
+  placeholders in labels update live; HTML in labels is cleaned),
+  responses are saved as you go.
 - Every answer is stored **on the device only** — offline-friendly.
 
 ## GPS mode

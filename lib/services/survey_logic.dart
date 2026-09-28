@@ -4,7 +4,13 @@
 /// - **Relevance** (visibility): `${field} = 'value'`, comparisons, `and`,
 ///   `or`, `not`, parentheses, and `selected(${multi_field}, 'value')`.
 /// - **Calculation** (computed answers): arithmetic over `${field}` refs,
-///   e.g. `${width} * ${length}`.
+///   e.g. `${width} * ${length}`, plus ODK functions: `now()`, `today()`,
+///   `date()`, `time()`, `format-date()`, `format-date-time()`, `concat()`,
+///   `join()`, `if()`, `coalesce()`, string helpers (`substr`,
+///   `string-length`, `upper`, `lower`, `contains`, `starts-with`,
+///   `ends-with`), `selected-at()`, `count-selected()`, and math helpers
+///   (`round`, `floor`, `ceil`, `abs`, `min`, `max`, `pow`, `sqrt`,
+///   `number`, `string`, `boolean`).
 /// - **Constraint** (validation): same syntax as relevance, evaluated with
 ///   `.` standing for the question's own answer, e.g. `. > 0 and . <= 100`.
 class SurveyLogic {
@@ -33,7 +39,11 @@ class SurveyLogic {
       final tokens = _Lexer(expression).tokenize();
       final value = _Parser(tokens, answers).parse();
       if (value is num) return _formatNumber(value);
+      if (value is DateTime) return value.toIso8601String();
       if (value is String || value is bool) return value.toString();
+      if (value is List) {
+        return value.map((e) => e?.toString() ?? '').join(' ');
+      }
       return null;
     } catch (_) {
       return null;
@@ -66,6 +76,53 @@ class SurveyLogic {
       return value.toInt().toString();
     }
     return value.toStringAsFixed(4).replaceFirst(RegExp(r'0+$'), '');
+  }
+
+  /// Strips HTML markup from XLSForm labels/hints. Real-world ODK forms
+  /// embed tags like `<span style=...>`, `<b>`, `<i>` in labels; the app has
+  /// no HTML renderer, so tags are removed (`<br>`/`</p>` become newlines)
+  /// and entities (`&amp;`, `&nbsp;`, …) are decoded.
+  static String stripHtml(String input) {
+    var s = input.replaceAll(
+        RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    s = s.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n');
+    s = s.replaceAll(RegExp(r'<[^>]*>'), '');
+    const entities = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&apos;': "'",
+      '&nbsp;': ' ',
+    };
+    entities.forEach((k, v) => s = s.replaceAll(k, v));
+    s = s.replaceAllMapped(
+      RegExp(r'&#(\d+);'),
+      (m) {
+        final code = int.tryParse(m.group(1)!);
+        return code == null ? m.group(0)! : String.fromCharCode(code);
+      },
+    );
+    return s.trim();
+  }
+
+  static final RegExp _refPattern =
+      RegExp(r'\$\{\s*([A-Za-z_][A-Za-z0-9_.\-]*)\s*\}');
+
+  /// Replaces `${name}` placeholders in [template] with the current answer
+  /// values (ODK dynamic labels). Missing answers become empty strings,
+  /// multi-select lists are comma-joined, datetimes use ISO format.
+  static String interpolate(String template, Map<String, dynamic> answers) {
+    return template.replaceAllMapped(_refPattern, (m) {
+      final value = answers[m.group(1)!];
+      if (value == null) return '';
+      if (value is List) {
+        return value.map((e) => e?.toString() ?? '').join(', ');
+      }
+      if (value is DateTime) return value.toIso8601String();
+      return value.toString();
+    });
   }
 
   static bool _isTruthy(dynamic value) {
@@ -373,13 +430,25 @@ class _Parser {
         _advance();
         return _answers[token.lexeme];
       case _TokenType.ident:
+        final name = token.lexeme;
         _advance();
-        if (token.lexeme == 'selected') {
-          return _parseSelected();
+        // Hyphenated ODK function names: format-date, selected-at, ...
+        var fullName = name;
+        while (_peek().type == _TokenType.operator &&
+            _peek().lexeme == '-' &&
+            _pos + 1 < _tokens.length &&
+            _tokens[_pos + 1].type == _TokenType.ident) {
+          _advance(); // consume '-'
+          fullName += '-${_advance().lexeme}';
         }
-        if (token.lexeme == 'true' || token.lexeme == 'yes') return true;
-        if (token.lexeme == 'false' || token.lexeme == 'no') return false;
-        return _answers[token.lexeme];
+        if (_peek().type == _TokenType.lparen) {
+          // Legacy special syntax for selected(${f}, 'v').
+          if (fullName == 'selected') return _parseSelected();
+          return _parseFunctionCall(fullName);
+        }
+        if (name == 'true' || name == 'yes') return true;
+        if (name == 'false' || name == 'no') return false;
+        return _answers[name];
       case _TokenType.lparen:
         _advance();
         final value = parseOr();
@@ -428,6 +497,369 @@ class _Parser {
     return actual?.toString() == expected;
   }
 
+  /// Parses a generic function call `name(arg, ...)` after the opening
+  /// parenthesis has been confirmed.
+  dynamic _parseFunctionCall(String name) {
+    _advance(); // consume '('
+    final args = <dynamic>[];
+    if (_peek().type != _TokenType.rparen) {
+      args.add(parseOr());
+      while (_peek().type == _TokenType.comma) {
+        _advance();
+        args.add(parseOr());
+      }
+    }
+    if (_peek().type != _TokenType.rparen) {
+      throw FormatException('Missing closing parenthesis in $name()');
+    }
+    _advance();
+    return _callFunction(name, args);
+  }
+
+  /// ODK function library. Throws [FormatException] on bad arguments; the
+  /// public evaluate* entry points convert that into null / fail-open.
+  dynamic _callFunction(String name, List<dynamic> args) {
+    switch (name) {
+      // -- dates & times (device-local, like ODK Collect) --
+      case 'now':
+        _requireArgCount(name, args, 0, 0);
+        return DateTime.now();
+      case 'today':
+        _requireArgCount(name, args, 0, 0);
+        final n = DateTime.now();
+        return DateTime(n.year, n.month, n.day);
+      case 'date':
+        _requireArgCount(name, args, 0, 1);
+        if (args.isEmpty) {
+          final n = DateTime.now();
+          return DateTime(n.year, n.month, n.day);
+        }
+        final d = _toDateTime(args[0]);
+        if (d == null) throw FormatException('date() got an unparsable value');
+        return DateTime(d.year, d.month, d.day);
+      case 'time':
+        _requireArgCount(name, args, 0, 1);
+        final n = DateTime.now();
+        if (args.isEmpty) return n;
+        final t = _toDateTime(args[0]);
+        if (t == null) throw FormatException('time() got an unparsable value');
+        return DateTime(n.year, n.month, n.day, t.hour, t.minute, t.second);
+      case 'format-date':
+      case 'format-date-time':
+        _requireArgCount(name, args, 2, 2);
+        final d = _toDateTime(args[0]);
+        if (d == null) {
+          throw FormatException('$name() got an unparsable date');
+        }
+        return _formatDateTime(d, _str(args[1]));
+
+      // -- strings --
+      case 'concat':
+        return args.map(_str).join();
+      case 'join':
+        if (args.isEmpty) {
+          throw FormatException('join() needs a separator argument');
+        }
+        final sep = _str(args[0]);
+        final parts = <String>[];
+        for (final a in args.skip(1)) {
+          if (a == null) continue;
+          if (a is List) {
+            parts.addAll(a.map((e) => e?.toString() ?? ''));
+          } else {
+            parts.add(_str(a));
+          }
+        }
+        return parts.join(sep);
+      case 'string-length':
+        _requireArgCount(name, args, 1, 1);
+        return _str(args[0]).length;
+      case 'substr':
+        _requireArgCount(name, args, 2, 3);
+        final s = _str(args[0]);
+        var start = _num(args[1]).toInt() - 1; // XPath is 1-based
+        if (start < 0) start = 0;
+        if (start >= s.length) return '';
+        if (args.length > 2) {
+          final len = _num(args[2]).toInt();
+          if (len <= 0) return '';
+          final end = (start + len).clamp(0, s.length);
+          return s.substring(start, end);
+        }
+        return s.substring(start);
+      case 'upper':
+        _requireArgCount(name, args, 1, 1);
+        return _str(args[0]).toUpperCase();
+      case 'lower':
+        _requireArgCount(name, args, 1, 1);
+        return _str(args[0]).toLowerCase();
+      case 'contains':
+        _requireArgCount(name, args, 2, 2);
+        return _str(args[0]).contains(_str(args[1]));
+      case 'starts-with':
+        _requireArgCount(name, args, 2, 2);
+        return _str(args[0]).startsWith(_str(args[1]));
+      case 'ends-with':
+        _requireArgCount(name, args, 2, 2);
+        return _str(args[0]).endsWith(_str(args[1]));
+
+      // -- branching / null handling --
+      case 'if':
+        _requireArgCount(name, args, 3, 3);
+        return _isTruthy(args[0]) ? args[1] : args[2];
+      case 'coalesce':
+        if (args.isEmpty) {
+          throw FormatException('coalesce() needs at least one argument');
+        }
+        for (final a in args) {
+          if (a == null) continue;
+          if (a is String && a.isEmpty) continue;
+          return a;
+        }
+        return '';
+
+      // -- multi-select helpers --
+      case 'count-selected':
+        _requireArgCount(name, args, 1, 1);
+        final v = args[0];
+        if (v == null) return 0;
+        if (v is List) return v.length;
+        final parts = v
+            .toString()
+            .split(RegExp(r'\s+'))
+            .where((e) => e.isNotEmpty)
+            .toList();
+        return parts.length;
+      case 'selected-at':
+        _requireArgCount(name, args, 2, 2);
+        final v = args[0];
+        final pos = _num(args[1]).toInt();
+        List<String> items;
+        if (v is List) {
+          items = v.map((e) => e?.toString() ?? '').toList();
+        } else if (v == null) {
+          return '';
+        } else {
+          items = v
+              .toString()
+              .split(RegExp(r'\s+'))
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+        if (pos < 0 || pos >= items.length) return '';
+        return items[pos];
+
+      // -- math --
+      case 'round':
+        _requireArgCount(name, args, 1, 2);
+        final x = _num(args[0]).toDouble();
+        final decimals = args.length > 1 ? _num(args[1]).toInt() : 0;
+        final factor = _pow10(decimals);
+        final shifted = x * factor;
+        final rounded =
+            shifted >= 0 ? (shifted + 0.5).floor() : (shifted - 0.5).ceil();
+        return rounded / factor;
+      case 'floor':
+        _requireArgCount(name, args, 1, 1);
+        return _num(args[0]).toDouble().floor();
+      case 'ceil':
+        _requireArgCount(name, args, 1, 1);
+        return _num(args[0]).toDouble().ceil();
+      case 'abs':
+        _requireArgCount(name, args, 1, 1);
+        final x = _num(args[0]);
+        return x is int ? x.abs() : (x as num).abs();
+      case 'min':
+        if (args.isEmpty) throw FormatException('min() needs arguments');
+        return args.map(_num).reduce((a, b) => a < b ? a : b);
+      case 'max':
+        if (args.isEmpty) throw FormatException('max() needs arguments');
+        return args.map(_num).reduce((a, b) => a > b ? a : b);
+      case 'pow':
+        _requireArgCount(name, args, 2, 2);
+        return _powNum(_num(args[0]).toDouble(), _num(args[1]).toDouble());
+      case 'sqrt':
+        _requireArgCount(name, args, 1, 1);
+        final x = _num(args[0]).toDouble();
+        if (x < 0) throw const FormatException('sqrt() of negative number');
+        return _sqrtNum(x);
+
+      // -- conversions & literals --
+      case 'number':
+        _requireArgCount(name, args, 1, 1);
+        return _num(args[0]);
+      case 'int':
+        _requireArgCount(name, args, 1, 1);
+        return _num(args[0]).toDouble().truncate();
+      case 'string':
+        _requireArgCount(name, args, 1, 1);
+        return _str(args[0]);
+      case 'boolean':
+        _requireArgCount(name, args, 1, 1);
+        return _isTruthy(args[0]);
+      case 'true':
+        _requireArgCount(name, args, 0, 0);
+        return true;
+      case 'false':
+        _requireArgCount(name, args, 0, 0);
+        return false;
+
+      default:
+        throw FormatException('Unknown function: $name()');
+    }
+  }
+
+  void _requireArgCount(String name, List<dynamic> args, int min, int max) {
+    if (args.length < min || args.length > max) {
+      throw FormatException('$name() expects $min..$max argument(s)');
+    }
+  }
+
+  static String _str(dynamic value) {
+    if (value == null) return '';
+    if (value is num) return SurveyLogic._formatNumber(value);
+    if (value is DateTime) return value.toIso8601String();
+    if (value is bool) return value.toString();
+    if (value is List) return value.map(_str).join(' ');
+    return value.toString();
+  }
+
+  static num _num(dynamic value) {
+    if (value is num) return value;
+    if (value is bool) return value ? 1 : 0;
+    final parsed = num.tryParse((value?.toString() ?? '').trim());
+    if (parsed == null) throw const FormatException('Expected a number');
+    return parsed;
+  }
+
+  static double _pow10(int n) {
+    var result = 1.0;
+    for (var i = 0; i < n; i++) {
+      result *= 10;
+    }
+    return result;
+  }
+
+  static double _powNum(double base, double exp) {
+    // Integer exponents without dart:math dependency.
+    if (exp == exp.roundToDouble() && exp.abs() < 64) {
+      var result = 1.0;
+      final count = exp.abs().toInt();
+      for (var i = 0; i < count; i++) {
+        result *= base;
+      }
+      return exp < 0 ? 1 / result : result;
+    }
+    // Fractional exponents via exp/log series.
+    return _expNum(exp * _logNum(base));
+  }
+
+  static double _logNum(double x) {
+    if (x <= 0) throw const FormatException('log() of non-positive number');
+    // Normalize to [1, 2) then use the atanh series for ln.
+    var e = 0;
+    while (x >= 2) {
+      x /= 2;
+      e++;
+    }
+    while (x < 1) {
+      x *= 2;
+      e--;
+    }
+    final y = (x - 1) / (x + 1);
+    final y2 = y * y;
+    var term = y;
+    var sum = 0.0;
+    for (var n = 1; n <= 101; n += 2) {
+      sum += term / n;
+      term *= y2;
+    }
+    const ln2 = 0.6931471805599453;
+    return 2 * sum + e * ln2;
+  }
+
+  static double _expNum(double x) {
+    var term = 1.0;
+    var sum = 1.0;
+    for (var n = 1; n <= 60; n++) {
+      term *= x / n;
+      sum += term;
+    }
+    return sum;
+  }
+
+  static double _sqrtNum(double x) {
+    if (x == 0) return 0;
+    var guess = x > 1 ? x / 2 : 1.0;
+    for (var i = 0; i < 40; i++) {
+      guess = (guess + x / guess) / 2;
+    }
+    return guess;
+  }
+
+  /// Parses ISO date/datetime strings or `HH:MM[:SS]` time-of-day strings
+  /// (resolved against today). Returns null when unparsable.
+  static DateTime? _toDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    try {
+      return DateTime.parse(s);
+    } catch (_) {}
+    final tm = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$').firstMatch(s);
+    if (tm != null) {
+      final now = DateTime.now();
+      return DateTime(
+        now.year,
+        now.month,
+        now.day,
+        int.parse(tm.group(1)!),
+        int.parse(tm.group(2)!),
+        tm.group(3) != null ? int.parse(tm.group(3)!) : 0,
+      );
+    }
+    return null;
+  }
+
+  static const List<String> _monthNamesFull = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  static const List<String> _monthNamesShort = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  static const List<String> _weekdayNamesFull = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+    'Friday', 'Saturday', 'Sunday',
+  ];
+  static const List<String> _weekdayNamesShort = [
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+  ];
+
+  /// Formats a date with ODK `%`-style specifiers (%Y %y %m %d %e %H %M %S
+  /// %b %h %B %a %A %p and %%).
+  static String _formatDateTime(DateTime dt, String format) {
+    var out = format;
+    out = out.replaceAll('%Y', dt.year.toString().padLeft(4, '0'));
+    out = out.replaceAll('%y', (dt.year % 100).toString().padLeft(2, '0'));
+    out = out.replaceAll('%m', dt.month.toString().padLeft(2, '0'));
+    out = out.replaceAll('%d', dt.day.toString().padLeft(2, '0'));
+    out = out.replaceAll('%e', dt.day.toString());
+    out = out.replaceAll('%H', dt.hour.toString().padLeft(2, '0'));
+    out = out.replaceAll('%M', dt.minute.toString().padLeft(2, '0'));
+    out = out.replaceAll('%S', dt.second.toString().padLeft(2, '0'));
+    out = out.replaceAll('%b', _monthNamesShort[dt.month - 1]);
+    out = out.replaceAll('%h', _monthNamesShort[dt.month - 1]);
+    out = out.replaceAll('%B', _monthNamesFull[dt.month - 1]);
+    out = out.replaceAll('%a', _weekdayNamesShort[dt.weekday - 1]);
+    out = out.replaceAll('%A', _weekdayNamesFull[dt.weekday - 1]);
+    out = out.replaceAll('%p', dt.hour < 12 ? 'AM' : 'PM');
+    out = out.replaceAll('%%', '%');
+    return out;
+  }
+
   dynamic _compare(String op, dynamic left, dynamic right) {
     switch (op) {
       case '=':
@@ -450,6 +882,22 @@ class _Parser {
               return left >= right;
           }
         }
+        // Date/datetime comparison (ISO strings and DateTime objects mix).
+        final leftDt = _tryParseDate(left);
+        final rightDt = _tryParseDate(right);
+        if (leftDt != null && rightDt != null) {
+          final c = leftDt.compareTo(rightDt);
+          switch (op) {
+            case '<':
+              return c < 0;
+            case '>':
+              return c > 0;
+            case '<=':
+              return c <= 0;
+            case '>=':
+              return c >= 0;
+          }
+        }
         // Fall back to lexicographic comparison for strings.
         final a = _toString(left);
         final b = _toString(right);
@@ -467,7 +915,27 @@ class _Parser {
     return false;
   }
 
-  String _toString(dynamic value) => value?.toString() ?? '';
+  String _toString(dynamic value) {
+    if (value == null) return '';
+    if (value is DateTime) return value.toIso8601String();
+    return value.toString();
+  }
+
+  /// Parses a value into a [DateTime] for comparisons: DateTime objects pass
+  /// through, date-like strings (containing `-`, `/`, `T` or `:`) are parsed.
+  /// Returns null for anything else so plain words/numbers never compare
+  /// as dates.
+  static DateTime? _tryParseDate(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is! String) return null;
+    final s = value.trim();
+    if (!RegExp(r'[-/T:]').hasMatch(s)) return null;
+    try {
+      return DateTime.parse(s);
+    } catch (_) {
+      return null;
+    }
+  }
 
   _Token _peek() => _tokens[_pos];
 

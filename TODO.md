@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4g — v2.4.1 fix batch (Complete — tests green, APK built 2026-08-23)  
+**Status:** Phase 4h — v2.4.2 ODK form fix batch (Complete — tests green, APK built 2026-08-23)  
 **Last Updated:** 2026-08-23  
-**Version:** 2.4.1
+**Version:** 2.4.2
 
 ---
 
@@ -845,6 +845,16 @@ the GPS Mode copy flow.
 - [x] Imports: WKT support (`POINT (lon lat)` / `POINT Z`) in CSV cells, dedicated geometry columns, GeoJSON properties and KML/KMZ ExtendedData; coordinate synonyms expanded (x/y, lon/lng/long, lat_dd, dd_lat, point_x/point_y, …)
 - [x] SHP import: minimal binary reader (Point/Z/M full, first vertex of PolyLine/Polygon/MultiPoint; .dbf not read)
 - [x] Tests updated/added — suite 227/227 green; analyze clean
+- [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
+
+---
+
+## PHASE 4h: V2.4.2 ODK FORM FIX BATCH (2026-08-23) — Complete, tests green
+
+- [x] ODK function library in expression engine — now/today/date/time, format-date(-time), concat/join, if/coalesce, string + math + select helpers; hyphenated names; legacy selected() preserved
+- [x] HTML stripped from labels/hints/notes/titles; `${var}` interpolated live with current answers
+- [x] Date-aware comparisons; DateTime results stored as ISO
+- [x] 17 new survey_logic tests (caught + fixed a selected-at dispatch bug); suite 244/244 green
 - [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
 
 ---

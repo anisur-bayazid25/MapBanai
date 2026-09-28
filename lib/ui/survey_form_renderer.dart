@@ -256,14 +256,17 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.form.name,
+            SurveyLogic.stripHtml(widget.form.name),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            widget.form.description,
+            SurveyLogic.interpolate(
+              SurveyLogic.stripHtml(widget.form.description),
+              _answers,
+            ),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey.shade600,
             ),
@@ -314,6 +317,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
           languageCode: _formLanguage,
           value: _answers[question.name],
           controller: _controllers[question.name],
+          answers: _answers,
           onChanged: (value) => _updateAnswer(question.name, value),
         ),
       );
@@ -376,21 +380,32 @@ class _QuestionWidget extends StatelessWidget {
   final Question question;
   final String languageCode;
   final dynamic value;
-  final TextEditingController? controller;
   final ValueChanged<dynamic> onChanged;
+  final TextEditingController? controller;
+
+  /// Current answers, used to interpolate `${name}` placeholders in labels
+  /// (ODK dynamic labels) and to strip embedded HTML.
+  final Map<String, dynamic> answers;
 
   const _QuestionWidget({
     required this.question,
     required this.languageCode,
     required this.value,
     required this.onChanged,
+    required this.answers,
     this.controller,
   });
 
   @override
   Widget build(BuildContext context) {
-    final displayLabel = question.labelFor(languageCode);
-    final displayHint = question.hintFor(languageCode);
+    final displayLabel = SurveyLogic.interpolate(
+      SurveyLogic.stripHtml(question.labelFor(languageCode)),
+      answers,
+    );
+    final rawHint = question.hintFor(languageCode);
+    final displayHint = rawHint == null
+        ? null
+        : SurveyLogic.interpolate(SurveyLogic.stripHtml(rawHint), answers);
     AppLocalizations? l10n;
     try {
       l10n = AppLocalizations.of(context);
@@ -603,7 +618,10 @@ class _QuestionWidget extends StatelessWidget {
             border: Border.all(color: Colors.blue.shade200),
           ),
           child: Text(
-            question.labelFor(languageCode),
+            SurveyLogic.interpolate(
+              SurveyLogic.stripHtml(question.labelFor(languageCode)),
+              answers,
+            ),
             style: TextStyle(color: Colors.blue.shade900),
           ),
         );
