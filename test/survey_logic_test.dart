@@ -501,6 +501,21 @@ void main() {
         isTrue,
       );
     });
+
+    test('curly quotes and nbsp in expressions are normalized', () {
+      expect(
+        SurveyLogic.evaluateRelevance('\${a12} = ‘1’', {'a12': '1'}),
+        isTrue,
+      );
+      expect(
+        SurveyLogic.evaluateRelevance('\${a12} = ‘1’', {'a12': '2'}),
+        isFalse,
+      );
+      expect(
+        SurveyLogic.evaluateCalculation('“a” + “b”', {}),
+        'ab',
+      );
+    });
   });
 
   group('SurveyLogic.parseStyledText (v2.4.3)', () {

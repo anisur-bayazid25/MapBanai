@@ -423,7 +423,18 @@ class _Lexer {
   final String _input;
   int _pos = 0;
 
-  _Lexer(this._input);
+  _Lexer(String input) : _input = _normalize(input);
+
+  /// Normalizes real-world authoring artifacts before tokenizing: curly
+  /// single/double quotes (Word/Excel often produce ‘ ’ “ ”) become ASCII
+  /// quotes so string literals parse, and non-breaking spaces become plain
+  /// spaces.
+  static String _normalize(String input) {
+    return input
+        .replaceAll(RegExp('[‘’‚‛]'), "'")
+        .replaceAll(RegExp('[“”„‟]'), '"')
+        .replaceAll('\u00A0', ' ');
+  }
 
   List<_Token> tokenize() {
     final tokens = <_Token>[];

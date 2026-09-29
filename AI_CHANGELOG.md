@@ -53,6 +53,35 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.4.4] — gating proof, smart-quote hardening, re-import notice
+
+### User report
+- On v2.4.3 (colors worked) the a12 gate still failed on the real UGGP
+  form: all questions showed regardless of choice 1–4. Asked whether the
+  ODK logic itself was at fault.
+
+### Findings
+- Synthetic parser + renderer tests (v2.4.3) passed, but the *combined*
+  pipeline (real xlsx bytes → parse → pump) was untested. Built
+  `test/survey_uggp_pipeline_test.dart` mirroring the real form
+  (label::english/bengali, styled spans, once/coalesce, nested group +
+  repeat with repeat_count, 4-choice a12): gating works for every choice.
+  Code path exonerated.
+- Remaining explanations, in order: (1) the on-device form was imported
+  under ≤v2.4.2 — `stored_forms` keeps parsed JSON only, so old imports
+  permanently lack groups and can never gate; (2) deviant `relevant` cell
+  content in the real file. Hardened (2): `_Lexer._normalize` maps curly
+  quotes → ASCII and NBSP → space (Word-authored forms).
+- If gating still fails after fresh import, the `relevant` cell on the
+  `begin_group module_b` row itself must be inspected (screenshots alone
+  can't rule out invisible characters).
+
+### Docs
+- CHANGELOG carries an explicit re-import notice; USER_GUIDE survey
+  section notes it.
+
+---
+
 ## [2.4.3] — real-form round: styled labels, group relevance, once/sum/regex/position
 
 ### Diagnosis (UGGP form screenshots + device screenshot)

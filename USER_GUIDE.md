@@ -47,6 +47,9 @@ Everything works offline; tiles open instantly and data stays on the device.
    form with the built-in builder.
    - Multi-language forms (`label::English (en)`, `label::Bangla (bn)`, …)
      let you pick the label language while filling the form.
+   - **If you imported a form before v2.4.3 and its skip logic misbehaves,
+     delete it and import the .xlsx again** — old imports predate group
+     skip-logic support and cannot be repaired in place.
 3. Fill the form: conditional questions appear automatically, and whole
    modules hide/show by group skip logic (e.g. an incomplete interview
    skips the remaining modules). Calculations update live — including ODK

@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4i — v2.4.3 real-form round (Complete — tests green, APK built 2026-08-23)  
+**Status:** Phase 4j — v2.4.4 gating proof + hardening (Complete — tests green, APK built 2026-08-23)  
 **Last Updated:** 2026-08-23  
-**Version:** 2.4.3
+**Version:** 2.4.4
 
 ---
 
@@ -868,6 +868,16 @@ the GPS Mode copy flow.
 - [x] Parser + engine + renderer-widget regression tests; suite 260/260 green
 - [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
 - [ ] Repeats render one instance only — full repeat iteration is future work (repeat_count stored)
+
+---
+
+## PHASE 4j: V2.4.4 GATING PROOF + HARDENING (2026-08-23) — Complete, tests green
+
+- [x] UGGP-faithful pipeline test (xlsx bytes → parse → renderer; all 4 outcome choices gate correctly)
+- [x] Smart-quote/NBSP normalization in expression lexer
+- [x] Documented: pre-v2.4.3 imports must be deleted + re-imported (stored JSON lacks groups)
+- [x] Suite 264/264 green; docs refreshed
+- [ ] If gating still fails after fresh import → inspect the real `relevant` cell bytes on the begin_group row
 
 ---
 

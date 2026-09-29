@@ -8,7 +8,7 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.4.3](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
+**Latest release: [v2.4.4](https://github.com/anisur-bayazid25/MapBanai/releases/latest)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
 ---

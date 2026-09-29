@@ -4,6 +4,30 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.4.4] - 2026-08-23
+
+### Fixed
+- **Skip-logic hardening + proof** — the v2.4.3 group-gating path is now
+  proven end-to-end by a UGGP-faithful pipeline test (real xlsx bytes with
+  English/Bengali labels, styled spans, once/coalesce calculations, nested
+  group + repeat, 4-choice outcome question → parse → render → only choice
+  1 opens the gated module; choices 2/3/4 keep it closed with the red end
+  note). Curly quotes (`‘ ’ “ ”`, common in Word-authored forms) and
+  non-breaking spaces in expressions are normalized before parsing.
+
+### IMPORTANT — re-import forms imported before v2.4.3
+- Stored forms keep only their parsed JSON, and parses made before v2.4.3
+  contain no group information — updating the app does **not** repair them.
+  To get module skip logic: open **Project settings → Survey forms**,
+  delete the old imported form, and **import the .xlsx again**. Fresh
+  imports carry group relevance and gate correctly.
+
+### Tests
+- `survey_uggp_pipeline_test.dart`: parser keeps groups/paths/i18n/calcs;
+  renderer gating across all four outcome choices; no raw markup.
+- Engine: curly-quote normalization.
+- Suite: 264 tests green.
+
 ## [2.4.3] - 2026-08-23
 
 ### Fixed
