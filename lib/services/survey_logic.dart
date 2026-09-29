@@ -125,12 +125,271 @@ class SurveyLogic {
     });
   }
 
+  /// Parses the ODK label HTML subset into styled runs for RichText
+  /// rendering: `<span style="color:…; font-weight:bold">`, `<b>`,
+  /// `<strong>`, `<i>`, `<em>`, `<u>`, `<font color="…">`, `<br/>` and
+  /// entities. Unknown/malformed tags are skipped with their text kept, so
+  /// messy real-world labels (e.g. `</f3_0 span>`) degrade gracefully.
+  static List<RichRun> parseStyledText(String input) {
+    final runs = <RichRun>[];
+    final stack = <_TextStyleSpec>[_TextStyleSpec()];
+    final buffer = StringBuffer();
+
+    void flush() {
+      if (buffer.isEmpty) return;
+      final current = stack.last;
+      runs.add(RichRun(
+        _decodeEntities(buffer.toString()),
+        bold: current.bold,
+        italic: current.italic,
+        underline: current.underline,
+        color: current.color,
+      ));
+      buffer.clear();
+    }
+
+    // Attribute values in ODK labels never contain angle brackets, so a
+    // simple negated-class pattern is enough (and avoids quote nesting).
+    final tagPattern = RegExp('<(/?)([A-Za-z][A-Za-z0-9]*)([^<>]*)>');
+    var pos = 0;
+    for (final match in tagPattern.allMatches(input)) {
+      if (match.start > pos) {
+        buffer.write(input.substring(pos, match.start));
+      }
+      pos = match.end;
+      final closing = match.group(1) == '/';
+      final tag = match.group(2)!.toLowerCase();
+      final attrs = match.group(3) ?? '';
+      final selfClosing = attrs.trimRight().endsWith('/');
+
+      if (tag == 'br') {
+        flush();
+        final current = stack.last;
+        runs.add(RichRun(
+          '\n',
+          bold: current.bold,
+          italic: current.italic,
+          underline: current.underline,
+          color: current.color,
+        ));
+        continue;
+      }
+      if (closing || selfClosing) {
+        // Only pop for known style tags; stray closers are ignored.
+        if (_isStyleTag(tag) && stack.length > 1) {
+          flush();
+          stack.removeLast();
+        }
+        continue;
+      }
+      switch (tag) {
+        case 'b':
+        case 'strong':
+          flush();
+          stack.add(stack.last.copyWith(bold: true));
+        case 'i':
+        case 'em':
+          flush();
+          stack.add(stack.last.copyWith(italic: true));
+        case 'u':
+          flush();
+          stack.add(stack.last.copyWith(underline: true));
+        case 'span':
+        case 'font':
+          flush();
+          stack.add(_styleFromAttrs(tag, attrs, stack.last));
+        default:
+          // Unknown tag: drop the tag itself, keep the text.
+          break;
+      }
+    }
+    if (pos < input.length) {
+      buffer.write(input.substring(pos));
+    }
+    flush();
+    return runs;
+  }
+
+  static bool _isStyleTag(String tag) {
+    return tag == 'b' ||
+        tag == 'strong' ||
+        tag == 'i' ||
+        tag == 'em' ||
+        tag == 'u' ||
+        tag == 'span' ||
+        tag == 'font';
+  }
+
+  static _TextStyleSpec _styleFromAttrs(
+      String tag, String attrs, _TextStyleSpec base) {
+    var spec = base;
+    // <font color="red">
+    final fontColor =
+        RegExp('color\\s*=\\s*["\']?([^"\'\\s>]+)').firstMatch(attrs);
+    if (tag == 'font' && fontColor != null) {
+      final parsed = _parseCssColor(fontColor.group(1)!);
+      if (parsed != null) spec = spec.copyWith(color: parsed);
+    }
+    // <span style="color:red; font-weight:bold; ...">
+    final styleAttr =
+        RegExp('style\\s*=\\s*"([^"]*)"').firstMatch(attrs) ??
+            RegExp("style\\s*=\\s*'([^']*)'").firstMatch(attrs);
+    if (styleAttr != null) {
+      for (final decl in styleAttr.group(1)!.split(';')) {
+        final parts = decl.split(':');
+        if (parts.length < 2) continue;
+        final prop = parts[0].trim().toLowerCase();
+        final value = parts.sublist(1).join(':').trim().toLowerCase();
+        switch (prop) {
+          case 'color':
+            final parsed = _parseCssColor(value);
+            if (parsed != null) spec = spec.copyWith(color: parsed);
+          case 'font-weight':
+            if (value == 'bold' ||
+                value == 'bolder' ||
+                (int.tryParse(value) ?? 0) >= 700) {
+              spec = spec.copyWith(bold: true);
+            }
+          case 'font-style':
+            if (value == 'italic' || value == 'oblique') {
+              spec = spec.copyWith(italic: true);
+            }
+          case 'text-decoration':
+            if (value.contains('underline')) {
+              spec = spec.copyWith(underline: true);
+            }
+        }
+      }
+    }
+    return spec;
+  }
+
+  static const Map<String, int> _namedColors = {
+    'red': 0xFFFF0000,
+    'maroon': 0xFF800000,
+    'green': 0xFF008000,
+    'blue': 0xFF0000FF,
+    'black': 0xFF000000,
+    'white': 0xFFFFFFFF,
+    'gray': 0xFF808080,
+    'grey': 0xFF808080,
+    'darkgray': 0xFFA9A9A9,
+    'darkgrey': 0xFFA9A9A9,
+    'lightgray': 0xFFD3D3D3,
+    'lightgrey': 0xFFD3D3D3,
+    'yellow': 0xFFFFFF00,
+    'orange': 0xFFFFA500,
+    'purple': 0xFF800080,
+    'teal': 0xFF008080,
+    'navy': 0xFF000080,
+    'lime': 0xFF00FF00,
+    'aqua': 0xFF00FFFF,
+    'cyan': 0xFF00FFFF,
+    'fuchsia': 0xFFFF00FF,
+    'magenta': 0xFFFF00FF,
+    'silver': 0xFFC0C0C0,
+    'olive': 0xFF808000,
+    'darkred': 0xFF8B0000,
+    'darkgreen': 0xFF006400,
+    'darkblue': 0xFF00008B,
+    'pink': 0xFFFFC0CB,
+    'brown': 0xFFA52A2A,
+  };
+
+  /// Parses CSS colors: named colors plus `#rgb` / `#rrggbb`. Returns an
+  /// ARGB int or null when unparsable.
+  static int? _parseCssColor(String value) {
+    final v = value.trim().toLowerCase();
+    final named = _namedColors[v];
+    if (named != null) return named;
+    final hex = RegExp(r'^#([0-9a-f]{3}|[0-9a-f]{6})$').firstMatch(v);
+    if (hex == null) return null;
+    var digits = hex.group(1)!;
+    if (digits.length == 3) {
+      digits = digits.split('').map((c) => '$c$c').join();
+    }
+    return 0xFF000000 | int.parse(digits, radix: 16);
+  }
+
+  static String _decodeEntities(String s) {
+    const entities = {
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&quot;': '"',
+      '&#39;': "'",
+      '&apos;': "'",
+      '&nbsp;': ' ',
+    };
+    var out = s;
+    entities.forEach((k, v) => out = out.replaceAll(k, v));
+    out = out.replaceAllMapped(
+      RegExp(r'&#(\d+);'),
+      (m) {
+        final code = int.tryParse(m.group(1)!);
+        return code == null ? m.group(0)! : String.fromCharCode(code);
+      },
+    );
+    return out;
+  }
+
   static bool _isTruthy(dynamic value) {
     if (value == null) return false;
     if (value is bool) return value;
     if (value is num) return value != 0;
     if (value is String) return value.isNotEmpty;
     return true;
+  }
+}
+
+/// One styled run of label text produced by [SurveyLogic.parseStyledText].
+class RichRun {
+  final String text;
+  final bool bold;
+  final bool italic;
+  final bool underline;
+
+  /// ARGB color int (e.g. `0xFFFF0000`), or null to inherit.
+  final int? color;
+
+  const RichRun(
+    this.text, {
+    this.bold = false,
+    this.italic = false,
+    this.underline = false,
+    this.color,
+  });
+
+  bool get hasStyle =>
+      bold || italic || underline || color != null;
+}
+
+/// Mutable style accumulator used while parsing styled label text.
+class _TextStyleSpec {
+  final bool bold;
+  final bool italic;
+  final bool underline;
+  final int? color;
+
+  const _TextStyleSpec({
+    this.bold = false,
+    this.italic = false,
+    this.underline = false,
+    this.color,
+  });
+
+  _TextStyleSpec copyWith({
+    bool? bold,
+    bool? italic,
+    bool? underline,
+    int? color,
+  }) {
+    return _TextStyleSpec(
+      bold: bold ?? this.bold,
+      italic: italic ?? this.italic,
+      underline: underline ?? this.underline,
+      color: color ?? this.color,
+    );
   }
 }
 
@@ -211,6 +470,12 @@ class _Lexer {
     }
 
     if (ch == '.') {
+      // ODK parent-axis '..' (used in position(..)): lex as one token so
+      // function argument parsing sees a single argument.
+      if (_pos + 1 < _input.length && _input[_pos + 1] == '.') {
+        _pos += 2;
+        return const _Token(_TokenType.ident, '..');
+      }
       // Standalone '.' refers to the current answer in constraints.
       _pos++;
       return const _Token(_TokenType.ident, '.');
@@ -375,14 +640,28 @@ class _Parser {
     while (_peek().type == _TokenType.operator && ['+', '-'].contains(_peek().lexeme)) {
       final op = _advance().lexeme;
       final right = parseMultiplicative();
-      if (left is num && right is num) {
-        left = op == '+' ? left + right : left - right;
-      } else {
+      // ODK coerces numeric strings: '3' + 0 = 3 (critical for
+      // coalesce(${count}, 0) + ... totals over string answers).
+      final leftNum = _tryNum(left);
+      final rightNum = _tryNum(right);
+      if (leftNum != null && rightNum != null) {
+        left = op == '+' ? leftNum + rightNum : leftNum - rightNum;
+      } else if (op == '+') {
         // Fall back to string concatenation for '+'.
-        left = op == '+' ? '${left ?? ''}${right ?? ''}' : left;
+        left = '${left ?? ''}${right ?? ''}';
+      } else {
+        throw const FormatException('Non-numeric operand for arithmetic');
       }
     }
     return left;
+  }
+
+  /// Numeric value of an operand, coercing numeric strings (answers arrive
+  /// as strings from text fields). Null for anything non-numeric.
+  static num? _tryNum(dynamic value) {
+    if (value is num) return value;
+    if (value == null || value is bool) return null;
+    return num.tryParse(value.toString().trim());
   }
 
   dynamic parseMultiplicative() {
@@ -390,18 +669,19 @@ class _Parser {
     while (_peek().type == _TokenType.operator && ['*', '/', '%'].contains(_peek().lexeme)) {
       final op = _advance().lexeme;
       final right = parseUnary();
-      if (left is num && right is num) {
-        switch (op) {
-          case '*':
-            left = left * right;
-          case '/':
-            if (right == 0) throw const FormatException('Division by zero');
-            left = left / right;
-          case '%':
-            left = left % right;
-        }
-      } else {
+      final leftNum = _tryNum(left);
+      final rightNum = _tryNum(right);
+      if (leftNum == null || rightNum == null) {
         throw const FormatException('Non-numeric operand for arithmetic');
+      }
+      switch (op) {
+        case '*':
+          left = leftNum * rightNum;
+        case '/':
+          if (rightNum == 0) throw const FormatException('Division by zero');
+          left = leftNum / rightNum;
+        case '%':
+          left = leftNum % rightNum;
       }
     }
     return left;
@@ -411,8 +691,11 @@ class _Parser {
     if (_peek().type == _TokenType.operator && _peek().lexeme == '-') {
       _advance();
       final value = parseUnary();
-      if (value is num) return -value;
-      throw const FormatException('Non-numeric operand for unary minus');
+      final n = _tryNum(value);
+      if (n == null) {
+        throw const FormatException('Non-numeric operand for unary minus');
+      }
+      return -n;
     }
     return parsePrimary();
   }
@@ -596,6 +879,18 @@ class _Parser {
       case 'contains':
         _requireArgCount(name, args, 2, 2);
         return _str(args[0]).contains(_str(args[1]));
+      case 'regex':
+        // ODK regex(value, pattern) uses full-match semantics (Java
+        // String.matches): the whole value must match, so the pattern is
+        // anchored. Existing ^/$ anchors in form patterns stay harmless.
+        _requireArgCount(name, args, 2, 2);
+        final subject = _str(args[0]);
+        final pattern = _str(args[1]);
+        try {
+          return RegExp('^(?:$pattern)\$').hasMatch(subject);
+        } catch (_) {
+          throw FormatException('regex() got an invalid pattern');
+        }
       case 'starts-with':
         _requireArgCount(name, args, 2, 2);
         return _str(args[0]).startsWith(_str(args[1]));
@@ -607,6 +902,13 @@ class _Parser {
       case 'if':
         _requireArgCount(name, args, 3, 3);
         return _isTruthy(args[0]) ? args[1] : args[2];
+      case 'once':
+        // ODK once(x): keep the existing value, compute only when blank.
+        // The renderer enforces the freeze (skips re-evaluation when the
+        // answer is already set); at engine level this evaluates the inner
+        // expression, which is the correct fallback everywhere else.
+        _requireArgCount(name, args, 1, 1);
+        return args[0];
       case 'coalesce':
         if (args.isEmpty) {
           throw FormatException('coalesce() needs at least one argument');
@@ -650,6 +952,30 @@ class _Parser {
         return items[pos];
 
       // -- math --
+      case 'sum':
+        // ODK sum() aggregates a repeat; outside repeats it simply totals
+        // its arguments (lists flattened, null/blank skipped).
+        if (args.isEmpty) return 0;
+        var total = 0.0;
+        var seen = false;
+        void addValue(dynamic v) {
+          if (v == null) return;
+          if (v is List) {
+            for (final e in v) {
+              addValue(e);
+            }
+            return;
+          }
+          if (v is String && v.trim().isEmpty) return;
+          total += _num(v).toDouble();
+          seen = true;
+        }
+
+        for (final a in args) {
+          addValue(a);
+        }
+        if (!seen) return 0;
+        return total == total.roundToDouble() ? total.toInt() : total;
       case 'round':
         _requireArgCount(name, args, 1, 2);
         final x = _num(args[0]).toDouble();
@@ -685,6 +1011,10 @@ class _Parser {
         return _sqrtNum(x);
 
       // -- conversions & literals --
+      case 'position':
+        // ODK position(..): 1-based index inside the current repeat.
+        // Repeats render a single instance, so this is always 1.
+        return 1;
       case 'number':
         _requireArgCount(name, args, 1, 1);
         return _num(args[0]);

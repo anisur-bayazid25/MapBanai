@@ -1,8 +1,8 @@
 # MapBanai - Project TODO
 
-**Status:** Phase 4h — v2.4.2 ODK form fix batch (Complete — tests green, APK built 2026-08-23)  
+**Status:** Phase 4i — v2.4.3 real-form round (Complete — tests green, APK built 2026-08-23)  
 **Last Updated:** 2026-08-23  
-**Version:** 2.4.2
+**Version:** 2.4.3
 
 ---
 
@@ -856,6 +856,18 @@ the GPS Mode copy flow.
 - [x] Date-aware comparisons; DateTime results stored as ISO
 - [x] 17 new survey_logic tests (caught + fixed a selected-at dispatch bug); suite 244/244 green
 - [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
+
+---
+
+## PHASE 4i: V2.4.3 REAL-FORM ROUND (2026-08-23) — Complete, tests green
+
+- [x] Styled labels — ODK HTML subset (span color/bold/italic, b/i/u, font color, br) renders as RichText; malformed tags degrade gracefully
+- [x] Group skip logic — begin_group relevance tracked (GroupInfo + Question.groupPath); gated modules hide/show live; module headers render for visible groups
+- [x] once()/sum()/regex()/position() functions; `..` lexer token; numeric-string coercion in arithmetic
+- [x] Note labels no longer duplicated
+- [x] Parser + engine + renderer-widget regression tests; suite 260/260 green
+- [x] Docs refreshed (CHANGELOG, AI_CHANGELOG, README, USER_GUIDE, TODO)
+- [ ] Repeats render one instance only — full repeat iteration is future work (repeat_count stored)
 
 ---
 

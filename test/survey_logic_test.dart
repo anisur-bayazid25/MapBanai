@@ -428,4 +428,127 @@ void main() {
       );
     });
   });
+
+  group('SurveyLogic repeat-adjacent functions (v2.4.3)', () {
+    test('once() evaluates its inner expression', () {
+      expect(
+        SurveyLogic.evaluateCalculation('once(today())', {}),
+        isNotNull,
+      );
+      expect(
+        SurveyLogic.evaluateCalculation('once(2 + 3)', {}),
+        '5',
+      );
+    });
+
+    test('sum() totals numerics and skips blanks', () {
+      expect(
+        SurveyLogic.evaluateCalculation(
+          'coalesce(\${a}, 0) + coalesce(\${b}, 0)',
+          {'a': '3', 'b': ''},
+        ),
+        '3',
+      );
+      expect(
+        SurveyLogic.evaluateCalculation('sum(\${v})', {'v': '5000'}),
+        '5000',
+      );
+      expect(SurveyLogic.evaluateCalculation('sum()', {}), '0');
+    });
+
+    test('regex() uses full-match semantics', () {
+      expect(
+        SurveyLogic.evaluateConstraint(
+          "regex(., '^[A-Z][a-zA-Z .()]{2,}\$')",
+          'John Doe',
+          null,
+        ),
+        isNull,
+      );
+      expect(
+        SurveyLogic.evaluateConstraint(
+          "regex(., '^[A-Z][a-zA-Z .()]{2,}\$')",
+          'jo',
+          'Bad name',
+        ),
+        'Bad name',
+      );
+      expect(
+        SurveyLogic.evaluateConstraint(
+          "regex(., '^01[3-9][0-9]{8}\$') or . = 99",
+          '99',
+          null,
+        ),
+        isNull,
+      );
+      expect(
+        SurveyLogic.evaluateConstraint(
+          "regex(., '^01[3-9][0-9]{8}\$') or . = 99",
+          '01512345678',
+          null,
+        ),
+        isNull,
+      );
+    });
+
+    test('position() returns 1 outside repeats', () {
+      expect(
+        SurveyLogic.evaluateCalculation('position(..)', {}),
+        '1',
+      );
+      expect(
+        SurveyLogic.evaluateRelevance('position(..) = 1', {}),
+        isTrue,
+      );
+    });
+  });
+
+  group('SurveyLogic.parseStyledText (v2.4.3)', () {
+    test('span color and bold render as styled runs', () {
+      final runs = SurveyLogic.parseStyledText(
+        '<span style="color:red; font-weight:bold">Extreme Heat</span> and more',
+      );
+      expect(runs.length, 2);
+      expect(runs[0].text, 'Extreme Heat');
+      expect(runs[0].bold, isTrue);
+      expect(runs[0].color, 0xFFFF0000);
+      expect(runs[1].text, ' and more');
+      expect(runs[1].hasStyle, isFalse);
+    });
+
+    test('named and hex colors parse', () {
+      final maroon = SurveyLogic.parseStyledText(
+        '<span style="color:maroon">M</span>',
+      );
+      expect(maroon.single.color, 0xFF800000);
+      final hex = SurveyLogic.parseStyledText(
+        '<span style="color:#0066CC">C</span>',
+      );
+      expect(hex.single.color, 0xFF0066CC);
+    });
+
+    test('b/i/u tags and br newlines', () {
+      final runs = SurveyLogic.parseStyledText('<b>B</b><i>I</i><u>U</u>a<br/>b');
+      expect(runs.map((r) => r.text).join('|'), 'B|I|U|a|\n|b');
+      expect(runs[0].bold, isTrue);
+      expect(runs[1].italic, isTrue);
+      expect(runs[2].underline, isTrue);
+    });
+
+    test('malformed tags degrade gracefully', () {
+      final runs = SurveyLogic.parseStyledText(
+        'Height <span>ok</span> and bad</f3_0 span> tail',
+      );
+      expect(
+        runs.map((r) => r.text).join(),
+        'Height ok and bad tail',
+      );
+    });
+
+    test('plain text yields a single unstyled run', () {
+      final runs = SurveyLogic.parseStyledText('Just text');
+      expect(runs.length, 1);
+      expect(runs.single.hasStyle, isFalse);
+    });
+  });
 }

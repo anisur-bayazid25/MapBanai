@@ -47,13 +47,20 @@ Everything works offline; tiles open instantly and data stays on the device.
    form with the built-in builder.
    - Multi-language forms (`label::English (en)`, `label::Bangla (bn)`, …)
      let you pick the label language while filling the form.
-3. Fill the form: conditional questions appear automatically, calculations
-   update live — including ODK date functions (`today()`, `now()`,
-   `format-date()`), text builders (`concat()`, `join()`), branching
-   (`if()`, `coalesce()`), select helpers and math. Labels containing
-   `${question}` placeholders update live with current answers, and any
-   HTML markup in labels is cleaned for display. Photos are captured and
-   geotagged, GPS points include accuracy.
+3. Fill the form: conditional questions appear automatically, and whole
+   modules hide/show by group skip logic (e.g. an incomplete interview
+   skips the remaining modules). Calculations update live — including ODK
+   date functions (`today()`, `now()`, `format-date()`), one-time stamps
+   (`once()`), totals (`sum()`, `coalesce()`), pattern checks (`regex()`),
+   text builders (`concat()`, `join()`), branching (`if()`), select and
+   math helpers. Labels containing `${question}` placeholders update live
+   with current answers, and colored/styled labels (red warnings, module
+   headers) render as in ODK Collect. Photos are captured and geotagged,
+   GPS points include accuracy.
+
+   > **Note:** repeat blocks (`begin_repeat`) currently render a single
+   > instance — household rosters and similar loops show one entry. Full
+   > repeat iteration is planned.
 4. Use **Save as draft** to park an unfinished form — resume any time from
    **History → Drafts**.
 

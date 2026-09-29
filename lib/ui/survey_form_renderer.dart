@@ -129,12 +129,35 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
 
   void _updateVisibility() {
     _visibleQuestions.clear();
+    final groups = widget.form.groupByName;
     for (final question in widget.form.questions) {
       if (question.type == QuestionType.hidden) continue;
-      if (question.isRelevant(_answers)) {
-        _visibleQuestions.add(question.name);
+      if (!question.isRelevant(_answers)) continue;
+      // Every enclosing group must be relevant too (e.g. ${a12} = '1'
+      // on a module hides the whole module when the interview failed).
+      var groupsOk = true;
+      for (final groupName in question.groupPath) {
+        final group = groups[groupName];
+        if (group != null && !group.isRelevant(_answers)) {
+          groupsOk = false;
+          break;
+        }
       }
+      if (groupsOk) _visibleQuestions.add(question.name);
     }
+  }
+
+  /// True for ODK `once(...)` calculations (case-insensitive, no nesting).
+  static bool _isOnceCalculation(String? expression) {
+    if (expression == null) return false;
+    final trimmed = expression.trim().toLowerCase();
+    return trimmed.startsWith('once(') && trimmed.endsWith(')');
+  }
+
+  /// Removes the outer `once(...)` wrapper, returning the inner expression.
+  static String _unwrapOnce(String expression) {
+    final trimmed = expression.trim();
+    return trimmed.substring(5, trimmed.length - 1);
   }
 
   void _updateCalculations() {
@@ -149,8 +172,16 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             question.calculation == null) {
           continue;
         }
+        final raw = question.calculation ?? question.defaultValue;
+        // once(x): freeze the first computed value — never recompute once
+        // the answer exists (matches ODK semantics for start-time stamps).
+        if (_isOnceCalculation(raw) &&
+            _answers[question.name] != null &&
+            _answers[question.name].toString().isNotEmpty) {
+          continue;
+        }
         final result = SurveyLogic.evaluateCalculation(
-          question.calculation ?? question.defaultValue,
+          _isOnceCalculation(raw) ? _unwrapOnce(raw!) : raw,
           _answers,
         );
         if (result != null && _answers[question.name] != result) {
@@ -255,20 +286,23 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            SurveyLogic.stripHtml(widget.form.name),
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+          RichText(
+            text: _styledSpan(
+              widget.form.name,
+              Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+              _answers,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            SurveyLogic.interpolate(
-              SurveyLogic.stripHtml(widget.form.description),
+          RichText(
+            text: _styledSpan(
+              widget.form.description,
+              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
               _answers,
-            ),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade600,
             ),
           ),
           const SizedBox(height: 16),
@@ -303,12 +337,28 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
 
   List<Widget> _buildQuestions() {
     final widgets = <Widget>[];
+    final groups = widget.form.groupByName;
+    final emittedGroups = <String>{};
 
     for (int i = 0; i < widget.form.questions.length; i++) {
       final question = widget.form.questions[i];
 
       if (!_visibleQuestions.contains(question.name)) {
         continue;
+      }
+
+      // Section headers for enclosing groups (module titles, colored in
+      // real forms). Emitted once, outermost first, only for visible groups.
+      for (final groupName in question.groupPath) {
+        if (emittedGroups.contains(groupName)) continue;
+        final group = groups[groupName];
+        if (group == null) continue;
+        if (!group.isRelevant(_answers)) continue;
+        final label = group.labelFor(_formLanguage).trim();
+        if (label.isNotEmpty) {
+          widgets.add(_buildGroupHeader(label));
+        }
+        emittedGroups.add(groupName);
       }
 
       widgets.add(
@@ -325,6 +375,29 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     }
 
     return widgets;
+  }
+
+  /// A colored module/section header for an ODK group.
+  Widget _buildGroupHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: _styledSpan(
+              label,
+              Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+              _answers,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Divider(color: Theme.of(context).dividerColor, height: 1),
+        ],
+      ),
+    );
   }
 
   void _saveForm() {
@@ -376,6 +449,38 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
   }
 }
 
+/// Builds an [InlineSpan] for an XLSForm label: `${name}` placeholders are
+/// interpolated with [answers], then the ODK HTML subset (`<span
+/// style="color:…">`, `<b>`, `<i>`, …) is rendered as styled runs on top of
+/// [base]. Falls back to plain text when the label carries no styling.
+InlineSpan _styledSpan(
+  String raw,
+  TextStyle? base,
+  Map<String, dynamic> answers,
+) {
+  final text = SurveyLogic.interpolate(raw, answers);
+  final runs = SurveyLogic.parseStyledText(text);
+  if (runs.length == 1 && !runs.first.hasStyle) {
+    return TextSpan(text: runs.first.text, style: base);
+  }
+  if (runs.isEmpty) return TextSpan(text: '', style: base);
+  return TextSpan(
+    children: [
+      for (final run in runs)
+        TextSpan(
+          text: run.text,
+          style: (base ?? const TextStyle()).copyWith(
+            fontWeight: run.bold ? FontWeight.w700 : null,
+            fontStyle: run.italic ? FontStyle.italic : null,
+            decoration:
+                run.underline ? TextDecoration.underline : null,
+            color: run.color != null ? Color(run.color!) : null,
+          ),
+        ),
+    ],
+  );
+}
+
 class _QuestionWidget extends StatelessWidget {
   final Question question;
   final String languageCode;
@@ -398,14 +503,9 @@ class _QuestionWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayLabel = SurveyLogic.interpolate(
-      SurveyLogic.stripHtml(question.labelFor(languageCode)),
-      answers,
+    final baseLabelStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+      fontWeight: FontWeight.w600,
     );
-    final rawHint = question.hintFor(languageCode);
-    final displayHint = rawHint == null
-        ? null
-        : SurveyLogic.interpolate(SurveyLogic.stripHtml(rawHint), answers);
     AppLocalizations? l10n;
     try {
       l10n = AppLocalizations.of(context);
@@ -415,31 +515,36 @@ class _QuestionWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: displayLabel,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+        // Notes render their label inside the blue box below; a header
+        // here would duplicate it.
+        if (question.type != QuestionType.note)
+          RichText(
+            text: TextSpan(
+              children: [
+                _styledSpan(
+                  question.labelFor(languageCode),
+                  baseLabelStyle,
+                  answers,
                 ),
-              ),
-              if (question.required)
-                TextSpan(
-                  text: ' *',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.red,
+                if (question.required)
+                  TextSpan(
+                    text: ' *',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.red,
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (displayHint != null) ...[
+        if (question.hintFor(languageCode) != null) ...[
           const SizedBox(height: 4),
-          Text(
-            displayHint,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey.shade600,
+          RichText(
+            text: _styledSpan(
+              question.hintFor(languageCode)!,
+              Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+              answers,
             ),
           ),
         ],
@@ -617,12 +722,12 @@ class _QuestionWidget extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.blue.shade200),
           ),
-          child: Text(
-            SurveyLogic.interpolate(
-              SurveyLogic.stripHtml(question.labelFor(languageCode)),
+          child: RichText(
+            text: _styledSpan(
+              question.labelFor(languageCode),
+              TextStyle(color: Colors.blue.shade900, fontSize: 14),
               answers,
             ),
-            style: TextStyle(color: Colors.blue.shade900),
           ),
         );
 

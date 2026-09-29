@@ -53,6 +53,73 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.4.3] — real-form round: styled labels, group relevance, once/sum/regex/position
+
+### Diagnosis (UGGP form screenshots + device screenshot)
+- Colors: v2.4.2 *stripped* HTML; user wants ODK Collect-style rendering.
+- Skip logic: `begin_group … relevant=${a12}='1'` rows were dropped by
+  `_parseQuestion→_isStructuralOrMeta→null`, so module gating never
+  applied. Root cause of "answering no still shows next questions".
+- Form also uses `once(today())`, `once(format-date-time(now(),'%H:%M'))`,
+  `coalesce(…)+…` totals, `sum(${b15_val})`, `regex(.,'…')` constraints,
+  `position(..)`, `repeat_count`, hyphenated `count-selected` inside
+  relevance — several unsupported.
+
+### Model (`lib/models/survey_form.dart`)
+- New `GroupInfo{name,label,relevance,labelTranslations,isRepeat,
+  repeatCount}` + JSON; `Question.groupPath: List<String>` + JSON;
+  `SurveyForm.groups` + JSON + `groupByName`. All backward compatible
+  (missing keys → empty).
+
+### Parser (`lib/services/xlsform_parser.dart`)
+- Main loop keeps `groupStack`: begingroup/beginrepeat → `_parseGroup`
+  (label + translations via existing helpers, relevance, repeat_count) push;
+  endgroup/endrepeat → pop; questions get `groupPath` snapshot. Anonymous
+  groups (empty name) don't push. `_parseQuestion` structural branch now
+  only swallows meta rows. Note: form uses `label::bengali` →
+  `_extractLanguageCode` already maps bengali→bn.
+
+### Engine (`lib/services/survey_logic.dart`)
+- `once(x)` → inner value (renderer implements the freeze); `sum(...)`
+  flattens lists, skips null/blank, numeric-only, empty → 0;
+  `regex(v,pat)` → `RegExp('^(?:pat)$')` full-match; `position(..)` → 1.
+  `..` lexed as single ident token (was two `.` → arg-parse throw → null).
+- Arithmetic coerces numeric strings (`_tryNum` in additive/multiplicative/
+  unary): `'3'+0 → 3` (was `'30'` — would have corrupted b06_total);
+  pure strings still concat; unary minus coerces.
+- Styled text: `RichRun{text,bold,italic,underline,color int?}` +
+  `parseStyledText` (stack parser: b/strong/i/em/u/span/font/br;
+  style-attr decls color/font-weight/font-style/text-decoration;
+  named + #rgb/#rrggbb colors; unknown/malformed tags skipped, text kept) +
+  shared entity decoder. Tag regex simplified to `<(/?)(name)([^<>]*)>`
+  after a quoting-mangled first attempt.
+- Test-only discovery: Flutter M3 `Colors.red` is 0xFFF44336, not CSS
+  0xFFFF0000 — color assertions must use explicit ARGB.
+
+### Renderer (`lib/ui/survey_form_renderer.dart`)
+- `_updateVisibility` also requires every enclosing group's relevance.
+- `_buildQuestions` emits `_buildGroupHeader` (styled label + divider)
+  once per visible group, outermost first.
+- `_updateCalculations` honors `once(...)`: skips when answer exists,
+  else evaluates unwrapped inner expression.
+- `_styledSpan(raw, base, answers)` helper (interpolate → parse → TextSpans
+  on base style); applied to headers, hints, notes, group headers, form
+  title/description. Note header suppressed (was duplicated with blue box).
+- Fixed two self-inflicted edit glitches (duplicated class header, orphaned
+  style lines) before analyze; `find.text` in tests needs
+  `findRichText:true` since labels are RichText now.
+
+### Tests
+- Parser: a12 gating, nested paths, JSON round-trip. Engine: once/sum/
+  regex (incl. `or .=99` phone pattern)/position/coercion/styled text.
+  New `survey_group_visibility_test.dart`: hidden/shown/live-toggle/no-HTML/
+  red-span/module-header. Suite 244→260 green.
+
+### Known limitation (documented in CHANGELOG + USER_GUIDE)
+- Repeats render one instance; `repeat_count` stored, not expanded.
+
+---
+
 ## [2.4.2] — ODK function library + HTML-strip + label interpolation
 
 ### Problem (from device screenshot, UGGP Household Survey)

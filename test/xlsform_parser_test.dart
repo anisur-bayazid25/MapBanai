@@ -304,5 +304,75 @@ void main() {
       expect(restored.questions.first.name, 'count');
       expect(restored.questions.first.type, QuestionType.integer);
     });
+
+    test('begin_group relevance gates enclosed questions (a12 pattern)', () {
+      final bytes = _buildWorkbook(
+        survey: [
+          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('relevant')],
+          [TextCellValue('select_one yn'), TextCellValue('a12'), TextCellValue('Outcome')],
+          [TextCellValue('begin_group'), TextCellValue('module_b'), TextCellValue('Module B'), TextCellValue("\${a12} = '1'")],
+          [TextCellValue('text'), TextCellValue('b01'), TextCellValue('Name')],
+          [TextCellValue('end_group')],
+          [TextCellValue('note'), TextCellValue('end_note'), TextCellValue('Done'), TextCellValue("\${a12} != '1'")],
+          [TextCellValue('text'), TextCellValue('after'), TextCellValue('After')],
+        ],
+        choices: [
+          [TextCellValue('list_name'), TextCellValue('name'), TextCellValue('label')],
+          [TextCellValue('yn'), TextCellValue('1'), TextCellValue('Completed')],
+          [TextCellValue('yn'), TextCellValue('2'), TextCellValue('Not completed')],
+        ],
+      );
+
+      final form = XlsFormParser.parse(bytes);
+      expect(form.groups, hasLength(1));
+      expect(form.groups.single.name, 'module_b');
+      expect(form.groups.single.label, 'Module B');
+      expect(form.groups.single.relevance, "\${a12} = '1'");
+
+      final b01 = form.questions.firstWhere((q) => q.name == 'b01');
+      expect(b01.groupPath, ['module_b']);
+      // Group/end markers never become questions.
+      expect(form.questions.any((q) => q.name == 'module_b'), isFalse);
+      // Questions outside the group stay top-level.
+      expect(
+        form.questions.firstWhere((q) => q.name == 'after').groupPath,
+        isEmpty,
+      );
+      final endNote = form.questions.firstWhere((q) => q.name == 'end_note');
+      expect(endNote.groupPath, isEmpty);
+      expect(endNote.relevance, "\${a12} != '1'");
+
+      // JSON round-trip preserves groups and paths.
+      final restored = SurveyForm.fromJson(form.toJson());
+      expect(restored.groups.single.relevance, "\${a12} = '1'");
+      expect(
+        restored.questions.firstWhere((q) => q.name == 'b01').groupPath,
+        ['module_b'],
+      );
+    });
+
+    test('nested groups accumulate the full group path', () {
+      final bytes = _buildWorkbook(
+        survey: [
+          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('relevant')],
+          [TextCellValue('begin_group'), TextCellValue('outer'), TextCellValue('Outer')],
+          [TextCellValue('begin_group'), TextCellValue('inner'), TextCellValue('Inner'), TextCellValue("\${flag} = 'y'")],
+          [TextCellValue('text'), TextCellValue('deep'), TextCellValue('Deep')],
+          [TextCellValue('end_group')],
+          [TextCellValue('text'), TextCellValue('shallow'), TextCellValue('Shallow')],
+          [TextCellValue('end_group')],
+        ],
+      );
+
+      final form = XlsFormParser.parse(bytes);
+      expect(
+        form.questions.firstWhere((q) => q.name == 'deep').groupPath,
+        ['outer', 'inner'],
+      );
+      expect(
+        form.questions.firstWhere((q) => q.name == 'shallow').groupPath,
+        ['outer'],
+      );
+    });
   });
 }

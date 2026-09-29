@@ -64,10 +64,41 @@ class XlsFormParser {
     final constraintMsgColMap = _localizedColumns(headers, 'constraint_message');
 
     final questions = <Question>[];
+    final groups = <GroupInfo>[];
+    final groupStack = <GroupInfo>[];
     for (int i = 1; i < rows.length; i++) {
       final row = rows[i];
       final typeRaw = _cell(row, typeCol);
       if (typeRaw == null || typeRaw.trim().isEmpty) continue;
+
+      // ODK containers: track group membership (with relevance!) instead of
+      // silently dropping them. begin_repeat is tracked the same way so its
+      // relevance/repeat_count survive; the renderer shows one instance.
+      final keyword = typeRaw
+          .trim()
+          .split(RegExp(r'\s+'))
+          .first
+          .toLowerCase()
+          .replaceAll(RegExp('[_ ]'), '');
+      if (keyword == 'begingroup' || keyword == 'beginrepeat') {
+        final name = (_cell(row, nameCol) ?? '').trim();
+        if (name.isNotEmpty) {
+          final group = _parseGroup(
+            row: row,
+            headers: headers,
+            name: name,
+            labelColMap: labelColMap,
+            isRepeat: keyword == 'beginrepeat',
+          );
+          if (!groups.any((g) => g.name == name)) groups.add(group);
+          groupStack.add(group);
+        }
+        continue;
+      }
+      if (keyword == 'endgroup' || keyword == 'endrepeat') {
+        if (groupStack.isNotEmpty) groupStack.removeLast();
+        continue;
+      }
 
       final parsed = _parseQuestion(
         row: row,
@@ -79,6 +110,7 @@ class XlsFormParser {
         constraintMsgColMap: constraintMsgColMap,
         rowIndex: i,
         choices: choices,
+        groupPath: [for (final g in groupStack) g.name],
       );
       if (parsed != null) questions.add(parsed);
     }
@@ -121,6 +153,7 @@ class XlsFormParser {
       version: settings['version'] is int ? settings['version'] as int : 1,
       languages: languages,
       defaultLanguage: defaultLang,
+      groups: groups,
     );
   }
 
@@ -309,6 +342,28 @@ class XlsFormParser {
 
   // ── question parsing ─────────────────────────────────────────
 
+  /// Parses a `begin_group` / `begin_repeat` row into a [GroupInfo],
+  /// preserving its display label (all languages) and — critically — its
+  /// `relevant` expression, which gates every question inside the group.
+  static GroupInfo _parseGroup({
+    required List<String?> row,
+    required Map<String, int> headers,
+    required String name,
+    required Map<String, int> labelColMap,
+    required bool isRepeat,
+  }) {
+    final labelRaw = _collectLocalizedRaw(row, labelColMap);
+    final defaultLabel = _pickDefaultLabel(labelRaw);
+    return GroupInfo(
+      name: name,
+      label: defaultLabel.isNotEmpty ? defaultLabel : name,
+      relevance: _cell(row, headers['relevant'] ?? headers['relevance'] ?? -1),
+      labelTranslations: _translationsFromRaw(labelRaw),
+      isRepeat: isRepeat,
+      repeatCount: isRepeat ? _cell(row, headers['repeat_count'] ?? -1) : null,
+    );
+  }
+
   static Question? _parseQuestion({
     required List<String?> row,
     required Map<String, int> headers,
@@ -319,15 +374,15 @@ class XlsFormParser {
     required Map<String, int> constraintMsgColMap,
     required int rowIndex,
     required Map<String, List<Choice>> choices,
+    List<String>? groupPath,
   }) {
     final typeRaw = _cell(row, typeCol) ?? '';
     final name = _cell(row, nameCol) ?? '';
 
     if (_isStructuralOrMeta(typeRaw)) {
-      // ODK group/repeat containers and auto-computed metadata rows
-      // (start/end/today/deviceid/username/…). Groups are flattened and
-      // metadata is captured automatically by the app, so neither needs a
-      // rendered question.
+      // ODK auto-computed metadata rows (start/end/today/deviceid/…).
+      // Group/repeat containers are handled by the caller (group stack),
+      // so reaching here means end_group/end_repeat leftovers or metadata.
       return null;
     }
 
@@ -399,6 +454,7 @@ class XlsFormParser {
       labelTranslations: labelTranslations,
       hintTranslations: hintTranslations,
       constraintMessageTranslations: constraintTranslations,
+      groupPath: groupPath,
     );
   }
 

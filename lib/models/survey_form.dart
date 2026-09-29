@@ -22,6 +22,20 @@ class SurveyForm {
   /// back to the first entry in [languages] or 'en'.
   final String? defaultLanguage;
 
+  /// ODK group/repeat containers in sheet order. Questions reference these
+  /// by name via [Question.groupPath]; a question is only shown when its own
+  /// relevance AND every enclosing group's relevance hold.
+  final List<GroupInfo> groups;
+
+  /// Group lookup by name (first definition wins).
+  Map<String, GroupInfo> get groupByName {
+    final map = <String, GroupInfo>{};
+    for (final g in groups) {
+      map.putIfAbsent(g.name, () => g);
+    }
+    return map;
+  }
+
   SurveyForm({
     required this.id,
     required this.name,
@@ -30,7 +44,9 @@ class SurveyForm {
     this.version = 1,
     List<String>? languages,
     this.defaultLanguage,
-  }) : languages = languages ?? const [];
+    List<GroupInfo>? groups,
+  })  : languages = languages ?? const [],
+        groups = groups ?? const [];
 
   /// True when this form defines more than one language.
   bool get isMultiLanguage => languages.length > 1;
@@ -63,6 +79,7 @@ class SurveyForm {
     'version': version,
     if (languages.isNotEmpty) 'languages': languages,
     if (defaultLanguage != null) 'default_language': defaultLanguage,
+    if (groups.isNotEmpty) 'groups': groups.map((g) => g.toJson()).toList(),
   };
 
   factory SurveyForm.fromJson(Map<String, dynamic> json) => SurveyForm(
@@ -75,7 +92,77 @@ class SurveyForm {
     version: json['version'] ?? 1,
     languages: (json['languages'] as List?)?.map((e) => e.toString()).toList() ?? const [],
     defaultLanguage: json['default_language'] as String?,
+    groups: (json['groups'] as List?)
+        ?.map((g) => GroupInfo.fromJson(g as Map<String, dynamic>))
+        .toList() ?? const [],
   );
+}
+
+/// An ODK `begin_group` / `begin_repeat` container.
+///
+/// Groups render as section headers and — critically — carry a `relevance`
+/// expression that gates every question inside (e.g. `${a12} = '1'` hides a
+/// whole module until the interview outcome is "completed").
+class GroupInfo {
+  final String name;
+  final String label;
+  final String? relevance;
+
+  /// Language -> translation for the group label.
+  final Map<String, String> labelTranslations;
+
+  /// True for `begin_repeat` containers.
+  final bool isRepeat;
+
+  /// The `repeat_count` expression for repeats (informational for now:
+  /// repeats render a single instance).
+  final String? repeatCount;
+
+  const GroupInfo({
+    required this.name,
+    this.label = '',
+    this.relevance,
+    Map<String, String>? labelTranslations,
+    this.isRepeat = false,
+    this.repeatCount,
+  }) : labelTranslations = labelTranslations ?? const {};
+
+  String labelFor(String? languageCode) {
+    if (languageCode == null || languageCode == 'default') return label;
+    final code = languageCode.toLowerCase();
+    return labelTranslations[code] ?? label;
+  }
+
+  bool isRelevant(Map<String, dynamic> answers) {
+    return SurveyLogic.evaluateRelevance(relevance, answers);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'label': label,
+    if (relevance != null) 'relevance': relevance,
+    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
+    if (isRepeat) 'is_repeat': true,
+    if (repeatCount != null) 'repeat_count': repeatCount,
+  };
+
+  factory GroupInfo.fromJson(Map<String, dynamic> json) {
+    final raw = json['label_translations'];
+    return GroupInfo(
+      name: json['name']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      relevance: json['relevance']?.toString(),
+      labelTranslations: raw is Map
+          ? Map<String, String>.fromEntries(
+              raw.entries.map(
+                (e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString()),
+              ),
+            )
+          : const {},
+      isRepeat: json['is_repeat'] == true,
+      repeatCount: json['repeat_count']?.toString(),
+    );
+  }
 }
 
 class Question {
@@ -98,6 +185,11 @@ class Question {
   final Map<String, String> hintTranslations;
   final Map<String, String> constraintMessageTranslations;
 
+  /// Enclosing ODK group names, outermost first. A question is only shown
+  /// when its own relevance AND every enclosing group's relevance hold.
+  /// Empty for top-level questions.
+  final List<String> groupPath;
+
   Question({
     required this.name,
     required this.label,
@@ -114,9 +206,11 @@ class Question {
     Map<String, String>? labelTranslations,
     Map<String, String>? hintTranslations,
     Map<String, String>? constraintMessageTranslations,
+    List<String>? groupPath,
   })  : labelTranslations = labelTranslations ?? const {},
         hintTranslations = hintTranslations ?? const {},
-        constraintMessageTranslations = constraintMessageTranslations ?? const {};
+        constraintMessageTranslations = constraintMessageTranslations ?? const {},
+        groupPath = groupPath ?? const [];
 
   /// Returns the label for [languageCode] (e.g. 'bn'), falling back to
   /// the default [label] when no translation exists.
@@ -163,6 +257,7 @@ class Question {
     if (hintTranslations.isNotEmpty) 'hint_translations': hintTranslations,
     if (constraintMessageTranslations.isNotEmpty)
       'constraint_message_translations': constraintMessageTranslations,
+    if (groupPath.isNotEmpty) 'group_path': groupPath,
   };
 
   factory Question.fromJson(Map<String, dynamic> json) {
@@ -194,6 +289,10 @@ class Question {
       labelTranslations: _readMap('label_translations'),
       hintTranslations: _readMap('hint_translations'),
       constraintMessageTranslations: _readMap('constraint_message_translations'),
+      groupPath: (json['group_path'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
   }
 

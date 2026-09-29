@@ -4,6 +4,41 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.4.3] - 2026-08-23
+
+### Fixed
+- **Label colors now render** — `<span style="color:red; font-weight:bold">`,
+  `<b>`, `<i>`, `<u>`, `<font color>` and `<br/>` in question labels, hints,
+  notes, group headers and form titles are rendered as styled text (named +
+  hex colors) instead of showing raw markup. Malformed tags degrade
+  gracefully (tag dropped, text kept).
+- **Group skip logic works** — `begin_group` rows were silently dropped, so
+  group-level `relevant` (e.g. `${a12} = '1'` on whole modules) never
+  applied: answering "no" still showed every following question. Groups are
+  now tracked with their relevance; a question shows only when its own AND
+  all enclosing groups' relevance hold. Visible groups render their (styled)
+  module header once.
+- **New ODK functions**: `once()` (first computed value frozen — start-time
+  stamps no longer recompute), `sum()` (totals numerics, skips blanks),
+  `regex()` (full-match semantics, so mobile-number patterns validate
+  correctly), `position()` (1 outside repeats).
+- **Arithmetic coerces numeric strings** — `coalesce(${count}, 0) + ...`
+  totals over string answers now add (`3`) instead of concatenating (`30`).
+- Note questions no longer show their label twice (header + blue box).
+
+### Known limitations
+- Repeats (`begin_repeat`) render a single instance; `repeat_count` is
+  recorded but not expanded yet. All other logic in repeat blocks evaluates
+  normally.
+
+### Tests
+- Parser: a12-gating group test + nested group paths + JSON round-trip.
+- Engine: once/sum/regex/position, string-coercion arithmetic, styled-text
+  parsing (incl. malformed tags).
+- New renderer widget tests: gated module hidden/shown/toggled live, no raw
+  HTML, red span actually red, module header emitted.
+- Suite: 260 tests green.
+
 ## [2.4.2] - 2026-08-23
 
 ### Fixed
