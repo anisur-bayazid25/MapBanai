@@ -28,6 +28,8 @@ No account, no registration, no internet needed.
 
 ## Home screen
 
+- **Start/resume field visit** — review a site, fill its form and attach a geotagged photo.
+- **Field quality / Offline maps** — inspect project issues and manage permitted map packages.
 - **Mode tiles** — Survey, GIS, GPS and Study Area as a 2×2 grid of square
   cards; below them GPS CSV Viewer, Cloud Sync and WebMap in one row.
 - **Settings** — the ☰ menu icon in the top-right corner.

@@ -199,3 +199,13 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 - SDK 36 apksigner verification — v1/v2 signatures verified, one signer. aapt reports com.mapbanai.mapbanai, 2.6.0, code 23, minSdk 23.
 - Implemented all four recommended workflow improvements: linked visits, permitted offline map downloads, revision/team merge exports and field quality checks. GPS accuracy remains advisory for photos.
 - No Android device/emulator or live sync endpoint was connected. FIELD_WORKFLOW.md and RELEASE_NOTES.md document usage and remaining integration checks. User-owned outputs were not modified or staged.
+
+## 2026-10-12 — published 2.6.0
+
+- Source commit: fd53e48, pushed to main; annotated tag v2.6.0 pushed without force.
+- GitHub workflow 38233244146 completed successfully: signed Android build, tests, analysis and APK publication all passed.
+- Release: https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.0
+- Published asset: app-release.apk, 122,873,292 bytes, uploaded successfully.
+- Local APK signing certificate matches the published v2.4.4 certificate, supporting an in-place upgrade.
+- Downloaded published APK verified with apksigner; certificate matches v2.4.4. aapt confirms 2.6.0/code 23/minSdk 23.
+- Published APK SHA-256: 495B3EFBDF09C19C942EC5781F4AC3655C9E7BE6B1BD351416759A09C694F818.
