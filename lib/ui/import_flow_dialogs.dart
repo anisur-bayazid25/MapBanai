@@ -91,8 +91,8 @@ Future<void> runProjectImport(
         navigator.pop();
         progressVisible = false;
       }
-      choice = await showProjectConflictDialog(context, session.meta)
-          ?? ImportChoice.cancel;
+      choice = await showProjectConflictDialog(context, session.meta) ??
+          ImportChoice.cancel;
       if (choice == ImportChoice.cancel) return;
     } else if (progressVisible) {
       navigator.pop();
@@ -212,53 +212,65 @@ Future<void> showExportProjectOptions(
   required ProjectSharingFlow flow,
   required Project project,
 }) async {
+  var includeSyncConnection = false;
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
-    builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Export "${project.name}" (v${project.projectVersion})',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'The project package includes forms, questions, settings and '
-              'layers. Collected data and photos are never exported.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.pop(context, true),
-                icon: const Icon(Icons.save_alt_rounded),
-                label: const Text('SAVE PROJECT FILE'),
+    builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Export "${project.name}" (v${project.projectVersion})',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'The project package includes forms, questions, settings and '
+                      'layers. Collected data and photos are never exported.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Include sync connection'),
+                      subtitle: const Text(
+                          'Include the Apps Script URL and API key for trusted enumerators. Recipients can read the key.'),
+                      value: includeSyncConnection,
+                      onChanged: (value) => setSheetState(
+                          () => includeSyncConnection = value ?? false),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.save_alt_rounded),
+                        label: const Text('SAVE PROJECT FILE'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: () => Navigator.pop(context, false),
+                        icon: const Icon(Icons.ios_share_rounded),
+                        label: const Text('SHARE PROJECT'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                onPressed: () => Navigator.pop(context, false),
-                icon: const Icon(Icons.ios_share_rounded),
-                label: const Text('SHARE PROJECT'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
+            )),
   );
   if (confirmed == null || !context.mounted) return;
 
   final messenger = ScaffoldMessenger.of(context);
   if (confirmed) {
-    final status = await flow.exportProject(project);
+    final status = await flow.exportProject(project,
+        includeSyncConnection: includeSyncConnection);
     if (!context.mounted) return;
     messenger.showSnackBar(
       SnackBar(
@@ -270,7 +282,8 @@ Future<void> showExportProjectOptions(
       ),
     );
   } else {
-    final shared = await flow.shareProject(project);
+    final shared = await flow.shareProject(project,
+        includeSyncConnection: includeSyncConnection);
     if (!context.mounted) return;
     if (shared) {
       messenger.showSnackBar(

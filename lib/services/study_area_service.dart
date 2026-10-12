@@ -1,3 +1,4 @@
+import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -150,6 +151,9 @@ String studyAreaCanonicalJson(dynamic value) {
 
 class StudyAreaSite {
   final String id;
+  // Deterministic UUID keeps legacy/imported IDs linked across devices and exports.
+  String get featureUuid =>
+      const Uuid().v5(Uuid.NAMESPACE_URL, 'mapbanai:feature:$id');
   double latitude;
   double longitude;
   Map<String, String> attributes;
@@ -198,6 +202,7 @@ class StudyAreaSite {
         'project_id': projectId,
         'project_external_id': projectExternalId,
         'layer_id': layerId,
+        'feature_uuid': featureUuid,
         'form_answers': formAnswers,
         'form_snapshot': formSnapshot,
         'latitude': latitude,
@@ -304,6 +309,7 @@ class StudyAreaSite {
         'project_id': projectId,
         'project_external_id': projectExternalId,
         'layer_id': layerId,
+        'feature_uuid': featureUuid,
         'form_answers': formAnswers,
         'form_snapshot': formSnapshot,
       };
@@ -359,6 +365,7 @@ class StudyAreaSite {
               ? sourceProperties![entry.key]
               : entry.value,
         'id': id,
+        'feature_uuid': featureUuid,
         'status': status.name,
         'latitude': latitude,
         'longitude': longitude,
@@ -372,6 +379,7 @@ class StudyAreaSite {
           'project_id': projectId,
           'project_external_id': projectExternalId,
           'layer_id': layerId,
+          'feature_uuid': featureUuid,
           'form_answers': formAnswers,
           'form_snapshot': formSnapshot,
           'attributes': attributes,

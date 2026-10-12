@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/help_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/l10n/app_localizations.dart';
@@ -195,6 +196,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: Text(l10n?.settings ?? 'Settings'),
         actions: [
+          IconButton(
+              tooltip: 'Help & manager setup',
+              icon: const Icon(Icons.help_outline),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const HelpScreen()))),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Center(

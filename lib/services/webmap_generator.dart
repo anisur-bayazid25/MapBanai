@@ -70,7 +70,14 @@ class WebMapGenerator {
     } catch (_) {
       template = await File('assets/webmap/atlas.html').readAsString();
     }
+    String studio;
+    try {
+      studio = await rootBundle.loadString('assets/webmap/map_studio.js');
+    } catch (_) {
+      studio = await File('assets/webmap/map_studio.js').readAsString();
+    }
     return template
+        .replaceAll('__MAP_STUDIO_JS__', studio)
         .replaceAll('__LEAFLET_CSS__', css)
         .replaceAll('__LEAFLET_JS__', js)
         .replaceAll('__FORM_OPTIONS__', formOptions)

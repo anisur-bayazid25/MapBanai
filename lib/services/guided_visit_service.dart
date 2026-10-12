@@ -79,6 +79,7 @@ class GuidedVisitService {
             'project_id': projectId,
             'project_external_id': project.externalId,
             'site_id': site.id,
+            'feature_uuid': site.featureUuid,
             'layer_id': site.layerId,
             'started_at': DateTime.now().toUtc().toIso8601String(),
             'state': 'draft',

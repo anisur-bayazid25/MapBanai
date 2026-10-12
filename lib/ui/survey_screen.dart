@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/questionnaire_sync_screen.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 
@@ -47,7 +48,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
     final projectId = project?.id;
     final rows = projectId == null
         ? <StoredForm>[]
-        : await _database.getStoredFormsForProject(projectId);
+        : (await ProjectWorkspaceService(_database).load(projectId)).forms;
     if (!mounted) return;
     setState(() {
       _projectId = projectId;
@@ -195,6 +196,17 @@ class _SurveyScreenState extends State<SurveyScreen> {
       appBar: AppBar(
         title: const Text('Survey Mode'),
         actions: [
+          IconButton(
+              tooltip: 'Sync questionnaire',
+              icon: const Icon(Icons.cloud_download_outlined),
+              onPressed: _projectId == null
+                  ? null
+                  : () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => QuestionnaireSyncScreen(
+                              database: _database, projectId: _projectId!)));
+                      await _loadStoredForms();
+                    }),
           IconButton(
             tooltip: 'Build or import a survey form',
             icon: const Icon(Icons.library_add_outlined),

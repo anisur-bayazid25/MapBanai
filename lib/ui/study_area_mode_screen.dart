@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
 import 'package:mapbanai/services/study_area_outbox_service.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -1382,6 +1383,16 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       site: site),
                   icon: const Icon(Icons.edit_location_alt_outlined),
                   label: const Text('Redraw geometry')),
+            if (_workspace != null)
+              TextButton.icon(
+                  icon: const Icon(Icons.timeline),
+                  label: const Text('Site timeline / add observation'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => SiteTimelineScreen(
+                          database: _database,
+                          store: _store,
+                          projectId: _workspace!.project.id,
+                          site: site)))),
             TextButton.icon(
                 onPressed: () => _showHistory(site),
                 icon: const Icon(Icons.history),

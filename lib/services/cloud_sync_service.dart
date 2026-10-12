@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -80,10 +81,12 @@ class CloudSyncService {
     }
     final apiKey = config?.syncApiKey?.trim() ?? '';
 
-    final project = await db.getProjectById(projectId);
-    if (project == null) {
+    final existingProject = await db.getProjectById(projectId);
+    if (existingProject == null) {
       throw const CloudSyncException('Project not found');
     }
+
+    final project = (await ProjectWorkspaceService(db).load(projectId)).project;
 
     if (studyAreaStore != null) {
       final operator = await db.getSetting('user_name') ?? 'Local fieldworker';
@@ -109,6 +112,7 @@ class CloudSyncService {
     final body = jsonEncode({
       'apiKey': apiKey,
       'action': 'sync_data',
+      'projectId': project.externalId,
       'responses': responsesPayload,
       'features': featuresPayload,
     });
@@ -283,6 +287,7 @@ class CloudSyncService {
         'form_name': formName,
         'answers': answers is Map ? answers : {},
         'edited_at': resp['edited_at'],
+        if (resp['visit'] is Map) 'feature_uuid': resp['visit']['feature_uuid'],
         if (resp['workflow'] == 'guided_visit_v1') ...{
           'workflow': resp['workflow'],
           'visit': resp['visit'],

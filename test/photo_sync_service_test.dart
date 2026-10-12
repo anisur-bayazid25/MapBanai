@@ -42,9 +42,10 @@ void main() {
     final photoPath = await createTempPhoto('a.jpg', List<int>.filled(100, 1));
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     var attempts = 0;
+    final payloads = <Map<String, dynamic>>[];
     server.listen((req) async {
       attempts++;
-      await utf8.decoder.bind(req).join();
+      payloads.add(jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>);
       if (attempts < 3) {
         req.response.statusCode = 500;
         req.response.write('temp fail');
@@ -81,6 +82,10 @@ void main() {
       final result = await svc.syncPhotos(projectId);
 
       expect(attempts, 3);
+      expect(payloads.map((p) => p['photoId']).toSet(), hasLength(1));
+      expect(payloads.first['photoId'], matches(RegExp(r'^[a-f0-9]{64}$')));
+      expect(payloads.first['projectId'], (await db.getProjectById(projectId))!.externalId);
+      expect(payloads.first['responseId'], isNotEmpty);
       expect(result.total, 1);
       expect(result.synced, 1);
       expect(result.failed, 0);

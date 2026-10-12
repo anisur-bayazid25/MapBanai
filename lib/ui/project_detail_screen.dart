@@ -1,3 +1,7 @@
+import 'package:mapbanai/ui/project_templates_screen.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/ui/help_screen.dart';
+import 'package:mapbanai/ui/questionnaire_sync_screen.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
@@ -59,6 +63,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         project = item;
         break;
       }
+    }
+    if (project != null) {
+      project =
+          (await ProjectWorkspaceService(_database).load(project.id)).project;
     }
     final count = project == null
         ? 0
@@ -508,6 +516,29 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       appBar: AppBar(
         title: Text(project?.name ?? 'Project'),
         actions: [
+          IconButton(
+              tooltip: 'Help & manager setup',
+              icon: const Icon(Icons.help_outline),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => HelpScreen(projectId: project?.externalId)))),
+          IconButton(
+              tooltip: 'Reusable templates',
+              icon: const Icon(Icons.bookmarks_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ProjectTemplatesScreen(
+                        database: _database, projectId: widget.projectId)));
+                await _load();
+              }),
+          IconButton(
+              tooltip: 'Sync questionnaire',
+              icon: const Icon(Icons.cloud_download_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => QuestionnaireSyncScreen(
+                        database: _database, projectId: widget.projectId)));
+                await _load();
+              }),
           if (project != null) ...[
             PopupMenuButton<String>(
               key: const ValueKey('project-share-menu'),
@@ -792,6 +823,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   'background sync.',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
+                if (project.externalId != null)
+                  SelectableText('Project ID: ${project.externalId}',
+                      style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _syncUrlController,

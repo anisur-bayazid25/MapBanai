@@ -1,5 +1,16 @@
 # UPDATE_FEATURE_LOG
 
+## 2026-10-12 — local map studio / Google Sheet XLSForm sync (unreleased)
+
+- Full serial Flutter suite: 358 passed. Final questionnaire content-reversion regression: 3 passed.
+- Static analysis: no errors, three existing unused-variable warnings.
+- Browser checks: desktop/mobile palettes; decoded PNG/JPEG; native image message; no JS errors or horizontal overflow; basemap/geometry/labels/attribution export verified in Chromium.
+- Apps Script handler: mock-service authentication, project isolation and worksheet serialization passed. No live Google deployment tested.
+- Signed release preview built successfully (117.6 MB); existing Kotlin metadata diagnostics remain non-fatal. APK signature matches previous production releases.
+- Local preview APK SHA-256: `597D33A66A3EB62C0CB0A1B96EC6A523B5D37EB716E6FCB00487EB1D8A81C938`.
+- Source remains local; no new tag/push/release requested for these additions. Version currently remains 2.6.1+24.
+
+
 ## 2026-10-12 — project workspace, 2.6.1+24
 
 - `flutter test --concurrency=1`: 352 passed. Final changed GIS/guided/workspace regressions: 15 passed.
@@ -222,3 +233,17 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 - Local APK signing certificate matches the published v2.4.4 certificate, supporting an in-place upgrade.
 - Downloaded published APK verified with apksigner; certificate matches v2.4.4. aapt confirms 2.6.0/code 23/minSdk 23.
 - Published APK SHA-256: 495B3EFBDF09C19C942EC5781F4AC3655C9E7BE6B1BD351416759A09C694F818.
+
+### Offline help and manager setup
+- Added Help buttons in Home, Settings, Project Details and questionnaire sync.
+- Bundled feature instructions and a complete copyable Google Sheets/Drive Apps Script backend. One workbook (or two workbooks) uses one deployment/key per project.
+- Backend validates project/key, upserts complete JSON records and deduplicates photo retries. Data/photo requests now include project UUID; photos include stable content/session IDs.
+- Deployment still requires manager-owned Google resources and a pilot; no live Google deployment was available.
+
+## v2.6.2 - Repeated observations and templates
+
+Guided visits remain separate observations, linked through stable feature UUIDs. Study Area and the visit selector expose timelines, numeric comparisons and complete CSV export. Imported visit revisions and local saved interviews are deduplicated by visit UUID. Keep measurement units and question names consistent across form versions.
+
+Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
+
+This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).

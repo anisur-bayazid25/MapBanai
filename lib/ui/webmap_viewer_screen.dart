@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/atlas_image_export.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
@@ -61,6 +62,15 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     try {
       final data = jsonDecode(message.message) as Map<String, dynamic>;
       final name = data['name'];
+      if (name == 'mapbanai-map.png' || name == 'mapbanai-map.jpg') {
+        final image = AtlasImageExport.fromMessage(data);
+        final directory = await getTemporaryDirectory();
+        final file = await File('${directory.path}/${image.name}')
+            .writeAsBytes(image.bytes);
+        await Share.shareXFiles([XFile(file.path, mimeType: image.mimeType)],
+            subject: 'MapBanai map image');
+        return;
+      }
       if (name != 'mapbanai-filtered.geojson' &&
           name != 'mapbanai-filtered.csv') return;
       final content = data['content'];

@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/project_templates_screen.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
@@ -132,6 +133,15 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
       appBar: AppBar(
         title: const Text('Project setup'),
         actions: [
+          IconButton(
+              tooltip: 'Reusable templates',
+              icon: const Icon(Icons.bookmarks_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) =>
+                        ProjectTemplatesScreen(database: database)));
+                await _loadProjects();
+              }),
           Tooltip(
             message: 'Create custom survey form',
             child: Padding(

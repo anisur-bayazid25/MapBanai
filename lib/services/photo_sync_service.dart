@@ -1,3 +1,5 @@
+import 'package:crypto/crypto.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -175,6 +177,7 @@ class PhotoSyncService {
     } catch (e) {
       throw Exception('Invalid sync URL: $e');
     }
+    final project = (await ProjectWorkspaceService(db).load(projectId)).project;
     final apiKey = config?.syncApiKey?.trim() ?? '';
 
     final photos = await queryUnsyncedPhotos(projectId);
@@ -250,9 +253,14 @@ class PhotoSyncService {
       }
 
       String base64;
+      String photoId;
       try {
         final bytes = await file.readAsBytes();
         base64 = base64Encode(bytes);
+        photoId = sha256.convert([
+          ...utf8.encode(session.externalId ?? session.id.toString()),
+          ...bytes
+        ]).toString();
       } catch (e) {
         failed++;
         if (onProgress != null) onProgress(synced + failed + skipped, total);
@@ -268,6 +276,9 @@ class PhotoSyncService {
           final payload = jsonEncode({
             'apiKey': apiKey,
             'action': 'upload_photo',
+            'projectId': project.externalId,
+            'photoId': photoId,
+            'responseId': session.externalId ?? session.id.toString(),
             'filename': filename,
             'mimeType': mimeType,
             'base64': base64,

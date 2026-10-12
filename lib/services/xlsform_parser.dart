@@ -33,6 +33,12 @@ class XlsFormParser {
       throw XlsFormParseException('Could not read the workbook: ${e.message}');
     }
 
+    return parseWorkbook(workbook, fileName: fileName);
+  }
+
+  /// Google Sheets supplies the same raw worksheet rows as an XLSX import.
+  static SurveyForm parseWorkbook(XlsxWorkbook workbook,
+      {String fileName = 'survey.xlsx'}) {
     final surveyTable = workbook.sheet(_surveySheet);
     if (surveyTable == null) {
       throw XlsFormParseException(

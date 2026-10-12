@@ -27,6 +27,7 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
   String? _payload;
   String? _error;
   bool _inline = false;
+  bool _includeSyncConnection = false;
 
   @override
   void initState() {
@@ -43,7 +44,8 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
   Future<void> _build() async {
     try {
       final exporter = ProjectExporter(_database);
-      final data = await exporter.buildData(widget.project);
+      final data = await exporter.buildData(widget.project,
+          includeSyncConnection: _includeSyncConnection);
       if (!mounted) return;
       String payload;
       var inline = true;
@@ -52,9 +54,9 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
       } on ProjectTooLargeForQrException {
         // Bootstrap code with the package checksum.
         inline = false;
-        final bytes = await exporter.buildPackageBytes(widget.project);
-        final checksum =
-            ProjectQr.sha256HexBytes(bytes);
+        final bytes = await exporter.buildPackageBytes(widget.project,
+            includeSyncConnection: _includeSyncConnection);
+        final checksum = ProjectQr.sha256HexBytes(bytes);
         payload = ProjectQr.encodeBootstrap(
           projectId: data.meta.projectId,
           projectName: data.meta.projectName,
@@ -83,8 +85,8 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
           padding: const EdgeInsets.all(20),
           child: _payload == null
               ? (_error != null
-                    ? Text(_error!, style: theme.textTheme.bodyMedium)
-                    : const CircularProgressIndicator())
+                  ? Text(_error!, style: theme.textTheme.bodyMedium)
+                  : const CircularProgressIndicator())
               : SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -97,6 +99,19 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
                       Text(
                         'Version ${_versionLabel()}',
                         style: theme.textTheme.bodyMedium,
+                      ),
+                      CheckboxListTile(
+                        title: const Text('Include sync connection'),
+                        subtitle: const Text(
+                            'Share the URL and API key only with trusted enumerators.'),
+                        value: _includeSyncConnection,
+                        onChanged: (value) async {
+                          setState(() {
+                            _includeSyncConnection = value ?? false;
+                            _payload = null;
+                          });
+                          await _build();
+                        },
                       ),
                       const SizedBox(height: 20),
                       Container(

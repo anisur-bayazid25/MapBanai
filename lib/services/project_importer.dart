@@ -457,7 +457,7 @@ class ProjectImporter {
         await _database.deleteProject(replaceExistingId);
       }
       final result = await _insert(data, newCopy: newCopy);
-      if (retainedSync != null) {
+      if (retainedSync != null && data.settings['sync_connection'] == null) {
         await _database.upsertSyncConfig(
             projectId: result.projectId,
             syncEndpointUrl: retainedSync.syncEndpointUrl,
@@ -495,7 +495,7 @@ class ProjectImporter {
         await _database.deleteProject(replaceExistingId);
       }
       final result = await _insert(data, newCopy: newCopy);
-      if (retainedSync != null) {
+      if (retainedSync != null && data.settings['sync_connection'] == null) {
         await _database.upsertSyncConfig(
             projectId: result.projectId,
             syncEndpointUrl: retainedSync.syncEndpointUrl,
@@ -562,6 +562,25 @@ class ProjectImporter {
           await _database.insertProjectField(projectId, name);
         }
       }
+    }
+
+    final connection = data.settings['sync_connection'];
+    if (connection != null) {
+      if (connection is! Map ||
+          connection['endpoint_url'] is! String ||
+          connection['api_key'] is! String)
+        throw const FormatException('Invalid sync connection');
+      final endpoint = Uri.tryParse(connection['endpoint_url']);
+      if (endpoint == null ||
+          endpoint.scheme != 'https' ||
+          endpoint.host.isEmpty ||
+          endpoint.userInfo.isNotEmpty) {
+        throw const FormatException('Shared sync URL must use HTTPS');
+      }
+      await _database.upsertSyncConfig(
+          projectId: projectId,
+          syncEndpointUrl: connection['endpoint_url'],
+          syncApiKey: connection['api_key']);
     }
 
     if (data.settings['study_layers'] is List) {

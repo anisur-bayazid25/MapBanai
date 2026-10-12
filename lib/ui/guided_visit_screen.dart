@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:provider/provider.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
@@ -21,10 +22,12 @@ class GuidedVisitScreen extends StatefulWidget {
       {super.key,
       required this.projectId,
       this.resumeSessionId,
+      this.initialSiteId,
       this.database,
       this.studyAreaStore});
   final int projectId;
   final int? resumeSessionId;
+  final String? initialSiteId;
   final AppDatabase? database;
   final StudyAreaStore? studyAreaStore;
   @override
@@ -81,7 +84,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
       if (project == null) throw StateError('Project does not exist.');
       final workspace = await ProjectWorkspaceService(_db).load(project.id);
       final sites = await _store.loadSites();
-      final forms = await _db.getStoredFormsForProject(project.id);
+
       final rows = await _db.getSurveySessionsByProject(project.id);
       _username = await _db.getSetting('user_name');
       SurveySession? resume;
@@ -102,7 +105,9 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                 GuidedVisitService.belongsToProject(site, workspace.project) &&
                 site.layerId == workspace.layerId)
             .toList();
-        _forms = forms;
+        _selectedSite =
+            _sites.where((site) => site.id == widget.initialSiteId).firstOrNull;
+        _forms = workspace.forms;
         _resumable = rows
             .where((row) =>
                 GuidedVisitService.isVisit(row) &&
@@ -434,6 +439,20 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                               if (mounted) _restore(draft);
                                             }),
                                     child: const Text('Start visit')),
+                                if (_selectedSite != null)
+                                  TextButton.icon(
+                                      icon: const Icon(Icons.timeline),
+                                      label: const Text(
+                                          'Site timeline / compare observations'),
+                                      onPressed: () => Navigator.of(context)
+                                          .push(MaterialPageRoute(
+                                              builder: (_) =>
+                                                  SiteTimelineScreen(
+                                                      database: _db,
+                                                      store: _store,
+                                                      projectId:
+                                                          widget.projectId,
+                                                      site: _selectedSite!)))),
                                 if (_sites.isEmpty)
                                   const Text(
                                       'Import study-area features first to begin a guided baseline visit.'),

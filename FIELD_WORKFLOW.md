@@ -74,3 +74,16 @@ Field Quality validates each form in a separate worker with a three-second deadl
 The shared questionnaire route follows [ODK Collect's offline form workflow](https://docs.getodk.org/collect-intro/). Geometry followed by typed attributes follows [QField digitizing](https://docs.qfield.org/how-to/data-collection/digitize/). Project-owned forms, layers and synchronization follow [Mergin Maps' project sync model](https://merginmaps.com/docs/manage/synchronisation/). These informed MapBanai's **one project, one form, three entry routes** workflow; this is a product direction, not a claim that no other app supports it.
 
 Next priorities: a site timeline comparing repeated salinity visits; collector assignments and coverage summaries; server-side conflict review and deletion acknowledgements; external GNSS support for projects needing precise heights. Linked observations, rather than overwriting a site each round, follow the [one-to-many observation model](https://merginmaps.com/docs/layer/one-to-n-relations/). These future priorities are not bundled as unfinished features in this release.
+
+
+## New local improvements
+
+Map studio provides PNG/JPEG, themed posters, titles and labels. See [design references](GEOSPATIAL_APP_IDEAS.md). Project sharing can optionally include the sync connection. [Google Sheets questionnaire setup](ONLINE_QUESTIONNAIRES.md) explains how to deploy the handler and update XLSForms without overwriting previous observations. These additions are local changes after v2.6.1 until a new release is published.
+
+## v2.6.2 - Repeated observations and templates
+
+Guided visits remain separate observations, linked through stable feature UUIDs. Study Area and the visit selector expose timelines, numeric comparisons and complete CSV export. Imported visit revisions and local saved interviews are deduplicated by visit UUID. Keep measurement units and question names consistent across form versions.
+
+Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
+
+This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).

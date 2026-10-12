@@ -140,6 +140,8 @@ void main() {
       expect(captured, hasLength(1));
       final payload = captured.first;
       expect(payload['apiKey'], 'test-key-123');
+      expect(payload['projectId'], (await db.getProjectById(projectId))!.externalId);
+      expect(payload['projectId'], isNotEmpty);
       expect(payload['action'], 'sync_data');
       expect(payload['responses'], isA<List>());
       expect((payload['responses'] as List), hasLength(1));

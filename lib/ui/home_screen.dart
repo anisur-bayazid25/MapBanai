@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/help_screen.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'dart:async';
 
@@ -714,6 +715,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         actions: [
           IconButton(
+              tooltip: 'Help & manager setup',
+              icon: const Icon(Icons.help_outline),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const HelpScreen()))),
+          IconButton(
             tooltip: l10n?.settings ?? 'Settings',
             icon: const Icon(Icons.menu),
             onPressed: () async {
@@ -1303,7 +1309,8 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
     try {
       // Phase 1: data
       setState(() => _phase = 'Syncing data...');
-      final dataResult = await CloudSyncService(widget.database, studyAreaStore: StudyAreaStore())
+      final dataResult = await CloudSyncService(widget.database,
+              studyAreaStore: StudyAreaStore())
           .syncProject(widget.projectId)
           .catchError((e) {
         // rethrow to handle offline vs generic

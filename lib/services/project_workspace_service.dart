@@ -49,7 +49,24 @@ class ProjectWorkspaceService {
     final layerId = layers.any((item) => item.id == config['layer_id'])
         ? config['layer_id'] as String
         : 'default';
-    final forms = await db.getStoredFormsForProject(projectId);
+    final allForms = await db.getStoredFormsForProject(projectId);
+    final latestRaw = await db.getSetting('questionnaire_latest_$projectId');
+    final latest = latestRaw == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(jsonDecode(latestRaw));
+    final validLatest = {
+      for (final entry in latest.entries)
+        if (allForms.any((row) => row.id == entry.value)) entry.key: entry.value
+    };
+    final forms = allForms.where((row) {
+      try {
+        final schemaId = (jsonDecode(row.json) as Map)['id'];
+        return !validLatest.containsKey(schemaId) ||
+            validLatest[schemaId] == row.id;
+      } catch (_) {
+        return true;
+      }
+    }).toList();
     final form = forms.where((row) => row.id == config['form_id']).firstOrNull;
     return ProjectWorkspace(
         project, layers, layerId, forms, form ?? forms.firstOrNull);

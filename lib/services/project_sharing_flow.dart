@@ -95,10 +95,11 @@ class ProjectSharingFlow {
     ProjectFileSink? fileSink,
     List<ProjectTransferProvider>? transferProviders,
     ProjectImporter? importer,
-  }) : _database = database,
-       _fileSink = fileSink ?? SafProjectFileSink(),
-       _importer = importer ?? ProjectImporter(database),
-       _transferProviders = transferProviders ?? ProjectTransferProviders.available();
+  })  : _database = database,
+        _fileSink = fileSink ?? SafProjectFileSink(),
+        _importer = importer ?? ProjectImporter(database),
+        _transferProviders =
+            transferProviders ?? ProjectTransferProviders.available();
 
   final AppDatabase _database;
   final ProjectFileSink _fileSink;
@@ -108,16 +109,21 @@ class ProjectSharingFlow {
   ProjectExporter get exporter => ProjectExporter(_database);
 
   /// Builds the .mbproj bytes without touching any OS API.
-  Future<Uint8List> build(Project project) => exporter.buildPackageBytes(project);
+  Future<Uint8List> build(Project project,
+          {bool includeSyncConnection = false}) =>
+      exporter.buildPackageBytes(project,
+          includeSyncConnection: includeSyncConnection);
 
   /// Suggested filename: `Name_v<N>.mbproj`.
   String suggestedFileName(Project project) =>
       safeProjectFileName(project.name, project.projectVersion);
 
   /// Export → native save dialog. Never requires a storage permission.
-  Future<ProjectExportStatus> exportProject(Project project) async {
+  Future<ProjectExportStatus> exportProject(Project project,
+      {bool includeSyncConnection = false}) async {
     try {
-      final bytes = await build(project);
+      final bytes =
+          await build(project, includeSyncConnection: includeSyncConnection);
       final path = await _fileSink.savePackageBytes(
         fileName: suggestedFileName(project),
         bytes: bytes,
@@ -130,16 +136,20 @@ class ProjectSharingFlow {
   }
 
   /// Writes a shareable copy of the package to the app's private temp dir.
-  Future<File?> createShareFile(Project project) async {
+  Future<File?> createShareFile(Project project,
+      {bool includeSyncConnection = false}) async {
     try {
-      final bytes = await build(project);
+      final bytes =
+          await build(project, includeSyncConnection: includeSyncConnection);
       final dir = Directory(p.join(
         (await getTemporaryDirectory()).path,
         'mapbanai_share',
       ));
       await dir.create(recursive: true);
       final file = File(
-        p.join(dir.path, '${DateTime.now().microsecondsSinceEpoch}_'
+        p.join(
+            dir.path,
+            '${DateTime.now().microsecondsSinceEpoch}_'
             '${suggestedFileName(project)}'),
       );
       await file.writeAsBytes(bytes, flush: true);
@@ -151,8 +161,10 @@ class ProjectSharingFlow {
 
   /// Runs every available transfer provider; returns true when one
   /// accepted the file.
-  Future<bool> shareProject(Project project) async {
-    final file = await createShareFile(project);
+  Future<bool> shareProject(Project project,
+      {bool includeSyncConnection = false}) async {
+    final file = await createShareFile(project,
+        includeSyncConnection: includeSyncConnection);
     if (file == null) return false;
     for (final provider in _transferProviders) {
       if (await provider.isAvailable()) {

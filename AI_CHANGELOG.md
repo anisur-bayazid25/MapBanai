@@ -8,6 +8,16 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## 2026-10-12 — local map studio and online questionnaires (unreleased)
+
+Bundled map_studio.js composes the current Leaflet view into PNG/JPEG Canvas images: filtered geometries, loaded CORS-permitted tiles, labels, north arrow, scale and attribution. Five palettes tone raster tiles; they do not individually style road/water/building vectors. Size capped at 3072 pixels/side and 8 MP. Native AtlasImageExport validates filename, MIME/base64 and file signatures before sharing. No external screenshot service/UI library added.
+
+ProjectExporter/SharingFlow accept includeSyncConnection (default false); package settings optionally carry endpoint_url/api_key. Import validates HTTPS, applies explicit shared settings and preserves existing credentials if the package omits them. Inline QR has the same option.
+
+XlsFormParser.parseWorkbook reuses file-import logic for Google Sheet rows. QuestionnaireSyncService sends get_questionnaire with project UUID/key, handles Google's cached ContentService GET redirect, bounds payload/time, parses in an isolate and appends changed definitions as new StoredForms rows. Internal version increments even when the Sheet version is unchanged. questionnaire_latest_<projectId> points selectors and definition exports at current synced forms, leaving older rows and response snapshots intact. Content reversion creates a new revision too; retry is idempotent. One workbook is linked per project by the bundled Apps Script configuration.
+
+No Google account/deployment was supplied: deploy server/questionnaire_apps_script.gs into the existing sync script, configure private script properties and validate both questionnaire and collection sync. Google Sheet edits alone do not require redeployment after the handler is installed. Android camera/native-share field validation is still outstanding.
+
 ## 2026-10-12 — 2.6.1 project workspace
 
 ProjectWorkspaceService persists layer catalogues and selected form/layer in AppSettings keyed by local project ID, validates form ownership and ensures a UUID. StudyAreaSite persists layer_id, typed form_answers and form_snapshot through GeoJSON/history. Unassigned sites need explicit project/layer assignment. Guided visits now enforce project ownership. Project packages carry layer catalogues and map active form schema IDs to newly imported local form IDs.
@@ -838,3 +848,17 @@ GuidedVisitService persists workflow metadata and form snapshots in survey_sessi
 FieldQualityService reports answer/evidence/GPS and nearby-feature issues without making photo accuracy mandatory. PhotoRecord stores optional accuracy/fix time; GPS geometry keeps its separate threshold. OfflineMapService validates permitted style resources recursively, budgets downloads and controls MapLibre regions through bundled Android method-channel extensions. Four map screens share completed package selection/attribution. Offline cache is excluded from backups. Backup restore now remaps revision attachment paths too.
 
 Release CI uses Java 17, requires the production signing secrets, runs serial Flutter tests and nonfatal-warning analysis, then publishes APK with RELEASE_NOTES.md. No device/emulator or live sync endpoint was available for integration validation. See FIELD_WORKFLOW.md for supported XLSForm boundaries and field checks.
+
+### Offline help and manager setup
+- Added Help buttons in Home, Settings, Project Details and questionnaire sync.
+- Bundled feature instructions and a complete copyable Google Sheets/Drive Apps Script backend. One workbook (or two workbooks) uses one deployment/key per project.
+- Backend validates project/key, upserts complete JSON records and deduplicates photo retries. Data/photo requests now include project UUID; photos include stable content/session IDs.
+- Deployment still requires manager-owned Google resources and a pilot; no live Google deployment was available.
+
+## v2.6.2 - Repeated observations and templates
+
+Guided visits remain separate observations, linked through stable feature UUIDs. Study Area and the visit selector expose timelines, numeric comparisons and complete CSV export. Imported visit revisions and local saved interviews are deduplicated by visit UUID. Keep measurement units and question names consistent across form versions.
+
+Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
+
+This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).

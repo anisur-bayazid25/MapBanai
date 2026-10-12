@@ -1,16 +1,14 @@
-MapBanai v2.6.1 — Easy Geospatial Data Collection
+MapBanai v2.6.2 - Repeated observations and reusable projects
 
-- Survey, GIS, Study Area, WebMap and sync share project ownership. GPS stays independent.
-- Each project supports multiple named study layers and a shared selected survey form. GIS and Study Area use the same typed form questions as Survey Mode.
-- Study Area supports explicit assignment of previous unassigned sites, layer-scoped visits/imports/exports, typed answers and project sync outbox records.
-- Sync URLs and API keys survive partial updates, successful sync and replacement of the same project definition. Project sharing retains layer names while excluding credentials.
-- GPS reports GNSS altitude and vertical accuracy instead of automatically subtracting the first fix. Relative height requires an explicit reference.
-- A responsive project atlas adds filters, measurement colours, answer tables and filtered CSV/GeoJSON exports, including Android sharing.
-- Field quality uses isolated, time-bounded form validation, progress reporting and bounded duplicate review.
-- Updated home tagline and acknowledgements to the CARE project and BRAC James P Grant School of Public Health, BRAC University.
+- Site timelines link completed visits to stable feature UUIDs. Compare salinity or another numeric question by questionnaire, inspect earlier answers, and export all observations as CSV. Each visit keeps earlier measurements; the map shows the latest summary.
+- Imported visit history joins local observations without duplicates. GeoJSON and visit uploads include feature UUIDs. Timelines show local history; downloading observations from other phones is not added.
+- Save project or selected-layer templates. Reuse forms and named layers in fresh projects, or add layers to an existing project. Templates omit collected records, site geometry, photos and cloud credentials.
+- Share project packages with optional Apps Script URL/API key. Review and apply updated XLSForms from Google Sheets while preserving earlier records and drafts.
+- Offline Help covers field modes and manager setup with a complete copyable Sheets/Drive backend. One or two workbooks use one deployment/key per project. Uploads validate project identity and deduplicate retries.
+- WebMap themes, labels, poster captions and PNG/JPEG image export support Android sharing. Missing or blocked basemap tiles may require data-only export.
 
-Install over your existing app using the signed APK below. Photos still require GPS tags; accuracy is recorded but never an accuracy threshold for photos. Credentials already erased by previous versions require re-entry or backup restoration. Indoor GNSS does not reliably measure floor height.
+Install over your existing app using the signed APK. Photos still require geotags; GPS accuracy is recorded without imposing an accuracy threshold.
 
-Unassigned legacy study sites require explicit assignment to a project/layer. Shared .mbproj packages contain project definitions, not collected observations. Receiving sync scripts must preserve the new layer/site metadata and upsert stable IDs; remote deletion propagation is not added.
+Automated app/backend checks, static analysis, browser map checks and signing verification cover this release. No phone/emulator or live Google deployment was available. Pilot camera/GNSS and your endpoint before fieldwork. Fill the supplied script configuration with your project UUID, workbook IDs, Drive folder and private key, run setupMapBanai and deploy it; existing Google deployments are not changed automatically.
 
-Automated tests, browser atlas checks, static analysis and Android signing verification cover this release. No Android phone/emulator was connected; validate native camera/GNSS and your sync endpoint on your phone before field deployment. See [FIELD_WORKFLOW.md](https://github.com/anisur-bayazid25/MapBanai/blob/main/FIELD_WORKFLOW.md) for the full workflow and research references.
+See FIELD_WORKFLOW.md and ONLINE_QUESTIONNAIRES.md in the repository for setup and limits.

@@ -4,6 +4,14 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [Unreleased]
+
+- Added five map-studio themes, captions, labels and PNG/JPEG poster/current-view exports with Android sharing.
+- Added optional sync URL/API key inclusion in project file and inline QR sharing.
+- Added Google Sheets XLSForm questionnaire sync through a project-authenticated Apps Script handler.
+- Changed questionnaires create new local revisions; prior records/drafts remain unchanged and latest versions appear in selectors.
+- Added Google Sheets setup and geospatial-app design reference guides.
+
 ## [2.6.1] - 2026-10-12
 
 - Bound Survey, GIS, Study Area, WebMap and sync to project identity; GPS remains standalone.
@@ -412,3 +420,13 @@ Re-import existing XLSForms to use parser fixes. See FIELD_WORKFLOW.md for the f
 
 [2.1.1]: https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.1.1
 [2.1.0]: https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.1.0
+
+- Added offline Help & manager setup with feature guides, project-ID copying and a complete Sheets/Drive backend. One or two workbooks use one URL/key per project; data/photo uploads include project identity and stable photo IDs.
+
+## v2.6.2 - Repeated observations and templates
+
+Guided visits remain separate observations, linked through stable feature UUIDs. Study Area and the visit selector expose timelines, numeric comparisons and complete CSV export. Imported visit revisions and local saved interviews are deduplicated by visit UUID. Keep measurement units and question names consistent across form versions.
+
+Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
+
+This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).

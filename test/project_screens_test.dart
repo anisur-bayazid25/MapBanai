@@ -35,7 +35,8 @@ void main() {
   testWidgets('create project shows in list, then settings update name',
       (tester) async {
     await _pumpSetup(tester, db);
-    expect(find.text('No projects yet. Create one to start collecting data.'), findsOneWidget);
+    expect(find.text('No projects yet. Create one to start collecting data.'),
+        findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'Riverbank Survey');
     await tester.tap(find.text('Create project'));
@@ -54,9 +55,11 @@ void main() {
     expect(find.text('Project name'), findsNWidgets(2));
 
     await tester.enterText(
-      find.byWidgetPredicate(
-        (widget) => widget is TextField && widget.controller != null,
-      ).last,
+      find
+          .byWidgetPredicate(
+            (widget) => widget is TextField && widget.controller != null,
+          )
+          .last,
       'Riverbank North',
     );
     await tester.tap(find.text('Save'));
@@ -101,9 +104,11 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Archive project'),
       200,
-      scrollable: find.byWidgetPredicate(
-        (w) => w is Scrollable && w.axis == Axis.vertical,
-      ),
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axis == Axis.vertical,
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Archive project'));

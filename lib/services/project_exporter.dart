@@ -21,13 +21,14 @@ class ProjectExporter {
 
   /// Builds the typed package payload for a project. Used by both the ZIP
   /// export and the inline-QR exporter so both share one code path.
-  Future<ProjectPackageData> buildData(Project project) async {
+  Future<ProjectPackageData> buildData(Project project,
+      {bool includeSyncConnection = false}) async {
     final exportedAt = DateTime.now().toUtc().toIso8601String();
     final workspace = await ProjectWorkspaceService(_database).load(project.id);
     final externalId = workspace.project.externalId!;
 
     final fields = await _database.getProjectFields(project.id);
-    final forms = await _database.getStoredFormsForProject(project.id);
+    final forms = workspace.forms;
 
     final formIndex = <Map<String, dynamic>>[];
     final formFiles = <Map<String, dynamic>>[];
@@ -68,6 +69,16 @@ class ProjectExporter {
       'archived': project.archived,
     };
 
+    if (includeSyncConnection) {
+      final sync = await _database.getSyncConfig(project.id);
+      if (sync?.syncEndpointUrl?.isNotEmpty == true) {
+        settingsJson['sync_connection'] = {
+          'endpoint_url': sync!.syncEndpointUrl,
+          'api_key': sync.syncApiKey ?? '',
+        };
+      }
+    }
+
     final layersJson = <String, dynamic>{
       'basemap_id': 'osm',
       'basemaps': Basemap.defaults
@@ -105,8 +116,10 @@ class ProjectExporter {
   }
 
   /// Serializes a project into the full .mbproj ZIP byte stream.
-  Future<Uint8List> buildPackageBytes(Project project) async {
-    final data = await buildData(project);
+  Future<Uint8List> buildPackageBytes(Project project,
+      {bool includeSyncConnection = false}) async {
+    final data =
+        await buildData(project, includeSyncConnection: includeSyncConnection);
 
     final contentFiles = <String, Uint8List>{
       ProjectPackageFormat.projectFileName:
