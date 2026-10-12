@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:http/http.dart' as http;
 import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/services/study_area_store.dart';
+import 'package:mapbanai/services/study_area_outbox_service.dart';
+import 'package:mapbanai/services/guided_visit_service.dart';
 
 class CloudSyncException implements Exception {
   final String message;
@@ -22,8 +25,10 @@ class SyncResult {
 class CloudSyncService {
   final AppDatabase db;
   final http.Client? _client;
+  final StudyAreaStore? studyAreaStore;
 
-  CloudSyncService(this.db, {http.Client? client}) : _client = client;
+  CloudSyncService(this.db, {http.Client? client, this.studyAreaStore})
+      : _client = client;
 
   Future<List<SurveySession>> queryUnsyncedResponses(int projectId) async {
     final all = await (db.select(db.surveySessions)
@@ -80,6 +85,15 @@ class CloudSyncService {
       throw const CloudSyncException('Project not found');
     }
 
+    if (studyAreaStore != null) {
+      final operator = await db.getSetting('user_name') ?? 'Local fieldworker';
+      for (final site in await studyAreaStore!.loadSites()) {
+        if (!GuidedVisitService.belongsToProject(site, project)) continue;
+        site.projectId = projectId;
+        await StudyAreaOutboxService(db)
+            .enqueue(site, site.history.lastOrNull?.author ?? operator);
+      }
+    }
     final unsyncedResponses = await queryUnsyncedResponses(projectId);
     final unsyncedFeatures = await queryUnsyncedFeatures(projectId);
 
@@ -154,7 +168,6 @@ class CloudSyncService {
 
     if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
       final now = DateTime.now();
-      final cfg = config!;
       await db.transaction(() async {
         for (final s in [...unsyncedResponses, ...unsyncedFeatures]) {
           await (db.update(db.surveySessions)
@@ -165,8 +178,6 @@ class CloudSyncService {
         // Update lastSyncAt preserving url/key
         await db.upsertSyncConfig(
           projectId: projectId,
-          syncEndpointUrl: cfg.syncEndpointUrl,
-          syncApiKey: cfg.syncApiKey,
           lastSyncAt: Value(now),
         );
       });
@@ -266,6 +277,7 @@ class CloudSyncService {
       list.add({
         'response_id': stableId,
         'project_name': projectName,
+        'layer_id': resp['layer_id'] ?? 'default',
         'surveyor': surveyor,
         'submitted_at': s.createdAt.toIso8601String(),
         'form_name': formName,
@@ -369,11 +381,20 @@ class CloudSyncService {
         'geometry_type': geometryType,
         'latitude': lat,
         'longitude': lon,
-        'geojson': geojson,
+        'geojson': resp['geometry'] is Map ? resp['geometry'] : geojson,
+        'layer_id': resp['layer_id'] ?? 'default',
+        'form_id': resp['form_id'],
+        'form_name': resp['form_name'],
+        if (resp['site'] is Map) 'study_site': resp['site'],
         'photo_path': photoPath,
-        'attributes': resp['fields'] is Map
-            ? resp['fields']
-            : (resp['attributes'] is Map ? resp['attributes'] : {}),
+        'attributes': {
+          if (resp['attributes'] is Map)
+            ...Map<String, dynamic>.from(resp['attributes']),
+          if (resp['fields'] is Map)
+            ...Map<String, dynamic>.from(resp['fields']),
+          if (resp['answers'] is Map)
+            ...Map<String, dynamic>.from(resp['answers']),
+        },
         'name': resp['name'] ?? '',
         'notes': resp['notes'] ?? '',
         'edited_at': resp['edited_at'],

@@ -13,7 +13,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get homeTitle => 'ম্যাপবানাই';
 
   @override
-  String get homeSubtitle => 'অফলাইন ফিল্ড ডেটা সংগ্রহ';
+  String get homeSubtitle => 'সহজ ভূস্থানিক তথ্য সংগ্রহ';
 
   @override
   String get surveyModeTitle => 'সার্ভে মোড';
@@ -215,7 +215,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get aboutSection => 'সম্পর্কে';
 
   @override
-  String get aboutTagline => 'অফলাইন ফিল্ড ডেটা সংগ্রহ জিআইএস';
+  String get aboutTagline => 'সহজ ভূস্থানিক তথ্য সংগ্রহ';
 
   @override
   String versionLabel(String version) {

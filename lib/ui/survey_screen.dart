@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
@@ -358,6 +359,9 @@ class _SurveyScreenState extends State<SurveyScreen> {
   }
 
   Future<void> _openStoredFormDetail(StoredForm row) async {
+    if (row.projectId != null)
+      await ProjectWorkspaceService(_database)
+          .select(row.projectId!, formId: row.id);
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SurveyFormDetailScreen(

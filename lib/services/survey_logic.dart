@@ -1082,6 +1082,7 @@ class _Parser {
   }
 
   static double _pow10(int n) {
+    if (n.abs() > 308) throw const FormatException('Decimal precision out of range');
     var result = 1.0;
     for (var i = 0; i < n; i++) {
       result *= 10;
@@ -1104,6 +1105,7 @@ class _Parser {
   }
 
   static double _logNum(double x) {
+    if (!x.isFinite) throw const FormatException('log() of non-finite number');
     if (x <= 0) throw const FormatException('log() of non-positive number');
     // Normalize to [1, 2) then use the atanh series for ln.
     var e = 0;

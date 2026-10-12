@@ -1,3 +1,8 @@
+import 'package:mapbanai/state/project_state.dart';
+import 'package:provider/provider.dart';
+import 'package:mapbanai/services/form_attribute_service.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/ui/common/project_workspace_bar.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -31,6 +36,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
   late final StudyAreaStore _store = widget.studyAreaStore ?? StudyAreaStore();
   late final GuidedVisitService _service =
       GuidedVisitService(database: _db, sites: _store);
+  ProjectWorkspace? _workspace;
   Project? _project;
   List<StudyAreaSite> _sites = [];
   List<StoredForm> _forms = [];
@@ -73,6 +79,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     try {
       final project = await _db.getProjectById(widget.projectId);
       if (project == null) throw StateError('Project does not exist.');
+      final workspace = await ProjectWorkspaceService(_db).load(project.id);
       final sites = await _store.loadSites();
       final forms = await _db.getStoredFormsForProject(project.id);
       final rows = await _db.getSurveySessionsByProject(project.id);
@@ -87,9 +94,13 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
       }
       if (!mounted) return;
       setState(() {
-        _project = project;
+        _workspace = workspace;
+        _selectedForm = workspace.form;
+        _project = workspace.project;
         _sites = sites
-            .where((site) => GuidedVisitService.belongsToProject(site, project))
+            .where((site) =>
+                GuidedVisitService.belongsToProject(site, workspace.project) &&
+                site.layerId == workspace.layerId)
             .toList();
         _forms = forms;
         _resumable = rows
@@ -131,8 +142,9 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
           ? StudyAreaStatus.verified
           : site.status;
       _selectedForm = _forms
-          .where((form) => form.id == metadata['stored_form_id'])
-          .firstOrNull;
+              .where((form) => form.id == metadata['stored_form_id'])
+              .firstOrNull ??
+          _workspace?.form;
     });
   }
 
@@ -205,6 +217,8 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     await _saveSite();
     final stored = _selectedForm;
     if (stored == null) throw StateError('Choose a project survey form.');
+    await ProjectWorkspaceService(_db)
+        .select(widget.projectId, formId: stored.id);
     var response = GuidedVisitService.decode(_session!);
     if (GuidedVisitService.visit(_session!)['stored_form_id'] != stored.id) {
       final row = await _service.saveDraft(
@@ -219,8 +233,15 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
         response['form_snapshot'] is Map
             ? response['form_snapshot'] as Map
             : jsonDecode(stored.json) as Map));
-    final answers = Map<String, dynamic>.from(response['answers'] as Map);
     final site = _editedSite();
+    final answers = FormAttributeService.prefill(
+        form,
+        {
+          ...site.attributes,
+          ...site.formAnswers,
+          ...Map<String, dynamic>.from(response['answers'] as Map)
+        },
+        geometry: site.currentGeometry);
     for (final question in form.questions) {
       if (answers.containsKey(question.name)) continue;
       final value = question.name == 'feature_id' || question.name == 'site_id'
@@ -355,6 +376,34 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                             children: [
                               if (_busy) const LinearProgressIndicator(),
                               if (row == null) ...[
+                                ProjectWorkspaceBar(
+                                    database: _db,
+                                    workspace: _workspace,
+                                    onChanged: (workspace) async {
+                                      try {
+                                        context
+                                            .read<ProjectState>()
+                                            .setSelectedProject(
+                                                workspace.project.name,
+                                                projectId:
+                                                    workspace.project.id);
+                                      } catch (_) {}
+                                      if (workspace.project.id !=
+                                          widget.projectId) {
+                                        await Navigator.of(context)
+                                            .pushReplacement(MaterialPageRoute(
+                                                builder: (_) =>
+                                                    GuidedVisitScreen(
+                                                        projectId: workspace
+                                                            .project.id,
+                                                        database:
+                                                            widget.database,
+                                                        studyAreaStore: widget
+                                                            .studyAreaStore)));
+                                      } else {
+                                        await _load();
+                                      }
+                                    }),
                                 const Text(
                                     'Choose a baseline feature to verify, update and document.'),
                                 const SizedBox(height: 12),

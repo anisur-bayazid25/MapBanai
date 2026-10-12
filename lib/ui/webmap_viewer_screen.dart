@@ -1,3 +1,11 @@
+import 'package:mapbanai/state/project_state.dart';
+import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
+import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/services/webmap_generator.dart';
+import 'package:mapbanai/services/webmap_data_service.dart';
+import 'package:mapbanai/services/study_area_store.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,8 +17,11 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// .html file so it can be opened in a real browser.
 class WebmapViewerScreen extends StatefulWidget {
   final File htmlFile;
+  final AppDatabase? database;
+  final int? projectId;
 
-  const WebmapViewerScreen({required this.htmlFile, super.key});
+  const WebmapViewerScreen(
+      {required this.htmlFile, this.database, this.projectId, super.key});
 
   @override
   State<WebmapViewerScreen> createState() => _WebmapViewerScreenState();
@@ -19,6 +30,8 @@ class WebmapViewerScreen extends StatefulWidget {
 class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
   late final WebViewController _controller;
   bool _loading = true;
+  late File _file = widget.htmlFile;
+  String _projectName = "";
 
   @override
   void initState() {
@@ -27,8 +40,12 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
       ..enableZoom(true)
+      ..addJavaScriptChannel('MapBanaiExport', onMessageReceived: _exportData)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) => request.url.startsWith('file://')
+              ? NavigationDecision.navigate
+              : NavigationDecision.prevent,
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
           },
@@ -37,13 +54,69 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
           },
         ),
       )
-      ..loadFile(widget.htmlFile.path);
+      ..loadFile(_file.path);
+  }
+
+  Future<void> _exportData(JavaScriptMessage message) async {
+    try {
+      final data = jsonDecode(message.message) as Map<String, dynamic>;
+      final name = data['name'];
+      if (name != 'mapbanai-filtered.geojson' &&
+          name != 'mapbanai-filtered.csv') return;
+      final content = data['content'];
+      if (content is! String) return;
+      final directory = await getTemporaryDirectory();
+      final file = await File('${directory.path}/$name').writeAsString(content);
+      await Share.shareXFiles([XFile(file.path)],
+          subject: 'MapBanai filtered data');
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Export failed: $error')));
+    }
+  }
+
+  Future<void> _chooseProject() async {
+    final db = widget.database;
+    if (db == null) return;
+    final projects = await db.getProjects();
+    if (!mounted) return;
+    final project = await showDialog<Project>(
+        context: context,
+        builder: (context) =>
+            SimpleDialog(title: const Text('Select project'), children: [
+              for (final project in projects)
+                SimpleDialogOption(
+                    onPressed: () => Navigator.pop(context, project),
+                    child: Text(project.name))
+            ]));
+    if (project == null || !mounted) return;
+    try {
+      context
+          .read<ProjectState>()
+          .setSelectedProject(project.name, projectId: project.id);
+    } catch (_) {}
+    setState(() => _loading = true);
+    try {
+      final generator = WebMapGenerator(
+          dataService: WebMapDataService(db, studyAreaStore: StudyAreaStore()));
+      final html = await generator.generateHtml(projectId: project.id);
+      _file = await generator.writeToFile(html);
+      _projectName = project.name;
+      await _controller.loadFile(_file.path);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cannot open project map: $error')));
+      }
+    }
   }
 
   Future<void> _share() async {
     try {
       await Share.shareXFiles(
-        [XFile(widget.htmlFile.path)],
+        [XFile(_file.path)],
         text: 'MapBanai WebMap',
         subject: 'MapBanai WebMap',
       );
@@ -60,8 +133,13 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WebMap'),
+        title: Text(_projectName.isEmpty ? 'Project Atlas' : _projectName),
         actions: [
+          if (widget.database != null)
+            IconButton(
+                onPressed: _chooseProject,
+                tooltip: "Select project",
+                icon: const Icon(Icons.folder_outlined)),
           IconButton(
             icon: const Icon(Icons.share_outlined),
             tooltip: 'Share HTML file',
@@ -72,8 +150,7 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_loading)
-            const Center(child: CircularProgressIndicator()),
+          if (_loading) const Center(child: CircularProgressIndicator()),
         ],
       ),
     );

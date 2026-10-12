@@ -27,7 +27,7 @@ class GuidedVisitService {
   static bool belongsToProject(StudyAreaSite site, Project project) {
     if (site.projectExternalId != null)
       return site.projectExternalId == project.externalId;
-    return site.projectId == null || site.projectId == project.id;
+    return site.projectId == project.id;
   }
 
   static bool isVisit(SurveySession session) {
@@ -72,12 +72,14 @@ class GuidedVisitService {
         status: const drift.Value('draft'),
         responses: drift.Value(jsonEncode({
           'workflow': 'guided_visit_v1',
+          'layer_id': site.layerId,
           'answers': <String, dynamic>{},
           'visit': {
             'id': const Uuid().v4(),
             'project_id': projectId,
             'project_external_id': project.externalId,
             'site_id': site.id,
+            'layer_id': site.layerId,
             'started_at': DateTime.now().toUtc().toIso8601String(),
             'state': 'draft',
             'sequence': 0,
@@ -154,12 +156,9 @@ class GuidedVisitService {
       throw StateError('Complete and save the selected survey first.');
     final form = SurveyForm.fromJson(
         Map<String, dynamic>.from(response['form_snapshot']));
-    final errors = FieldQualityService.validateAnswers(
+    final errors = await FieldQualityService.validateAnswersInWorker(
         form, Map<String, dynamic>.from(response['answers'] as Map));
     if (errors.isNotEmpty) throw StateError(errors.first);
-    final mediaErrors = await FieldQualityService.validateMedia(
-        form, Map<String, dynamic>.from(response['answers'] as Map));
-    if (mediaErrors.isNotEmpty) throw StateError(mediaErrors.first);
     final photoError = await FieldQualityService.validatePhoto(
         FieldQualityService.photo(response['photo']));
     if (photoError != null) throw StateError(photoError);
@@ -173,6 +172,9 @@ class GuidedVisitService {
         site.changeNote.trim().isEmpty)
       throw StateError('Add a change or review note for this visit outcome.');
     final geometry = site.currentGeometry;
+    site.formAnswers = Map<String, dynamic>.from(response['answers'] as Map);
+    site.formSnapshot = Map<String, dynamic>.from(response['form_snapshot']);
+    metadata['site_after'] = site.toJson();
     if (!FieldQualityService.validGeometry(geometry))
       throw StateError('Feature geometry is missing or invalid.');
     await database.transaction(() async {

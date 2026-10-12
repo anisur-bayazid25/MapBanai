@@ -1,3 +1,11 @@
+import 'package:mapbanai/services/record_geometry.dart';
+import 'package:mapbanai/ui/study_area_mode_screen.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/ui/common/project_workspace_bar.dart';
+import 'package:mapbanai/ui/common/form_attribute_editor.dart';
+import 'package:mapbanai/models/survey_form.dart';
+import 'package:mapbanai/state/project_state.dart';
+import 'package:provider/provider.dart';
 import 'package:mapbanai/ui/common/basemap_picker.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -16,6 +24,7 @@ import 'package:mapbanai/services/measure_units.dart';
 import 'package:mapbanai/services/track_recorder.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/feature_detail_sheet.dart';
+import 'package:mapbanai/ui/survey_session_detail_screen.dart';
 
 enum _DraftType { none, point, line, polygon }
 
@@ -25,11 +34,13 @@ class _InfoFeature {
   final int sessionId;
   final String title;
   final String featureType;
+  final bool studySite;
 
   const _InfoFeature({
     required this.sessionId,
     required this.title,
     required this.featureType,
+    this.studySite = false,
   });
 }
 
@@ -73,9 +84,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
   String _selectedBasemapId = 'osm';
   MapStyleChoice? _offlineBasemap;
 
+  ProjectWorkspace? _workspace;
   List<Project> _projects = [];
   int? _selectedProjectId;
-  String? _selectedProjectName;
 
   int? _resumeDraftSessionId;
 
@@ -126,7 +137,6 @@ class _GisModeScreenState extends State<GisModeScreen> {
     } else {
       setState(() {
         _selectedProjectId = null;
-        _selectedProjectName = null;
       });
     }
     await _loadResumeDraft();
@@ -155,6 +165,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
     } catch (_) {
       return;
     }
+    final layerId = responses['layer_id']?.toString() ?? 'default';
+    if (_workspace!.layers.any((layer) => layer.id == layerId))
+      _workspace = await ProjectWorkspaceService(_database)
+          .select(project.id, layerId: layerId);
     final featureType = responses['feature_type'];
     if (featureType == null) return;
 
@@ -219,14 +233,18 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   Future<void> _selectProject(int id, String name) async {
+    final workspace = await ProjectWorkspaceService(_database).load(id);
     _cancelDraft();
     await _endMeasure();
     setState(() {
+      _workspace = workspace;
       _selectedProjectId = id;
-      _selectedProjectName = name;
       _infoFeature = null;
       _showInfoPanel = false;
     });
+    try {
+      context.read<ProjectState>().setSelectedProject(name, projectId: id);
+    } catch (_) {}
     _clearSurveyAnnotations();
     await _addSurveyAnnotations();
   }
@@ -375,6 +393,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
             sessionId is int ? sessionId : int.tryParse('$sessionId') ?? 0,
         title: title ?? 'Feature $sessionId',
         featureType: featureType ?? 'feature',
+        studySite: data?['study_site'] == true,
       );
       _showInfoPanel = true;
     });
@@ -434,6 +453,24 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
     if (responses['feature_type'] != 'point') return;
 
+    final oldLat = responses['latitude'];
+    final oldLon = responses['longitude'];
+    final answers = responses['answers'];
+    final snapshot = responses['form_snapshot'];
+    final questions = snapshot is Map ? snapshot['questions'] : null;
+    if (answers is Map && questions is List) {
+      for (final question in questions) {
+        if (question is! Map || question['type'] != 'geopoint') continue;
+        final value = answers[question['name']];
+        if (value is! String) continue;
+        final parts =
+            value.split(RegExp(r'[,\s]+')).map(double.tryParse).toList();
+        if (parts.length >= 2 && parts[0] == oldLat && parts[1] == oldLon) {
+          answers[question['name']] =
+              '${current.latitude},${current.longitude},0.0';
+        }
+      }
+    }
     responses['latitude'] = current.latitude;
     responses['longitude'] = current.longitude;
     await _database.updateSurveySession(
@@ -448,6 +485,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _deleteSelectedFeature() async {
     final info = _infoFeature;
     if (info == null) return;
+    if (info.studySite) {
+      _showSnack('Edit or remove this site in Study Area mode');
+      return;
+    }
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete feature',
@@ -503,13 +544,64 @@ class _GisModeScreenState extends State<GisModeScreen> {
       };
       try {
         final responses = jsonDecode(session.responses) as Map<String, dynamic>;
-        data['feature_type'] = responses['feature_type'] ?? 'unknown';
-        await _addSurveyFeature(controller, responses, data);
+        if ((responses['layer_id'] ?? 'default') !=
+            (_workspace?.layerId ?? 'default')) continue;
+        data['feature_type'] = responses['feature_type'] ?? 'survey';
+        data['study_site'] = responses['workflow'] == 'study_area_feature_v1';
+        final geometries = RecordGeometry.fromResponses(responses);
+        for (final geometry in geometries) {
+          await _addGeometry(controller, geometry, {
+            ...data,
+            'read_only_geometry': data['study_site'] == true ||
+                responses['feature_type'] != 'point' ||
+                geometry['type'] != 'Point' ||
+                jsonEncode(geometry['coordinates']) !=
+                    jsonEncode([responses['longitude'], responses['latitude']])
+          });
+        }
       } catch (_) {
         // Skip sessions whose responses are not GeoJSON-like.
       }
     }
     if (mounted) setState(() {});
+  }
+
+  Future<void> _addGeometry(MapLibreMapController controller,
+      Map<String, dynamic> geometry, Map<String, dynamic> data) async {
+    final type = geometry['type'];
+    final coordinates = geometry['coordinates'];
+    if (coordinates is! List) return;
+    if (type == 'Point' && coordinates.length >= 2) {
+      await _addSurveyFeature(
+          controller,
+          {
+            'feature_type': 'point',
+            'longitude': coordinates[0],
+            'latitude': coordinates[1]
+          },
+          data);
+    } else if (type == 'LineString' || type == 'Polygon') {
+      final points = type == 'Polygon' ? coordinates.first : coordinates;
+      if (points is! List) return;
+      await _addSurveyFeature(
+          controller,
+          {
+            'feature_type': type == 'Polygon' ? 'polygon' : 'line',
+            'vertices': [
+              for (final point in points)
+                if (point is List && point.length >= 2)
+                  {'longitude': point[0], 'latitude': point[1]}
+            ]
+          },
+          data);
+    } else if (type == 'MultiPoint' ||
+        type == 'MultiLineString' ||
+        type == 'MultiPolygon') {
+      for (final part in coordinates) {
+        await _addGeometry(controller,
+            {'type': type.toString().substring(5), 'coordinates': part}, data);
+      }
+    }
   }
 
   Future<void> _addSurveyFeature(
@@ -529,7 +621,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
             circleColor: '#E53935',
             circleStrokeWidth: 2,
             circleStrokeColor: '#FFFFFF',
-            draggable: true,
+            draggable: data['read_only_geometry'] != true,
           ),
           data,
         );
@@ -772,7 +864,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   Future<void> _finishDraft() async {
-    final fields = _selectedProjectId == null
+    final fields = _workspace?.form != null || _selectedProjectId == null
         ? const <String>[]
         : (await _database.getProjectFields(_selectedProjectId!))
             .map((f) => f.name)
@@ -789,16 +881,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
         fields: fields,
       );
       if (result != null) {
-        await _removeDraftAnnotations();
-        await _saveFeature(
+        final saved = await _saveFeature(
           featureType: 'point',
           result: result,
           latitude: fix.lat,
           longitude: fix.lon,
           accuracyM: fix.accuracy,
         );
+        if (saved && mounted) _cancelDraft();
       }
-      if (mounted) _cancelDraft();
       return;
     }
 
@@ -821,18 +912,17 @@ class _GisModeScreenState extends State<GisModeScreen> {
         fields: fields,
       );
       if (result != null) {
-        await _removeDraftAnnotations();
-        await _saveFeature(
+        final saved = await _saveFeature(
           featureType: _draftType == _DraftType.line ? 'line' : 'polygon',
           result: result,
           vertices: vertices,
         );
+        if (saved && mounted) _cancelDraft();
       }
-      if (mounted) _cancelDraft();
     }
   }
 
-  Future<void> _saveFeature({
+  Future<bool> _saveFeature({
     required String featureType,
     required FeatureDetailResult result,
     double? latitude,
@@ -843,10 +933,60 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final projectId = _selectedProjectId;
     if (projectId == null) {
       _showSnack('No project selected');
-      return;
+      return false;
     }
 
+    final schema = _workspace?.schema;
+    Map<String, dynamic> answers = {};
+    if (schema != null) {
+      final geometry = featureType == 'point'
+          ? {
+              'type': 'Point',
+              'coordinates': [longitude, latitude]
+            }
+          : {
+              'type': featureType == 'line' ? 'LineString' : 'Polygon',
+              'coordinates': featureType == 'line'
+                  ? [
+                      for (final p
+                          in vertices ?? <({double lat, double lon})>[])
+                        [p.lon, p.lat]
+                    ]
+                  : [
+                      [
+                        for (final p
+                            in vertices ?? <({double lat, double lon})>[])
+                          [p.lon, p.lat],
+                        if (vertices?.isNotEmpty == true)
+                          [vertices!.first.lon, vertices.first.lat]
+                      ]
+                    ]
+            };
+      for (final question in schema.questions) {
+        if (question.type == QuestionType.geopoint && featureType == 'point') {
+          answers[question.name] = '$latitude,$longitude,${accuracyM ?? 0}';
+        } else if (question.type == QuestionType.geotrace &&
+                featureType == 'line' ||
+            question.type == QuestionType.geoshape &&
+                featureType == 'polygon') {
+          answers[question.name] = jsonEncode(geometry);
+        }
+        if (question.type == QuestionType.image && result.photo != null)
+          answers[question.name] = result.photo!.toJson();
+      }
+      final edited = await editFormAttributes(context,
+          form: schema,
+          answers: answers,
+          username: await _database.getSetting('user_name'));
+      if (edited == null) return false;
+      answers = edited;
+    }
     final responses = <String, dynamic>{
+      'layer_id': _workspace?.layerId ?? 'default',
+      if (schema != null) 'form_id': schema.id,
+      if (schema != null) 'form_name': schema.name,
+      if (schema != null) 'form_snapshot': schema.toJson(),
+      if (schema != null) 'answers': answers,
       'feature_type': featureType,
       'user_name': await _database.getSetting('user_name'),
       'recorded_at': DateTime.now().toIso8601String(),
@@ -914,10 +1054,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
         ),
       );
     }
-    if (!mounted) return;
+    if (!mounted) return true;
     _showSnack('$featureType saved');
     final controller = _controller;
-    if (controller == null || !_styleReady) return;
+    if (controller == null || !_styleReady) return true;
     try {
       await _addSurveyFeature(
         controller,
@@ -932,6 +1072,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       // The feature is already in the database; it renders on the next
       // map load.
     }
+    return true;
   }
 
   void _cancelDraft() {
@@ -941,6 +1082,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     _resumeDraftSessionId = null;
     _recorder.reset();
     _ticker?.cancel();
+    _removeDraftAnnotations();
     if (mounted) {
       setState(() {
         _draftType = _DraftType.none;
@@ -952,7 +1094,6 @@ class _GisModeScreenState extends State<GisModeScreen> {
         _draftPlaceholder = null;
       });
     }
-    _removeDraftAnnotations();
     if (wasRecording) {
       _startLocationStream();
     }
@@ -989,6 +1130,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     final responses = <String, dynamic>{
       'draft': true,
+      'layer_id': _workspace?.layerId ?? 'default',
       'feature_type': _draftTypeName,
       'user_name': await _database.getSetting('user_name'),
       'saved_at': DateTime.now().toIso8601String(),
@@ -1206,17 +1348,21 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _removeDraftAnnotations() async {
     final controller = _controller;
     if (controller == null) return;
-    if (_draftPoint != null) {
-      await controller.removeCircle(_draftPoint!);
+    final point = _draftPoint;
+    final placeholder = _draftPlaceholder;
+    final line = _draftLine;
+    final fill = _draftFill;
+    if (point != null) {
+      await controller.removeCircle(point);
     }
-    if (_draftPlaceholder != null) {
-      await controller.removeCircle(_draftPlaceholder!);
+    if (placeholder != null) {
+      await controller.removeCircle(placeholder);
     }
-    if (_draftLine != null) {
-      await controller.removeLine(_draftLine!);
+    if (line != null) {
+      await controller.removeLine(line);
     }
-    if (_draftFill != null) {
-      await controller.removeFill(_draftFill!);
+    if (fill != null) {
+      await controller.removeFill(fill);
     }
   }
 
@@ -1330,6 +1476,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('GIS Mode'),
+        bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(112),
+            child: _buildProjectBar()),
         actions: [
           Tooltip(
             message: _locationStatus,
@@ -1379,15 +1528,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
               left: 8,
               bottom: 8,
               child: OfflineBasemapNotice(choice: _offlineBasemap)),
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: _buildProjectBar(),
-          ),
           if (_currentLocation != null)
             Positioned(
-              top: 64,
+              top: 12,
               right: 16,
               child: _buildGpsCard(),
             ),
@@ -1395,14 +1538,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
             Positioned(
               left: 16,
               right: 16,
-              top: 108,
+              top: 60,
               child: _buildDraftBanner(),
             ),
           if (_measureActive)
             Positioned(
               left: 16,
               right: 16,
-              top: 108,
+              top: 60,
               child: _buildMeasureBanner(),
             ),
           if (_showInfoPanel)
@@ -1443,42 +1586,13 @@ class _GisModeScreenState extends State<GisModeScreen> {
     ''';
   }
 
-  Widget _buildProjectBar() {
-    final name = _selectedProjectName ?? 'Select a project';
-    return Material(
-      color: Colors.white,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: _showProjectPicker,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Icon(
-                Icons.work_outline,
-                size: 18,
-                color: _selectedProjectId == null ? Colors.orange : Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Project: $name',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Icon(Icons.arrow_drop_down, color: Colors.grey),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildProjectBar() => ProjectWorkspaceBar(
+      database: _database,
+      workspace: _workspace,
+      enabled: !_draftActive,
+      onChanged: (workspace) async {
+        await _selectProject(workspace.project.id, workspace.project.name);
+      });
 
   Widget _buildGpsCard() {
     final location = _currentLocation;
@@ -1508,6 +1622,28 @@ class _GisModeScreenState extends State<GisModeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _editSelectedAttributes() async {
+    final info = _infoFeature;
+    if (info == null) return;
+    if (info.studySite) {
+      await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => StudyAreaModeScreen(
+              projectId: _selectedProjectId, database: _database)));
+      await _clearSurveyAnnotations();
+      await _addSurveyAnnotations();
+      return;
+    }
+    final row = await _database.getSurveySession(info.sessionId);
+    if (row == null || !mounted) return;
+    final project = await _database.getProjectById(row.projectId);
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SurveySessionDetailScreen(
+            session: row, projectName: project?.name ?? '')));
+    await _clearSurveyAnnotations();
+    await _addSurveyAnnotations();
   }
 
   Widget _buildInfoPanel() {
@@ -1549,6 +1685,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               )
             else ...[
+              TextButton.icon(
+                  onPressed: _editSelectedAttributes,
+                  icon: const Icon(Icons.assignment_outlined),
+                  label: const Text('View / edit information')),
               Text(
                 info.title,
                 style:

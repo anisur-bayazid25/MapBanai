@@ -164,6 +164,9 @@ class StudyAreaSite {
   List<StudyAreaRevision> history;
   int? projectId;
   String? projectExternalId;
+  String layerId;
+  Map<String, dynamic> formAnswers;
+  Map<String, dynamic>? formSnapshot;
 
   StudyAreaSite({
     required this.id,
@@ -181,7 +184,11 @@ class StudyAreaSite {
     List<StudyAreaRevision>? history,
     this.projectId,
     this.projectExternalId,
+    this.layerId = 'default',
+    Map<String, dynamic>? formAnswers,
+    this.formSnapshot,
   })  : attributes = attributes ?? {},
+        formAnswers = formAnswers ?? {},
         history = history ?? [] {
     revisionId ??= revisionToken;
   }
@@ -190,6 +197,9 @@ class StudyAreaSite {
         'id': id,
         'project_id': projectId,
         'project_external_id': projectExternalId,
+        'layer_id': layerId,
+        'form_answers': formAnswers,
+        'form_snapshot': formSnapshot,
         'latitude': latitude,
         'longitude': longitude,
         'geometry': currentGeometry,
@@ -255,6 +265,9 @@ class StudyAreaSite {
         history: List.from(history),
         projectId: projectId,
         projectExternalId: projectExternalId,
+        layerId: layerId,
+        formAnswers: Map.from(formAnswers),
+        formSnapshot: formSnapshot,
         original: original ??
             {
               'geometry': currentGeometry,
@@ -290,6 +303,9 @@ class StudyAreaSite {
         'history': history.map((r) => r.toJson()).toList(),
         'project_id': projectId,
         'project_external_id': projectExternalId,
+        'layer_id': layerId,
+        'form_answers': formAnswers,
+        'form_snapshot': formSnapshot,
       };
 
   factory StudyAreaSite.fromJson(Map<String, dynamic> json) {
@@ -321,6 +337,12 @@ class StudyAreaSite {
           .toList(),
       projectId: (json['project_id'] as num?)?.toInt(),
       projectExternalId: json['project_external_id'] as String?,
+      layerId: json['layer_id']?.toString() ?? 'default',
+      formAnswers:
+          Map<String, dynamic>.from(json['form_answers'] as Map? ?? {}),
+      formSnapshot: json['form_snapshot'] is Map
+          ? Map<String, dynamic>.from(json['form_snapshot'])
+          : null,
     );
   }
 
@@ -349,6 +371,9 @@ class StudyAreaSite {
           'history': history.map((r) => r.toJson()).toList(),
           'project_id': projectId,
           'project_external_id': projectExternalId,
+          'layer_id': layerId,
+          'form_answers': formAnswers,
+          'form_snapshot': formSnapshot,
           'attributes': attributes,
           'source_properties': sourceProperties,
         },
@@ -891,6 +916,12 @@ class StudyAreaService {
             .toList(),
         projectId: (metadata['project_id'] as num?)?.toInt(),
         projectExternalId: metadata['project_external_id'] as String?,
+        layerId: metadata['layer_id']?.toString() ?? 'default',
+        formAnswers:
+            Map<String, dynamic>.from(metadata['form_answers'] as Map? ?? {}),
+        formSnapshot: metadata['form_snapshot'] is Map
+            ? Map<String, dynamic>.from(metadata['form_snapshot'])
+            : null,
       ));
     }
     if (sites.isEmpty && features.isNotEmpty) {

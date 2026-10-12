@@ -135,7 +135,6 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         _permissionGranted = true;
         _recordingLogId = bg.activeLogId;
         _latest = bg.latest;
-        if (bg.latest != null) _groundRefAltitude ??= bg.latest!.altitude;
         _streamError = false;
       });
       return;
@@ -165,7 +164,6 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         _noteHeading(position.heading);
         setState(() {
           _latest = position;
-          _groundRefAltitude ??= position.altitude;
           _streamError = false;
         });
       },
@@ -186,7 +184,6 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       if (bg.isRecording) {
         _recordingLogId = bg.activeLogId;
         _latest = bg.latest;
-        if (bg.latest != null) _groundRefAltitude ??= bg.latest!.altitude;
         _streamError = false;
       }
     });
@@ -197,8 +194,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<void> _refreshCountsThrottled() async {
     final now = DateTime.now();
     final last = _lastCountsRefresh;
-    if (last != null &&
-        now.difference(last) < const Duration(seconds: 3)) {
+    if (last != null && now.difference(last) < const Duration(seconds: 3)) {
       return;
     }
     _lastCountsRefresh = now;
@@ -351,8 +347,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     );
     await _store.createLogFile(logId);
     await _loadLogs();
-    final log = (await _database.getGpsLogs())
-        .firstWhere((l) => l.id == logId, orElse: () => _logs.firstWhere((l) => l.id == logId));
+    final log = (await _database.getGpsLogs()).firstWhere((l) => l.id == logId,
+        orElse: () => _logs.firstWhere((l) => l.id == logId));
     _showSnack(
       '"${name.trim().isEmpty ? defaultName : name.trim()}" created',
     );
@@ -470,8 +466,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       await Navigator.of(context).push(
-        MaterialPageRoute(
-            builder: (_) => WebmapViewerScreen(htmlFile: file)),
+        MaterialPageRoute(builder: (_) => WebmapViewerScreen(htmlFile: file)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -530,10 +525,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             const SizedBox(height: 16),
             _buildLogsHeader(),
             const SizedBox(height: 8),
-            if (_logs.isEmpty)
-              _buildEmptyLogs()
-            else
-              ..._buildLogTiles(),
+            if (_logs.isEmpty) _buildEmptyLogs() else ..._buildLogTiles(),
           ],
         ),
       ),
@@ -630,8 +622,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     final deg = hasHeading ? ((heading % 360) + 360) % 360 : 0.0;
     // The dial rotates to -heading (shortest path via unwrapped value);
     // the red needle stays fixed pointing up — where the phone faces.
-    final dialTurns =
-        hasHeading ? -((_continuousHeading ?? deg) / 360) : 0.0;
+    final dialTurns = hasHeading ? -((_continuousHeading ?? deg) / 360) : 0.0;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -640,7 +631,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       ),
       child: ExpansionTile(
         leading: Icon(Icons.explore_outlined, color: Colors.teal.shade700),
-        title: const Text('Compass', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text('Compass',
+            style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           hasHeading
               ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} (from North)'
@@ -664,7 +656,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                         turns: dialTurns,
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeOut,
-                        child: const CustomPaint(painter: _CompassDialPainter()),
+                        child:
+                            const CustomPaint(painter: _CompassDialPainter()),
                       ),
                       // Fixed needle: always points up = phone facing.
                       const CustomPaint(painter: _CompassNeedlePainter()),
@@ -732,14 +725,14 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         children: [
           _readoutRow(
             label: 'Latitude',
-            value: position == null ? '—' : position.latitude.toStringAsFixed(7),
+            value:
+                position == null ? '—' : position.latitude.toStringAsFixed(7),
           ),
           const SizedBox(height: 12),
           _readoutRow(
             label: 'Longitude',
-            value: position == null
-                ? '—'
-                : position.longitude.toStringAsFixed(7),
+            value:
+                position == null ? '—' : position.longitude.toStringAsFixed(7),
           ),
           if (position != null) ...[
             const SizedBox(height: 12),
@@ -787,11 +780,13 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _readoutCell(
-                  label: 'Elevation',
+                  label: 'GNSS altitude',
                   value: position == null
                       ? '—'
-                      : _formatRelativeElevation(position.altitude),
-                  color: _elevationColor(position?.altitude),
+                      : position.altitude.isFinite &&
+                              position.altitudeAccuracy > 0
+                          ? '${position.altitude.toStringAsFixed(1)} m'
+                          : 'Unavailable',
                 ),
               ),
               const SizedBox(width: 10),
@@ -813,20 +808,30 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
               Expanded(
                 child: _readoutCell(
                   label: 'Satellites (in use / in view)',
-                  value: _gnss == null ? '—' : '${_gnss!.inUse}/${_gnss!.inView}',
+                  value:
+                      _gnss == null ? '—' : '${_gnss!.inUse}/${_gnss!.inView}',
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            position == null || _groundRefAltitude == null
-                ? 'Elevation is relative to the first fix of this session.'
-                : 'Elevation relative to first fix '
-                    '(${_groundRefAltitude!.toStringAsFixed(1)} m abs).',
-            style: TextStyle(fontSize: 11, color: Colors.teal.shade700),
-            textAlign: TextAlign.center,
-          ),
+              position == null || position.altitudeAccuracy <= 0
+                  ? 'Vertical accuracy unavailable. GNSS altitude is not a reliable floor-height measurement indoors.'
+                  : 'Vertical accuracy ±${position.altitudeAccuracy.toStringAsFixed(1)} m · WGS84 ellipsoid',
+              style: TextStyle(fontSize: 11, color: Colors.teal.shade700),
+              textAlign: TextAlign.center),
+          if (_groundRefAltitude != null && position != null)
+            Text(
+                'Height change from your reference: ${_formatRelativeElevation(position.altitude)}'),
+          TextButton.icon(
+              onPressed: position == null || position.altitudeAccuracy <= 0
+                  ? null
+                  : () {
+                      setState(() => _groundRefAltitude = position.altitude);
+                    },
+              icon: const Icon(Icons.height),
+              label: const Text('Set relative height reference here')),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -884,15 +889,6 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     return '$sign${relative.toStringAsFixed(1)} m';
   }
 
-  Color? _elevationColor(double? altitude) {
-    final ref = _groundRefAltitude;
-    if (altitude == null || ref == null) return null;
-    final relative = altitude - ref;
-    if (relative > 0.5) return Colors.green;
-    if (relative < -0.5) return Colors.blueGrey;
-    return null;
-  }
-
   Widget _readoutCell({
     required String label,
     required String value,
@@ -907,7 +903,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       ),
       child: Column(
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          Text(label,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -929,16 +926,15 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         Text(
           'GPS Logs (${_logs.length})',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+                fontWeight: FontWeight.w700,
+              ),
         ),
         Row(
           children: [
             OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const GpsCsvViewerScreen()),
+                  MaterialPageRoute(builder: (_) => const GpsCsvViewerScreen()),
                 );
               },
               icon: const Icon(Icons.table_chart_outlined, size: 18),
@@ -966,7 +962,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       ),
       child: Column(
         children: [
-          Icon(Icons.assessment_outlined, size: 40, color: Colors.grey.shade400),
+          Icon(Icons.assessment_outlined,
+              size: 40, color: Colors.grey.shade400),
           const SizedBox(height: 8),
           Text(
             'No logs yet. Create one to record coordinates, time, elevation '
@@ -1084,7 +1081,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outlined, size: 18, color: Colors.red),
+                          Icon(Icons.delete_outlined,
+                              size: 18, color: Colors.red),
                           SizedBox(width: 8),
                           Text('Delete', style: TextStyle(color: Colors.red)),
                         ],
@@ -1124,8 +1122,12 @@ class _CompassDialPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) / 2 - 6;
-    canvas.drawCircle(center, radius - 1,
-        Paint()..color = Colors.white..style = PaintingStyle.fill);
+    canvas.drawCircle(
+        center,
+        radius - 1,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill);
     canvas.drawCircle(
       center,
       radius,
@@ -1147,8 +1149,11 @@ class _CompassDialPainter extends CustomPainter {
       final isCardinal = deg % 90 == 0;
       final isMajor = deg % 30 == 0;
       final rad = deg * math.pi / 180;
-      final inner =
-          isCardinal ? radius - 14 : isMajor ? radius - 10 : radius - 6;
+      final inner = isCardinal
+          ? radius - 14
+          : isMajor
+              ? radius - 10
+              : radius - 6;
       final outer = radius - 2;
       final p1 = Offset(
           center.dx + inner * math.sin(rad), center.dy - inner * math.cos(rad));

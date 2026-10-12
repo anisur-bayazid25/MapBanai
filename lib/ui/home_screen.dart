@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/study_area_store.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -498,7 +499,8 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
     try {
-      final dataService = WebMapDataService(_database);
+      final dataService =
+          WebMapDataService(_database, studyAreaStore: StudyAreaStore());
       final generator = WebMapGenerator(dataService: dataService);
       // Project-wise: only this project's data
       final featureCollection =
@@ -528,7 +530,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       Navigator.of(context).pop(); // close loading
       await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => WebmapViewerScreen(htmlFile: file)),
+        MaterialPageRoute(
+            builder: (_) => WebmapViewerScreen(
+                htmlFile: file, database: _database, projectId: project.id)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -741,7 +745,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    l10n?.homeSubtitle ?? 'Offline field data collection',
+                    l10n?.homeSubtitle ?? 'Easy Geospatial Data Collection',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.grey.shade700,
@@ -826,7 +830,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () async {
                             await Navigator.of(context).push(
                               MaterialPageRoute(
-                                  builder: (_) => const StudyAreaModeScreen()),
+                                  builder: (_) => StudyAreaModeScreen(
+                                      projectId: context
+                                          .read<ProjectState>()
+                                          .selectedProjectId)),
                             );
                             _loadProjects();
                           },
@@ -1296,7 +1303,7 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
     try {
       // Phase 1: data
       setState(() => _phase = 'Syncing data...');
-      final dataResult = await CloudSyncService(widget.database)
+      final dataResult = await CloudSyncService(widget.database, studyAreaStore: StudyAreaStore())
           .syncProject(widget.projectId)
           .catchError((e) {
         // rethrow to handle offline vs generic

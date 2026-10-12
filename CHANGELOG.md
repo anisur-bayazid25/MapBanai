@@ -4,6 +4,17 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.6.1] - 2026-10-12
+
+- Bound Survey, GIS, Study Area, WebMap and sync to project identity; GPS remains standalone.
+- Added named project study layers, shared form selection and typed map attribute editing.
+- Added explicit legacy site assignment and study-site sync outbox records.
+- Preserved sync credentials through partial updates and same-project replacement.
+- Corrected GNSS altitude presentation and made relative references explicit.
+- Rebuilt the mobile project atlas with filters, measurement styling, answer tables and filtered exports.
+- Bounded form validation and duplicate scanning, with quality progress reporting.
+- Updated tagline and CARE/BRAC acknowledgements.
+
 ## [2.6.0] - 2026-10-12
 
 - Added linked guided visits, durable drafts and retryable map updates.

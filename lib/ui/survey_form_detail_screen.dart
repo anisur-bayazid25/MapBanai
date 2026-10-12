@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
@@ -59,6 +60,10 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           status: const drift.Value('saved'),
           responses: drift.Value(jsonEncode({
             'form_id': _form.id,
+            'form_snapshot': _form.toJson(),
+            'layer_id':
+                (await ProjectWorkspaceService(_database).load(projectId))
+                    .layerId,
             'form_name': _form.name,
             'user_name': await _database.getSetting('user_name'),
             'answers': answers,
@@ -90,6 +95,10 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           status: const drift.Value('draft'),
           responses: drift.Value(jsonEncode({
             'form_id': _form.id,
+            'form_snapshot': _form.toJson(),
+            'layer_id':
+                (await ProjectWorkspaceService(_database).load(projectId))
+                    .layerId,
             'form_name': _form.name,
             'user_name': await _database.getSetting('user_name'),
             'answers': answers,

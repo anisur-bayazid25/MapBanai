@@ -1,14 +1,16 @@
-MapBanai 2.6.0 improves collection and verification of previous field data.
+MapBanai v2.6.1 — Easy Geospatial Data Collection
 
-- Guided visits link baseline sites, reviewed attributes, forms, mandatory geotagged photos and map revisions. Drafts resume safely; failed map updates can be retried.
-- GPS accuracy is recorded/displayed, but does not block photos. Valid EXIF coordinates remain mandatory.
-- Study Area supports verification/update/new/review/not-found statuses, geometry editing, original baselines, revision history, changed-only exports and reviewed GeoJSON team merges.
-- Offline map packages support provider-approved custom style URLs, bounded downloads, storage limits and a shared basemap selector.
-- Field quality checks required answers, evidence, recorded GPS quality and possible duplicates.
-- XLSForm parsing, editable dates, conditional validation, backup restoration, sync acknowledgements, project selection and track timing are fixed.
+- Survey, GIS, Study Area, WebMap and sync share project ownership. GPS stays independent.
+- Each project supports multiple named study layers and a shared selected survey form. GIS and Study Area use the same typed form questions as Survey Mode.
+- Study Area supports explicit assignment of previous unassigned sites, layer-scoped visits/imports/exports, typed answers and project sync outbox records.
+- Sync URLs and API keys survive partial updates, successful sync and replacement of the same project definition. Project sharing retains layer names while excluding credentials.
+- GPS reports GNSS altitude and vertical accuracy instead of automatically subtracting the first fix. Relative height requires an explicit reference.
+- A responsive project atlas adds filters, measurement colours, answer tables and filtered CSV/GeoJSON exports, including Android sharing.
+- Field quality uses isolated, time-bounded form validation, progress reporting and bounded duplicate review.
+- Updated home tagline and acknowledgements to the CARE project and BRAC James P Grant School of Public Health, BRAC University.
 
-Upgrade: install over the existing app and re-import XLSForms under a new name/version to apply parser fixes. Keep your existing collected records. Repeats and other unsupported XLSForm constructs are rejected explicitly.
+Install over your existing app using the signed APK below. Photos still require GPS tags; accuracy is recorded but never an accuracy threshold for photos. Credentials already erased by previous versions require re-entry or backup restoration. Indoor GNSS does not reliably measure floor height.
 
-Use GeoJSON to exchange full revision history; CSV/XLSX are tabular exports. Offline downloads require a provider that permits them, and downloaded caches are not included in backups. Camera location is obtained after the external camera returns; remain at the capture location until saving completes.
+Unassigned legacy study sites require explicit assignment to a project/layer. Shared .mbproj packages contain project definitions, not collected observations. Receiving sync scripts must preserve the new layer/site metadata and upsert stable IDs; remote deletion propagation is not added.
 
-Automated tests and signed Android build verification cover this release. No Android device/emulator was connected: validate camera/GNSS, restore and offline downloads on your field phone before deployment. See FIELD_WORKFLOW.md in the repository for instructions.
+Automated tests, browser atlas checks, static analysis and Android signing verification cover this release. No Android phone/emulator was connected; validate native camera/GNSS and your sync endpoint on your phone before field deployment. See [FIELD_WORKFLOW.md](https://github.com/anisur-bayazid25/MapBanai/blob/main/FIELD_WORKFLOW.md) for the full workflow and research references.

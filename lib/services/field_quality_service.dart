@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:isolate';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -21,6 +23,41 @@ class FieldQualityIssue {
 }
 
 class FieldQualityService {
+  /// A hostile/accidental exponential regex must never block the UI isolate.
+  static Future<List<String>> validateAnswersInWorker(
+      SurveyForm form, Map<String, dynamic> answers,
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final port = ReceivePort();
+    Isolate? worker;
+    try {
+      worker = await Isolate.spawn(
+          _validateWorker, [port.sendPort, form.toJson(), answers]);
+      final result = await port.first.timeout(timeout);
+      return List<String>.from(result as List);
+    } on TimeoutException {
+      return [
+        'Form validation exceeded its time limit. Review this record and its expressions; validation is incomplete.'
+      ];
+    } finally {
+      worker?.kill(priority: Isolate.immediate);
+      port.close();
+    }
+  }
+
+  static void _validateWorker(List<dynamic> arguments) async {
+    final reply = arguments[0] as SendPort;
+    try {
+      final form = SurveyForm.fromJson(Map<String, dynamic>.from(arguments[1]));
+      final answers = Map<String, dynamic>.from(arguments[2]);
+      reply.send([
+        ...validateAnswers(form, answers),
+        ...(await validateMedia(form, answers)).map((error) => 'Photo: $error')
+      ]);
+    } catch (error) {
+      reply.send(['Form validation failed: $error']);
+    }
+  }
+
   static bool empty(dynamic value) =>
       value == null ||
       value.toString().trim().isEmpty ||
@@ -30,6 +67,11 @@ class FieldQualityService {
   static List<String> validateAnswers(
       SurveyForm form, Map<String, dynamic> answers) {
     final errors = <String>[];
+    final groups = form.groupByName;
+    final groupVisibility = {
+      for (final entry in groups.entries)
+        entry.key: entry.value.isRelevant(answers)
+    };
     if (form.groups.any((group) => group.isRepeat))
       errors.add('Repeated records are unsupported in this form.');
     for (final question in form.questions) {
@@ -37,8 +79,7 @@ class FieldQualityService {
           question.type == QuestionType.note ||
           question.type == QuestionType.calculated) continue;
       if (!question.isRelevant(answers) ||
-          question.groupPath.any(
-              (name) => form.groupByName[name]?.isRelevant(answers) == false))
+          question.groupPath.any((name) => groupVisibility[name] == false))
         continue;
       final value = answers[question.name];
       if (question.required && empty(value)) {
@@ -224,11 +265,21 @@ class FieldQualityService {
       required List<StoredForm> forms,
       required List<StudyAreaSite> sites,
       required double accuracyThresholdM,
-      double duplicateDistanceM = 10}) async {
+      double duplicateDistanceM = 10,
+      void Function(int completed, int total, String title)?
+          onProgress}) async {
     if (!duplicateDistanceM.isFinite || duplicateDistanceM <= 0)
       throw ArgumentError.value(duplicateDistanceM, 'duplicateDistanceM');
     final issues = <FieldQualityIssue>[];
     final points = <_QualityPoint>[];
+    final parsedForms = <String, SurveyForm>{};
+    for (final stored in forms) {
+      try {
+        final form = SurveyForm.fromJson(jsonDecode(stored.json));
+        parsedForms[form.id] = form;
+      } catch (_) {}
+    }
+    var completed = 0;
     for (final site in sites) {
       if (site.currentGeometry['type'] == 'Point')
         points.add(_QualityPoint(
@@ -236,6 +287,8 @@ class FieldQualityService {
             siteId: site.id));
     }
     for (final session in sessions) {
+      onProgress?.call(completed++, sessions.length, session.title);
+      await Future<void>.delayed(Duration.zero);
       Map<String, dynamic> response;
       try {
         response =
@@ -273,29 +326,20 @@ class FieldQualityService {
               sessionId: session.id));
         }
       }
-      for (final stored in forms) {
-        if (form != null) break;
-        try {
-          final candidate = SurveyForm.fromJson(
-              Map<String, dynamic>.from(jsonDecode(stored.json) as Map));
-          if (candidate.id == response['form_id']) {
-            form = candidate;
-            break;
-          }
-        } catch (_) {}
-      }
+      form ??= parsedForms[response['form_id']];
       if (response['form_id'] != null && form == null)
         issues.add(FieldQualityIssue('missing_form',
             '${session.title}: form definition is unavailable, required answers cannot be checked',
             sessionId: session.id));
       if (form != null) {
-        for (final error in validateAnswers(form, answers))
-          issues.add(FieldQualityIssue('answer', '${session.title}: $error',
-              sessionId: session.id));
-      }
-      if (form != null) {
-        for (final error in await validateMedia(form, answers))
-          issues.add(FieldQualityIssue('photo', '${session.title}: $error',
+        for (final error in await validateAnswersInWorker(form, answers))
+          issues.add(FieldQualityIssue(
+              error.startsWith('Photo:')
+                  ? 'photo'
+                  : error.contains('time limit')
+                      ? 'check_timeout'
+                      : 'answer',
+              '${session.title}: $error',
               sessionId: session.id));
       }
       final photos = <PhotoRecord>[];
@@ -392,6 +436,9 @@ class FieldQualityService {
     // Spatial buckets bound candidate comparisons for large field datasets.
     final buckets = <String, List<_QualityPoint>>{};
     final latitudeStep = duplicateDistanceM / 111320;
+    var comparisons = 0;
+    var duplicateCount = 0;
+    duplicateScan:
     for (final point in points) {
       if (!point.latitude.isFinite ||
           !point.longitude.isFinite ||
@@ -407,6 +454,13 @@ class FieldQualityService {
         for (var dx = -span; dx <= span; dx++) {
           for (final other in buckets['${row + dy}:${column + dx}'] ??
               const <_QualityPoint>[]) {
+            if (++comparisons % 1000 == 0)
+              await Future<void>.delayed(Duration.zero);
+            if (comparisons > 100000 || duplicateCount >= 1000) {
+              issues.add(const FieldQualityIssue('duplicate_scan_limit',
+                  'Duplicate review reached its limit. Filter by study layer or inspect smaller batches to review the remaining candidates.'));
+              break duplicateScan;
+            }
             if (point.sessionId != null && point.sessionId == other.sessionId)
               continue;
             if ((point.linkedSiteId != null &&
@@ -416,13 +470,15 @@ class FieldQualityService {
             if (point.linkedSiteId != null &&
                 point.linkedSiteId == other.linkedSiteId) continue;
             final distance = _distance(point, other);
-            if (distance <= duplicateDistanceM)
+            if (distance <= duplicateDistanceM) {
+              duplicateCount++;
               issues.add(FieldQualityIssue('near_duplicate',
                   '${point.label} and ${other.label} are ${distance.toStringAsFixed(1)} m apart. Review whether they are separate features.',
                   sessionId: point.sessionId ?? other.sessionId,
                   siteId: point.siteId ?? other.siteId,
                   relatedSiteId: other.siteId,
                   relatedSessionId: other.sessionId));
+            }
           }
         }
       }

@@ -1,4 +1,12 @@
-# MapBanai 2.6 field workflow
+# MapBanai 2.6.1 field workflow
+
+## One project, three ways to collect
+
+Choose a project, a named study layer and a survey form. The same selected form supplies questions, choices, conditions and required fields in Survey, GIS and Study Area. Survey is the simplest questionnaire route; GIS captures geometry before opening the form; Study Area reviews existing sites before filling the form and recording a revision. GPS diagnostics/tracks work independently.
+
+Each project has its own layers, form selection and sync connection. Create layers such as **Salinity October**, **Salinity December** and **Household baseline** from the Study Area/GIS selector. The project atlas combines layers and lets you filter to one. Collections retain their layer and form snapshot. For repeated measurements, use linked field visits so earlier observations remain separate records; editing a site's attributes changes its current state.
+
+Select the project inside Study Area before importing data or starting a visit. Previous sites that have no project are hidden until you deliberately choose **Assign previous unassigned sites** in the Study Area menu. Assign only after selecting the correct project/layer. Sites already owned by another project are never claimed. Export the selected study layer as GeoJSON to retain geometry, answers and revision history.
 
 ## Prepare forms and previous data
 
@@ -47,3 +55,22 @@ On the target phone, test date editing, geotagged capture with low accuracy, dra
 Run `powershell -File tool/build_android.ps1 -Mode release` on this workstation. It applies a process-local Windows Java socket-path workaround. Release version is 2.6.0+23, minimum Android API 23. Existing Kotlin metadata diagnostics are emitted during successful Android builds; review them when upgrading the toolchain.
 
 A useful next addition is a user-selected portable backup destination with restore preview and attachment counts.
+
+
+## Project atlas and sync
+
+Open WebMap for the current project; its folder button switches projects. Filter by study layer, form, collector, source, status, dates, search or numeric answer. The attribute table contains the collected answers. GeoJSON and CSV export the filtered results; Android opens the share sheet. HTML sharing produces a portable atlas with embedded data and Leaflet. Online street/imagery tiles require internet and provider availability.
+
+Sync is selected-project only. Study-area edits enter the same outbox as collections, with stable site IDs, layer IDs, typed answers and revision metadata. The receiving script must upsert stable IDs and retain these fields. This release does not add remote deletion propagation or a new cloud server. URLs and API keys survive partial saves, successful sync and replacement of the same project definition; they are deliberately omitted from shared project packages. Credentials already erased by an earlier version must be entered again or restored from a backup that contains them.
+
+## GNSS altitude and responsive quality checks
+
+GPS now shows the phone's **GNSS altitude**, its vertical accuracy and the WGS84 ellipsoid reference. It no longer silently subtracts the first fix and calls the result elevation. A relative-height reference is available only when explicitly set. Indoor phone GNSS cannot reliably measure your building floor height; unavailable altitude is shown as unavailable.
+
+Field Quality validates each form in a separate worker with a three-second deadline and displays record progress. A timeout becomes a review issue; it does not silently pass the form. Dense duplicate scans are bounded and report when their limit is reached. Photo accuracy warnings remain advisory.
+
+## Design references and next priorities
+
+The shared questionnaire route follows [ODK Collect's offline form workflow](https://docs.getodk.org/collect-intro/). Geometry followed by typed attributes follows [QField digitizing](https://docs.qfield.org/how-to/data-collection/digitize/). Project-owned forms, layers and synchronization follow [Mergin Maps' project sync model](https://merginmaps.com/docs/manage/synchronisation/). These informed MapBanai's **one project, one form, three entry routes** workflow; this is a product direction, not a claim that no other app supports it.
+
+Next priorities: a site timeline comparing repeated salinity visits; collector assignments and coverage summaries; server-side conflict review and deletion acknowledgements; external GNSS support for projects needing precise heights. Linked observations, rather than overwriting a site each round, follow the [one-to-many observation model](https://merginmaps.com/docs/layer/one-to-n-relations/). These future priorities are not bundled as unfinished features in this release.

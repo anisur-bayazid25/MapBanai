@@ -87,8 +87,7 @@ class ProjectImportException implements Exception {
 ///  * the database write is transactional — a failure leaves existing data
 ///    untouched, and the temp directory is always cleaned up.
 class ProjectImporter {
-  ProjectImporter(this._database, {Directory? tempBase})
-      : _tempBase = tempBase;
+  ProjectImporter(this._database, {Directory? tempBase}) : _tempBase = tempBase;
 
   final AppDatabase _database;
   final Directory? _tempBase;
@@ -105,7 +104,8 @@ class ProjectImporter {
       }
     }
     final root = Directory(
-      p.join(base.path, 'imports', 'tmp-${DateTime.now().microsecondsSinceEpoch}'),
+      p.join(
+          base.path, 'imports', 'tmp-${DateTime.now().microsecondsSinceEpoch}'),
     );
     await root.create(recursive: true);
     return root;
@@ -204,7 +204,8 @@ class ProjectImporter {
     }
 
     // ── Manifest validation ─────────────────────────────────────────────
-    final manifestEntry = _findEntry(archive, ProjectPackageFormat.manifestFileName);
+    final manifestEntry =
+        _findEntry(archive, ProjectPackageFormat.manifestFileName);
     if (manifestEntry == null) {
       throw const ProjectImportException(
         ProjectImportError.invalidManifest,
@@ -230,11 +231,12 @@ class ProjectImporter {
     }
     final packageVersion = manifest['package_version'];
     if (packageVersion is! int ||
-        !ProjectPackageFormat.supportedPackageVersions.contains(packageVersion)) {
+        !ProjectPackageFormat.supportedPackageVersions
+            .contains(packageVersion)) {
       throw ProjectImportException(
         ProjectImportError.unsupportedPackageVersion,
         'Unsupported project package version '
-            '${packageVersion == null ? '?' : packageVersion}.',
+        '${packageVersion == null ? '?' : packageVersion}.',
       );
     }
 
@@ -254,7 +256,8 @@ class ProjectImporter {
     }
 
     // ── Checksum verification over every declared content file ──────────
-    final checksums = (manifest['checksums'] as Map?) ?? const <String, dynamic>{};
+    final checksums =
+        (manifest['checksums'] as Map?) ?? const <String, dynamic>{};
     final contents = (manifest['contents'] as List?) ?? <dynamic>[];
     for (final rawPath in contents) {
       final path = rawPath.toString();
@@ -268,7 +271,9 @@ class ProjectImporter {
       final expected = checksums[path]?.toString();
       if (expected != null && expected.isNotEmpty) {
         final actual = ProjectPackageFormat.sha256Hex(
-          entry.content is List<int> ? entry.content as List<int> : const <int>[],
+          entry.content is List<int>
+              ? entry.content as List<int>
+              : const <int>[],
         );
         if (actual != expected) {
           throw ProjectImportException(
@@ -294,7 +299,9 @@ class ProjectImporter {
           final file = File(target);
           await file.parent.create(recursive: true);
           await file.writeAsBytes(
-            entry.content is List<int> ? entry.content as List<int> : const <int>[],
+            entry.content is List<int>
+                ? entry.content as List<int>
+                : const <int>[],
             flush: true,
           );
         }
@@ -317,19 +324,23 @@ class ProjectImporter {
     Map<String, dynamic> versionMeta;
     try {
       project = decodeObject(
-        await _readFile(p.join(tempRoot.path, ProjectPackageFormat.projectFileName)),
+        await _readFile(
+            p.join(tempRoot.path, ProjectPackageFormat.projectFileName)),
         'project.json',
       );
       settings = decodeObject(
-        await _readFile(p.join(tempRoot.path, ProjectPackageFormat.settingsFileName)),
+        await _readFile(
+            p.join(tempRoot.path, ProjectPackageFormat.settingsFileName)),
         'settings.json',
       );
       layers = decodeObject(
-        await _readFile(p.join(tempRoot.path, ProjectPackageFormat.layersFileName)),
+        await _readFile(
+            p.join(tempRoot.path, ProjectPackageFormat.layersFileName)),
         'layers.json',
       );
       versionMeta = decodeObject(
-        await _readFile(p.join(tempRoot.path, ProjectPackageFormat.versionFileName)),
+        await _readFile(
+            p.join(tempRoot.path, ProjectPackageFormat.versionFileName)),
         'metadata/version.json',
       );
     } on FormatException {
@@ -356,7 +367,8 @@ class ProjectImporter {
     final forms = <Map<String, dynamic>>[];
     final formIndex = (project['forms'] as List?) ?? const <dynamic>[];
     for (final raw in formIndex) {
-      final item = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final item =
+          raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final fileName = item['file']?.toString();
       if (fileName == null || fileName.isEmpty) {
         throw const ProjectImportException(
@@ -436,12 +448,23 @@ class ProjectImporter {
           'Project already exists — an import decision is required.',
         );
       }
+      SyncConfig? retainedSync;
       if (!newCopy &&
           replaceExistingId != null &&
           conflict?.id == replaceExistingId) {
+        if (conflict?.externalId == data.meta.projectId)
+          retainedSync = await _database.getSyncConfig(replaceExistingId);
         await _database.deleteProject(replaceExistingId);
       }
-      return _insert(data, newCopy: newCopy);
+      final result = await _insert(data, newCopy: newCopy);
+      if (retainedSync != null) {
+        await _database.upsertSyncConfig(
+            projectId: result.projectId,
+            syncEndpointUrl: retainedSync.syncEndpointUrl,
+            syncApiKey: retainedSync.syncApiKey,
+            lastSyncAt: drift.Value(retainedSync.lastSyncAt));
+      }
+      return result;
     });
   }
 
@@ -463,12 +486,23 @@ class ProjectImporter {
           'Project already exists — an import decision is required.',
         );
       }
+      SyncConfig? retainedSync;
       if (!newCopy &&
           replaceExistingId != null &&
           conflict?.id == replaceExistingId) {
+        if (conflict?.externalId == data.meta.projectId)
+          retainedSync = await _database.getSyncConfig(replaceExistingId);
         await _database.deleteProject(replaceExistingId);
       }
-      return _insert(data, newCopy: newCopy);
+      final result = await _insert(data, newCopy: newCopy);
+      if (retainedSync != null) {
+        await _database.upsertSyncConfig(
+            projectId: result.projectId,
+            syncEndpointUrl: retainedSync.syncEndpointUrl,
+            syncApiKey: retainedSync.syncApiKey,
+            lastSyncAt: drift.Value(retainedSync.lastSyncAt));
+      }
+      return result;
     });
   }
 
@@ -479,16 +513,16 @@ class ProjectImporter {
     final externalId = newCopy ? const Uuid().v4() : data.meta.projectId;
     final gpsThreshold = _asDouble(
       data.settings['gps_accuracy_threshold_m'],
-      fallback: _asDouble(data.project['gps_accuracy_threshold_m'], fallback: 10),
+      fallback:
+          _asDouble(data.project['gps_accuracy_threshold_m'], fallback: 10),
     );
     final archived = data.settings['archived'] == true ||
         data.project['is_archived'] == true;
     final description = (data.project['description'] ?? '').toString();
     final created = DateTime.tryParse(data.meta.createdAt) ?? DateTime.now();
-    final projectVersion =
-        data.project['project_version'] is int
-            ? data.project['project_version'] as int
-            : data.meta.projectVersion;
+    final projectVersion = data.project['project_version'] is int
+        ? data.project['project_version'] as int
+        : data.meta.projectVersion;
 
     final projectId = await _database.insertImportedProject(
       data.meta.projectName,
@@ -530,13 +564,28 @@ class ProjectImporter {
       }
     }
 
-    return ImportCommitResult(projectId: projectId, name: data.meta.projectName);
+    if (data.settings['study_layers'] is List) {
+      final forms = await _database.getStoredFormsForProject(projectId);
+      int? selectedForm;
+      for (final form in forms) {
+        if ((jsonDecode(form.json) as Map)['id'] ==
+            data.settings['active_form_schema_id']) selectedForm = form.id;
+      }
+      await _database.setSetting(
+          'project_workspace_$projectId',
+          jsonEncode({
+            'layers': data.settings['study_layers'],
+            'layer_id': data.settings['active_layer_id'],
+            'form_id': selectedForm
+          }));
+    }
+    return ImportCommitResult(
+        projectId: projectId, name: data.meta.projectName);
   }
 
   static String _readEntry(ArchiveFile entry) {
-    final content = entry.content is List<int>
-        ? entry.content as List<int>
-        : const <int>[];
+    final content =
+        entry.content is List<int> ? entry.content as List<int> : const <int>[];
     return utf8.decode(content, allowMalformed: false);
   }
 

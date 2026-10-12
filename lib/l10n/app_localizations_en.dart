@@ -13,7 +13,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeTitle => 'MapBanai';
 
   @override
-  String get homeSubtitle => 'Offline field data collection';
+  String get homeSubtitle => 'Easy Geospatial Data Collection';
 
   @override
   String get surveyModeTitle => 'Survey Mode';
@@ -215,7 +215,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutSection => 'About';
 
   @override
-  String get aboutTagline => 'Offline field data collection GIS';
+  String get aboutTagline => 'Easy Geospatial Data Collection';
 
   @override
   String versionLabel(String version) {

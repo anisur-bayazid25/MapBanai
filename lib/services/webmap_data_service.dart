@@ -5,6 +5,9 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/photo_store.dart';
+import 'package:mapbanai/services/study_area_store.dart';
+import 'package:mapbanai/services/guided_visit_service.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:path/path.dart' as p;
 
 /// Builds a single GeoJSON FeatureCollection from all local survey_sessions.
@@ -15,8 +18,9 @@ import 'package:path/path.dart' as p;
 /// Features. Photo handling reuses PhotoStore's thumbnail generation.
 class WebMapDataService {
   final AppDatabase db;
+  final StudyAreaStore? studyAreaStore;
 
-  WebMapDataService(this.db);
+  WebMapDataService(this.db, {this.studyAreaStore});
 
   /// Returns a GeoJSON FeatureCollection for a single project.
   /// If [projectId] is null, returns for all projects (legacy, not used for UI).
@@ -31,6 +35,11 @@ class WebMapDataService {
 
     final features = <Map<String, dynamic>>[];
     for (final s in sessions) {
+      try {
+        if ((jsonDecode(s.responses) as Map)['workflow'] ==
+                'study_area_feature_v1' &&
+            studyAreaStore != null) continue;
+      } catch (_) {}
       final feature = await _sessionToFeature(s);
       if (feature != null) features.add(feature);
       // A survey may contain several independent polygons/traces in addition
@@ -67,6 +76,43 @@ class WebMapDataService {
       }
     }
 
+    if (projectId != null && studyAreaStore != null) {
+      final workspace = await ProjectWorkspaceService(db).load(projectId);
+      final layerNames = {
+        for (final layer in workspace.layers) layer.id: layer.name
+      };
+      for (final feature in features) {
+        final properties = feature['properties'] as Map<String, dynamic>;
+        properties['layer_name'] =
+            layerNames[properties['layer_id']] ?? 'Main study area';
+      }
+      for (final site in await studyAreaStore!.loadSites()) {
+        if (!GuidedVisitService.belongsToProject(site, workspace.project))
+          continue;
+        features.add({
+          'type': 'Feature',
+          'geometry': site.currentGeometry,
+          'properties': {
+            'id': site.id,
+            'site_id': site.id,
+            'name': site.displayName,
+            'project_name': workspace.project.name,
+            'source': 'study_area',
+            'layer_id': site.layerId,
+            'layer_name': layerNames[site.layerId] ?? 'Main study area',
+            'site_status': site.status.name,
+            'status': site.status.name,
+            'geometry_type':
+                site.currentGeometry['type'].toString().toLowerCase(),
+            'form_name': site.formSnapshot?['name'] ?? '',
+            'surveyor': site.history.lastOrNull?.author ?? '',
+            'submitted_at': site.updatedAt?.toIso8601String() ?? '',
+            'answers': {...site.attributes, ...site.formAnswers},
+            'revision': site.revision,
+          }
+        });
+      }
+    }
     return {
       'type': 'FeatureCollection',
       'features': features,
@@ -86,6 +132,14 @@ class WebMapDataService {
       return null;
     }
 
+    if (resp['geometry'] is Map) {
+      return {
+        'type': 'Feature',
+        'geometry': resp['geometry'],
+        'properties': await _buildProperties(
+            s, resp, resp['geometry']['type'].toString(), '')
+      };
+    }
     // Try GIS feature first (feature_type)
     final featureType = resp['feature_type']?.toString();
     if (featureType == 'point' ||
@@ -302,6 +356,10 @@ class WebMapDataService {
     return {
       'id': s.externalId ?? s.id.toString(),
       'project_name': projectName,
+      'source': 'collection',
+      'layer_id': resp['layer_id'] ??
+          (resp['visit'] is Map ? resp['visit']['layer_id'] : null) ??
+          'default',
       'surveyor':
           resp['user_name']?.toString() ?? resp['surveyor']?.toString() ?? '',
       'submitted_at': s.createdAt.toIso8601String(),
@@ -409,6 +467,12 @@ class WebMapDataService {
     try {
       final file = File(photoPath);
       if (!file.existsSync()) return null;
+      final cached =
+          File(p.join(p.dirname(photoPath), 'thumbs', p.basename(photoPath)));
+      if (await cached.exists()) {
+        final bytes = await cached.readAsBytes();
+        if (bytes.length <= 100 * 1024) return base64Encode(bytes);
+      }
       // Cap: don't embed if original is huge? Thumbnail will still be small.
       // We cap thumbnail base64 to avoid ballooning GeoJSON.
       final bytes = await file.readAsBytes();

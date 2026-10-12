@@ -5,7 +5,7 @@
     "description": "Application title"
   },
   "homeTitle": "MapBanai",
-  "homeSubtitle": "Offline field data collection",
+  "homeSubtitle": "Easy Geospatial Data Collection",
   "surveyModeTitle": "Survey Mode",
   "surveyModeSubtitle": "Simple form-based field capture",
   "gisModeTitle": "GIS Mode",
@@ -102,7 +102,7 @@
     }
   },
   "aboutSection": "About",
-  "aboutTagline": "Offline field data collection GIS",
+  "aboutTagline": "Easy Geospatial Data Collection",
   "versionLabel": "Version {version}",
   "@versionLabel": {
     "placeholders": {

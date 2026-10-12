@@ -31,6 +31,7 @@ void main() {
         const ProjectsCompanion(name: drift.Value('Field project')));
     final site = StudyAreaSite(
         id: 'site',
+        projectId: projectId,
         latitude: 23,
         longitude: 90,
         attributes: {'name': 'Baseline'});

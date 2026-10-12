@@ -1,3 +1,5 @@
+import 'package:mapbanai/data/app_database.dart';
+import 'package:drift/drift.dart' as drift;
 import 'dart:io';
 import 'dart:math';
 
@@ -59,9 +61,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.forTesting();
+    addTearDown(db.close);
+    final projectId = await db.insertProject(
+        const ProjectsCompanion(name: drift.Value("Test project")));
     final store = MemoryStudyAreaStore();
-    await tester
-        .pumpWidget(MaterialApp(home: StudyAreaModeScreen(store: store)));
+    await tester.pumpWidget(MaterialApp(
+        home: StudyAreaModeScreen(
+            store: store, database: db, projectId: projectId)));
     await fakes.pumpFrames(tester);
     await tester.tap(find.byType(PopupMenuButton<String>));
     await fakes.pumpFrames(tester);

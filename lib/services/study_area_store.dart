@@ -394,6 +394,25 @@ class StudyAreaStore {
         await _write(sites);
       });
 
+  Future<int> assignUnclaimedSites(
+      {required int projectId,
+      required String projectExternalId,
+      required String layerId}) async {
+    var count = 0;
+    await _serialize(() async {
+      final sites = await loadSites();
+      for (final site in sites) {
+        if (site.projectId != null || site.projectExternalId != null) continue;
+        site.projectId = projectId;
+        site.projectExternalId = projectExternalId;
+        site.layerId = layerId;
+        count++;
+      }
+      await _write(sites);
+    });
+    return count;
+  }
+
   Future<void> clear() => _serialize(() async {
         final file = await _file();
         if (file.existsSync()) await file.delete();

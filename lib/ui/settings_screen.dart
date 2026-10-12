@@ -244,7 +244,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     labelText: l10n.preferredLanguage,
                   ),
                   items: [
-                    DropdownMenuItem(value: 'system', child: Text(l10n.systemDefault)),
+                    DropdownMenuItem(
+                        value: 'system', child: Text(l10n.systemDefault)),
                     DropdownMenuItem(value: 'en', child: Text(l10n.english)),
                     DropdownMenuItem(value: 'bn', child: Text(l10n.bangla)),
                   ],
@@ -252,7 +253,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (value != null) {
                       setState(() => _language = value);
                       // Immediate apply for instant feedback
-                      await context.read<AppSettingsProvider>().setLanguage(value);
+                      await context
+                          .read<AppSettingsProvider>()
+                          .setLanguage(value);
                       await widget.database.setSetting(_languageKey, value);
                     }
                   },
@@ -270,9 +273,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     labelText: l10n.preferredTheme,
                   ),
                   items: [
-                    DropdownMenuItem(value: 'system', child: Text(l10n.themeSystem)),
-                    DropdownMenuItem(value: 'light', child: Text(l10n.themeLight)),
-                    DropdownMenuItem(value: 'dark', child: Text(l10n.themeDark)),
+                    DropdownMenuItem(
+                        value: 'system', child: Text(l10n.themeSystem)),
+                    DropdownMenuItem(
+                        value: 'light', child: Text(l10n.themeLight)),
+                    DropdownMenuItem(
+                        value: 'dark', child: Text(l10n.themeDark)),
                   ],
                   onChanged: (value) async {
                     if (value != null) {
@@ -282,7 +288,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'dark' => ThemeMode.dark,
                         _ => ThemeMode.system,
                       };
-                      await context.read<AppSettingsProvider>().setThemeMode(mode);
+                      await context
+                          .read<AppSettingsProvider>()
+                          .setThemeMode(mode);
                       await widget.database.setSetting(_themeKey, value);
                     }
                   },
@@ -408,6 +416,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: Colors.grey.shade700,
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        const Text('Acknowledgments',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        const Text(
+                            'MapBanai gratefully acknowledges the contributions of the CARE project and BRAC James P Grant School of Public Health, BRAC University, to its development.'),
                         const SizedBox(height: 10),
                         const Divider(),
                         const ListTile(
@@ -434,8 +448,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
-                          onTap: () =>
-                              _launchUrl(Uri.parse(AppInfo.githubUrl)),
+                          onTap: () => _launchUrl(Uri.parse(AppInfo.githubUrl)),
                         ),
                         ListTile(
                           contentPadding: EdgeInsets.zero,

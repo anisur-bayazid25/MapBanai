@@ -113,7 +113,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Offline field data collection'**
+  /// **'Easy Geospatial Data Collection'**
   String get homeSubtitle;
 
   /// No description provided for @surveyModeTitle.
@@ -485,7 +485,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutTagline.
   ///
   /// In en, this message translates to:
-  /// **'Offline field data collection GIS'**
+  /// **'Easy Geospatial Data Collection'**
   String get aboutTagline;
 
   /// No description provided for @versionLabel.

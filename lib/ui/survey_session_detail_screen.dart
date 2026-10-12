@@ -1,3 +1,5 @@
+import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/ui/common/form_attribute_editor.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -142,6 +144,32 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   Future<void> _editFeature() async {
     final r = _responses;
     if (r == null || r['feature_type'] == null) return;
+    final workspace =
+        await ProjectWorkspaceService(_database).load(_session.projectId);
+    final schema = r['form_snapshot'] is Map
+        ? SurveyForm.fromJson(Map<String, dynamic>.from(r['form_snapshot']))
+        : workspace.schema;
+    if (schema != null) {
+      if (!mounted) return;
+      final answers = await editFormAttributes(context,
+          form: schema,
+          answers: Map<String, dynamic>.from(
+              r['answers'] as Map? ?? r['fields'] as Map? ?? {}),
+          username: await _database.getSetting('user_name'));
+      if (answers == null) return;
+      final updated = {
+        ...r,
+        'answers': answers,
+        'form_id': schema.id,
+        'form_name': schema.name,
+        'form_snapshot': schema.toJson(),
+        'edited_at': DateTime.now().toIso8601String()
+      };
+      await _database.updateSurveySession(_session.id,
+          responses: jsonEncode(updated));
+      await _load();
+      return;
+    }
     final featureType = r['feature_type'].toString();
     final vertices = _verticesOf(r);
     final fields = await _database.getProjectFields(_session.projectId);

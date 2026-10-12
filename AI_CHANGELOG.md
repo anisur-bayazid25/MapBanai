@@ -8,6 +8,14 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## 2026-10-12 — 2.6.1 project workspace
+
+ProjectWorkspaceService persists layer catalogues and selected form/layer in AppSettings keyed by local project ID, validates form ownership and ensures a UUID. StudyAreaSite persists layer_id, typed form_answers and form_snapshot through GeoJSON/history. Unassigned sites need explicit project/layer assignment. Guided visits now enforce project ownership. Project packages carry layer catalogues and map active form schema IDs to newly imported local form IDs.
+
+FormAttributeService/Editor reuse SurveyFormRenderer for map attributes; saved collections preserve form snapshots and layer IDs. StudyAreaOutboxService projects current sites into stable per-project feature records. Cloud sync reconciles store/outbox before upload; scripts need stable-ID upserts. Partial SyncConfig updates use Value.absent; same-identity project replacement retains credentials; sharing omits them.
+
+GNSS primary altitude is absolute sensor altitude with vertical accuracy, WGS84 ellipsoid labelling and explicit relative reference. Quality validation uses killable Isolate workers with deadlines; duplicate scans cap comparisons/results and yield. Atlas is a bundled HTML template with escaped JSON, batched canvas rendering, paged dynamic answer tables and Android JavaScript export sharing. No external UI framework/font dependency. No live device or server-endpoint acceptance test was possible.
+
 ## Repository & release architecture (stable facts)
 
 - Repo: https://github.com/anisur-bayazid25/MapBanai — `main` + version tags

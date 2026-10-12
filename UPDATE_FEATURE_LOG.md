@@ -1,5 +1,18 @@
 # UPDATE_FEATURE_LOG
 
+## 2026-10-12 — project workspace, 2.6.1+24
+
+- `flutter test --concurrency=1`: 352 passed. Final changed GIS/guided/workspace regressions: 15 passed.
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`: no errors; three pre-existing unused-variable warnings, 248 style/info notices.
+- Headless Chromium: desktop/mobile atlas, answer columns, numeric filtering, filtered GeoJSON download, no JS errors or mobile horizontal overflow. Removed a basemap that returned an API-key watermark; street default verified.
+- `tool/build_android.ps1 -Mode release`: final build completed, 117.4 MB; existing Kotlin metadata diagnostics remain non-fatal.
+- SDK 36 `apksigner verify --verbose --print-certs`: valid, same production certificate as published v2.4.4/v2.6.0.
+- SDK 36 `aapt dump badging`: com.mapbanai.mapbanai, 2.6.1, versionCode 24.
+- Local APK SHA-256: `94862968B7EDD2875C003E422DB750E568A7FFF574C50CDB8B38E6B9CFCE0492`.
+- `git diff --check`: passed. User-owned outputs and signing secrets excluded from commits.
+- No phone/emulator or live sync endpoint available. Field checks remain documented in FIELD_WORKFLOW.md.
+
+
 ## 2026-10-12 — field collection and baseline revision, 2.5.0+22
 
 | Check | Command / outcome |

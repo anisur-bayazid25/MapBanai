@@ -241,8 +241,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       final key = _syncApiKeyController.text.trim();
       await _database.upsertSyncConfig(
         projectId: project.id,
-        syncEndpointUrl: url.isEmpty ? null : url,
-        syncApiKey: key.isEmpty ? null : key,
+        syncEndpointUrl: url,
+        syncApiKey: key,
       );
       final updated = await _database.getSyncConfig(project.id);
       if (!mounted) return;

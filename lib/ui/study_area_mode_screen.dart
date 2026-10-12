@@ -1,3 +1,12 @@
+import 'package:mapbanai/services/form_attribute_service.dart';
+import 'package:mapbanai/services/study_area_outbox_service.dart';
+import 'package:mapbanai/data/app_database.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/services/guided_visit_service.dart';
+import 'package:mapbanai/ui/common/project_workspace_bar.dart';
+import 'package:mapbanai/ui/common/form_attribute_editor.dart';
+import 'package:mapbanai/state/project_state.dart';
+import 'package:provider/provider.dart';
 import 'package:mapbanai/ui/common/basemap_picker.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -22,11 +31,13 @@ class StudyAreaModeScreen extends StatefulWidget {
       this.store,
       this.initialSelectedSiteId,
       this.projectId,
+      this.database,
       this.projectExternalId});
 
   final StudyAreaStore? store;
   final String? initialSelectedSiteId;
   final int? projectId;
+  final AppDatabase? database;
   final String? projectExternalId;
 
   @override
@@ -35,6 +46,8 @@ class StudyAreaModeScreen extends StatefulWidget {
 
 class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   late final StudyAreaStore _store = widget.store ?? StudyAreaStore();
+  late final AppDatabase _database = widget.database ?? AppDatabase();
+  ProjectWorkspace? _workspace;
   final LocationService _locationService = LocationService();
   MapLibreMapController? _controller;
   bool _styleReady = false;
@@ -62,9 +75,77 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSites();
+    _loadWorkspace();
     _loadOperator();
     _startLocation();
+  }
+
+  Future<void> _loadWorkspace() async {
+    try {
+      int? id = widget.projectId;
+      if (id == null) {
+        try {
+          id = context.read<ProjectState>().selectedProjectId;
+        } catch (_) {}
+      }
+      if (id != null)
+        _workspace = await ProjectWorkspaceService(_database).load(id);
+      await _loadSites();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnack('Cannot load project: $error');
+      }
+    }
+  }
+
+  Future<void> _changeWorkspace(ProjectWorkspace workspace) async {
+    if (!mounted) return;
+    setState(() {
+      _workspace = workspace;
+      _selectedSite = null;
+    });
+    try {
+      context.read<ProjectState>().setSelectedProject(workspace.project.name,
+          projectId: workspace.project.id);
+    } catch (_) {}
+    await _loadSites();
+    if (_sites.isNotEmpty) _fitBounds();
+  }
+
+  Future<void> _claimLegacy() async {
+    final workspace = _workspace;
+    if (workspace == null) {
+      _showSnack('Select a project first');
+      return;
+    }
+    final sites = (await _store.loadSites())
+        .where((s) => s.projectId == null && s.projectExternalId == null)
+        .toList();
+    if (!mounted || sites.isEmpty) {
+      _showSnack('No unassigned sites');
+      return;
+    }
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('Assign previous sites'),
+                content: Text(
+                    'Move ${sites.length} unassigned sites into ${workspace.project.name} / ${workspace.layer.name}? Their original data and history will be kept.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Assign'))
+                ]));
+    if (ok != true) return;
+    await _store.assignUnclaimedSites(
+        projectId: workspace.project.id,
+        projectExternalId: workspace.project.externalId!,
+        layerId: workspace.layerId);
+    await _loadSites();
   }
 
   Future<void> _loadSites() async {
@@ -81,13 +162,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _sites = sites
-          .where((s) =>
-              widget.projectId == null ||
-              (s.projectExternalId != null && widget.projectExternalId != null
-                  ? s.projectExternalId == widget.projectExternalId
-                  : s.projectId == null || s.projectId == widget.projectId))
-          .toList();
+      _sites = _workspace == null
+          ? []
+          : sites
+              .where((site) =>
+                  GuidedVisitService.belongsToProject(
+                      site, _workspace!.project) &&
+                  site.layerId == _workspace!.layerId)
+              .toList();
       if (_selectedSite == null && widget.initialSelectedSiteId != null) {
         _selectedSite = _sites
             .where((s) => s.id == widget.initialSelectedSiteId)
@@ -209,6 +291,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   @override
   void dispose() {
     _posSub?.cancel();
+    if (widget.database == null) _database.close();
     super.dispose();
   }
 
@@ -389,6 +472,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   Future<void> _importSites() async {
+    if (_workspace == null) {
+      _showSnack("Select a project first");
+      return;
+    }
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: [
@@ -466,14 +553,37 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _showSnack('No sites found in file. Check format and lat/lon columns.');
         return;
       }
-      for (final site in imported) {
-        if (site.projectExternalId == null ||
-            site.projectExternalId == widget.projectExternalId) {
-          site.projectId = widget.projectId;
-          site.projectExternalId ??= widget.projectExternalId;
-        } else {
-          site.projectId = null;
+      final workspace = _workspace!;
+      final existing = await _store.loadSites();
+      for (var i = 0; i < imported.length; i++) {
+        var site = imported[i];
+        if (site.projectExternalId != null &&
+            site.projectExternalId != workspace.project.externalId) {
+          throw const FormatException(
+              'This file belongs to another project. Select that project before importing.');
         }
+        if (site.projectExternalId != null &&
+            site.layerId != workspace.layerId) {
+          throw const FormatException(
+              'This file belongs to another study layer. Select that layer before importing.');
+        }
+        if (site.projectExternalId == null) {
+          final collision = existing.any((other) =>
+              other.id == site.id &&
+              (!GuidedVisitService.belongsToProject(other, workspace.project) ||
+                  other.layerId != workspace.layerId));
+          if (collision) {
+            site = StudyAreaSite.fromJson({
+              ...site.toJson(),
+              'id':
+                  '${workspace.project.externalId}:${workspace.layerId}:${site.id}'
+            });
+            imported[i] = site;
+          }
+        }
+        site.projectId = workspace.project.id;
+        site.projectExternalId = workspace.project.externalId;
+        site.layerId = workspace.layerId;
       }
       final preview = await _store.previewMerge(imported);
       if (!mounted) return;
@@ -483,6 +593,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       if (choices == null) return;
       final merged = await _store.applyMerge(preview,
           resolutions: choices, author: _fieldworker);
+      for (final site in (await _store.loadSites()).where((site) =>
+          GuidedVisitService.belongsToProject(site, workspace.project) &&
+          site.layerId == workspace.layerId)) {
+        await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
+      }
       await _loadSites();
       _showSnack(
           'Imported ${merged.added} new features, updated ${merged.updated}, kept ${merged.kept} local versions.');
@@ -498,6 +613,25 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       final updated = await showDialog<StudyAreaSite>(
           context: context, builder: (context) => _EditSiteDialog(site: draft));
       if (updated == null) return false;
+      final schema = _workspace?.schema;
+      if (schema != null) {
+        final answers = await editFormAttributes(context,
+            form: schema,
+            username: _fieldworker,
+            answers: FormAttributeService.prefill(
+                schema, {...updated.attributes, ...updated.formAnswers},
+                geometry: updated.currentGeometry));
+        if (answers == null) return false;
+        updated.formAnswers = answers;
+        updated.formSnapshot = schema.toJson();
+        for (final entry in answers.entries) {
+          updated.attributes[entry.key] =
+              entry.value is Map || entry.value is List
+                  ? jsonEncode(entry.value)
+                  : entry.value?.toString() ?? '';
+        }
+      }
+
       try {
         await _store.updateSite(updated,
             expectedRevision: site.revision,
@@ -528,6 +662,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         draft = updated;
         continue;
       }
+      await StudyAreaOutboxService(_database).enqueue(updated, _fieldworker);
       await _loadSites();
       if (!mounted) return true;
       setState(() => _selectedSite = updated);
@@ -539,6 +674,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   void _startDrawing(String type, {StudyAreaSite? site}) {
+    if (_workspace == null) {
+      _showSnack("Select a project first");
+      return;
+    }
     _draft.clear();
     if (site != null) {
       final coordinates = site.currentGeometry['coordinates'];
@@ -607,9 +746,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         revision: previous?.revision ?? 0,
         revisionId: previous?.revisionId,
         history: previous?.history,
-        projectId: previous?.projectId ?? widget.projectId,
+        projectId: previous?.projectId ?? _workspace?.project.id,
         projectExternalId:
-            previous?.projectExternalId ?? widget.projectExternalId,
+            previous?.projectExternalId ?? _workspace?.project.externalId,
+        layerId: previous?.layerId ?? _workspace!.layerId,
+        formAnswers: previous?.formAnswers,
+        formSnapshot: previous?.formSnapshot,
         original: previous == null
             ? null
             : previous.original ??
@@ -634,13 +776,18 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   Future<void> _addSite(LatLng coordinates, {Position? gps}) async {
+    if (_workspace == null) {
+      _showSnack('Select a project first');
+      return;
+    }
     final site = StudyAreaSite(
         id: 'new_${DateTime.now().microsecondsSinceEpoch}',
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         status: StudyAreaStatus.newFeature,
-        projectId: widget.projectId,
-        projectExternalId: widget.projectExternalId,
+        projectId: _workspace?.project.id,
+        projectExternalId: _workspace?.project.externalId,
+        layerId: _workspace!.layerId,
         updatedAt: DateTime.now().toUtc(),
         attributes: {
           'name': 'New feature',
@@ -871,6 +1018,13 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Study Area Mode'),
+        bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(112),
+            child: ProjectWorkspaceBar(
+                database: _database,
+                workspace: _workspace,
+                onChanged: _changeWorkspace,
+                enabled: _drawType == null)),
         actions: [
           IconButton(
             tooltip: 'Import sites',
@@ -891,6 +1045,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) {
+              if (v == 'claim') _claimLegacy();
               if (v == 'operator') _editOperator();
               if (v == 'line') _startDrawing('LineString');
               if (v == 'polygon') _startDrawing('Polygon');
@@ -900,6 +1055,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             itemBuilder: (context) => [
               PopupMenuItem(
                   value: 'operator', child: Text('Fieldworker: $_fieldworker')),
+              const PopupMenuItem(
+                  value: 'claim',
+                  child: Text('Assign previous unassigned sites')),
               const PopupMenuItem(
                   value: 'line', child: Text('Add line (tap vertices)')),
               const PopupMenuItem(

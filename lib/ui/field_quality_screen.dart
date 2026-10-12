@@ -27,6 +27,7 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
   String _projectName = '';
   String? _projectExternalId;
   double _distance = 10;
+  String _progress = 'Preparing project records…';
   @override
   void initState() {
     super.initState();
@@ -57,6 +58,11 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
           forms: forms,
           sites: sites,
           accuracyThresholdM: project.gpsThresholdM,
+          onProgress: (done, total, title) {
+            if (mounted)
+              setState(
+                  () => _progress = 'Checking ${done + 1} of $total: $title');
+          },
           duplicateDistanceM: _distance);
       if (!mounted) return;
       setState(() {
@@ -138,7 +144,14 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
             ])),
         Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(_progress, textAlign: TextAlign.center)),
+                  ]))
                 : _error != null
                     ? Center(child: Text('Cannot check data: $_error'))
                     : _issues.isEmpty

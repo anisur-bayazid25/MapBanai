@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -22,7 +23,8 @@ class ProjectExporter {
   /// export and the inline-QR exporter so both share one code path.
   Future<ProjectPackageData> buildData(Project project) async {
     final exportedAt = DateTime.now().toUtc().toIso8601String();
-    final externalId = project.externalId ?? _freshId(project.id);
+    final workspace = await ProjectWorkspaceService(_database).load(project.id);
+    final externalId = workspace.project.externalId!;
 
     final fields = await _database.getProjectFields(project.id);
     final forms = await _database.getStoredFormsForProject(project.id);
@@ -59,6 +61,9 @@ class ProjectExporter {
     };
 
     final settingsJson = <String, dynamic>{
+      'study_layers': workspace.layers.map((layer) => layer.toJson()).toList(),
+      'active_layer_id': workspace.layerId,
+      'active_form_schema_id': workspace.schema?.id,
       'gps_accuracy_threshold_m': project.gpsThresholdM,
       'archived': project.archived,
     };
@@ -124,8 +129,7 @@ class ProjectExporter {
     };
     for (final form in data.forms) {
       final name = '${ProjectPackageFormat.formsDir}${form['id']}.json';
-      contentFiles[name] =
-          Uint8List.fromList(utf8.encode(jsonEncode(form)));
+      contentFiles[name] = Uint8List.fromList(utf8.encode(jsonEncode(form)));
     }
 
     final checksums = <String, String>{};
@@ -178,6 +182,4 @@ class ProjectExporter {
     }
     return {'raw': raw};
   }
-
-  static String _freshId(int id) => 'legacy-$id';
 }

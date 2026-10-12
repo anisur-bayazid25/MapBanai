@@ -565,22 +565,30 @@ class AppDatabase extends _$AppDatabase {
     await into(syncConfigs).insert(
       SyncConfigsCompanion(
         projectId: Value(projectId),
-        syncEndpointUrl: trimmedUrl == null || trimmedUrl.isEmpty
-            ? const Value(null)
-            : Value(trimmedUrl),
-        syncApiKey: trimmedKey == null || trimmedKey.isEmpty
-            ? const Value(null)
-            : Value(trimmedKey),
+        syncEndpointUrl: trimmedUrl == null
+            ? const Value.absent()
+            : trimmedUrl.isEmpty
+                ? const Value(null)
+                : Value(trimmedUrl),
+        syncApiKey: trimmedKey == null
+            ? const Value.absent()
+            : trimmedKey.isEmpty
+                ? const Value(null)
+                : Value(trimmedKey),
         lastSyncAt: lastSyncAt,
       ),
       onConflict: DoUpdate(
         (old) => SyncConfigsCompanion(
-          syncEndpointUrl: trimmedUrl == null || trimmedUrl.isEmpty
-              ? const Value(null)
-              : Value(trimmedUrl),
-          syncApiKey: trimmedKey == null || trimmedKey.isEmpty
-              ? const Value(null)
-              : Value(trimmedKey),
+          syncEndpointUrl: trimmedUrl == null
+              ? const Value.absent()
+              : trimmedUrl.isEmpty
+                  ? const Value(null)
+                  : Value(trimmedUrl),
+          syncApiKey: trimmedKey == null
+              ? const Value.absent()
+              : trimmedKey.isEmpty
+                  ? const Value(null)
+                  : Value(trimmedKey),
           lastSyncAt: lastSyncAt,
         ),
         target: [syncConfigs.projectId],
