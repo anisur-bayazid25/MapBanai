@@ -13,7 +13,10 @@ class PhotoRecord {
   final double? latitude;
   final double? longitude;
   final double? altitude;
-  final String gpsStatus; // GeotagWriter.deviceGeotag | inserted | patched | unchanged
+  final double? accuracy;
+  final DateTime? gpsFixedAt;
+  final String
+      gpsStatus; // GeotagWriter.deviceGeotag | inserted | patched | unchanged
   final DateTime capturedAt;
 
   const PhotoRecord({
@@ -22,6 +25,8 @@ class PhotoRecord {
     this.latitude,
     this.longitude,
     this.altitude,
+    this.accuracy,
+    this.gpsFixedAt,
     required this.gpsStatus,
     required this.capturedAt,
   });
@@ -42,34 +47,35 @@ class PhotoRecord {
   String get fileName => path.split(Platform.pathSeparator).last;
 
   Map<String, dynamic> toJson() => {
-    'path': path,
-    'thumb': thumbPath,
-    'latitude': latitude,
-    'longitude': longitude,
-    'altitude': altitude,
-    'gps': gpsStatus,
-    'captured_at': capturedAt.toIso8601String(),
-  };
+        'path': path,
+        'thumb': thumbPath,
+        'latitude': latitude,
+        'longitude': longitude,
+        'altitude': altitude,
+        'accuracy': accuracy,
+        'gps_fixed_at': gpsFixedAt?.toIso8601String(),
+        'gps': gpsStatus,
+        'captured_at': capturedAt.toIso8601String(),
+      };
 
   factory PhotoRecord.fromJson(Map<String, dynamic> json) => PhotoRecord(
-    path: json['path'] as String,
-    thumbPath: (json['thumb'] as String?) ?? '',
-    latitude: (json['latitude'] as num?)?.toDouble(),
-    longitude: (json['longitude'] as num?)?.toDouble(),
-    altitude: (json['altitude'] as num?)?.toDouble(),
-    gpsStatus: (json['gps'] as String?) ?? GeotagWriter.unchanged,
-    capturedAt: DateTime.tryParse(json['captured_at'] as String? ?? '') ??
-        DateTime.now(),
-  );
+        path: json['path'] as String,
+        thumbPath: (json['thumb'] as String?) ?? '',
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        altitude: (json['altitude'] as num?)?.toDouble(),
+        accuracy: (json['accuracy'] as num?)?.toDouble(),
+        gpsFixedAt: DateTime.tryParse(json['gps_fixed_at']?.toString() ?? ''),
+        gpsStatus: (json['gps'] as String?) ?? GeotagWriter.unchanged,
+        capturedAt: DateTime.tryParse(json['captured_at'] as String? ?? '') ??
+            DateTime.now(),
+      );
 }
 
 /// Stores captured photos in the app documents directory.
 ///
-/// Geotagging rules:
-///  - the device camera's own GPS EXIF is kept untouched when present;
-///  - otherwise GPS is embedded into the JPEG via [GeotagWriter];
-///  - non-JPEG images (HEIC etc.) are stored with coordinates recorded in the
-///    [PhotoRecord] (sidecar), since EXIF cannot be written.
+/// Field capture uses [saveGeotagged] to require verified GPS in the image.
+/// Legacy import callers may use [save] to retain older untagged images.
 class PhotoStore {
   static const int maxThumbDimension = 512;
   static const int _thumbQuality = 70;
@@ -106,32 +112,72 @@ class PhotoStore {
     double? latitude,
     double? longitude,
     double? altitude,
+    double? accuracy,
+    DateTime? gpsFixedAt,
     DateTime? capturedAt,
     Directory? dir,
+    bool requireGeotag = false,
+    bool preserveExistingGps = true,
   }) async {
     final photoDir = dir ?? await _documentsDir();
     final timestamp = DateTime.now();
-    final stamp = '${timestamp.year}${_pad(timestamp.month)}${_pad(timestamp.day)}'
+    final stamp =
+        '${timestamp.year}${_pad(timestamp.month)}${_pad(timestamp.day)}'
         '_${_pad(timestamp.hour)}${_pad(timestamp.minute)}${_pad(timestamp.second)}'
-        '_${timestamp.millisecond}';
+        '_${timestamp.microsecondsSinceEpoch}';
     final name = 'photo_$stamp.jpg';
 
     var fileBytes = bytes;
     var gpsStatus = 'none';
+    if (requireGeotag) {
+      img.Image? image;
+      try {
+        image = img.decodeImage(fileBytes);
+      } catch (_) {
+        throw const FormatException(
+            'The photo is damaged or uses an unsupported format. Choose a JPEG or PNG.');
+      }
+      if (image == null) {
+        throw const FormatException(
+            'This image format cannot be geotagged. Use JPEG or PNG.');
+      }
+      if (!_isJpeg(fileBytes)) {
+        fileBytes = Uint8List.fromList(
+            img.encodeJpg(img.bakeOrientation(image), quality: 92));
+      }
+    }
     if (latitude != null && longitude != null) {
       final result = GeotagWriter.embedGps(
-        bytes,
+        fileBytes,
         latitude: latitude,
         longitude: longitude,
         altitude: altitude,
         capturedAt: capturedAt ?? timestamp,
+        preserveExistingGps: preserveExistingGps,
       );
       fileBytes = result.bytes;
       gpsStatus = result.status;
-    } else if (GeotagWriter.hasEmbeddedGps(bytes)) {
+    } else if (GeotagWriter.hasEmbeddedGps(fileBytes)) {
       // Device camera already geotagged the photo.
       gpsStatus = GeotagWriter.deviceGeotag;
     }
+
+    final embedded = GeotagWriter.readGps(fileBytes);
+    if (requireGeotag && embedded == null) {
+      throw const FormatException(
+          'GPS could not be embedded in this photo. Retry with a valid GPS fix.');
+    }
+    // Sidecar coordinates must agree with the image (gallery EXIF may win).
+    if (embedded != null &&
+        (requireGeotag || gpsStatus == GeotagWriter.deviceGeotag)) {
+      latitude = embedded.latitude;
+      longitude = embedded.longitude;
+      altitude = embedded.altitude;
+    }
+
+    await photoDir.create(recursive: true);
+    await Directory('${photoDir.path}${Platform.pathSeparator}thumbs')
+        .create(recursive: true);
 
     final file = File('${photoDir.path}${Platform.pathSeparator}$name');
     await file.writeAsBytes(fileBytes, flush: true);
@@ -148,6 +194,10 @@ class PhotoStore {
       latitude: latitude,
       longitude: longitude,
       altitude: altitude,
+      accuracy: accuracy != null && accuracy.isFinite && accuracy >= 0
+          ? accuracy
+          : null,
+      gpsFixedAt: gpsFixedAt,
       gpsStatus: gpsStatus,
       capturedAt: capturedAt ?? timestamp,
     );
@@ -158,6 +208,29 @@ class PhotoStore {
 
     return record;
   }
+
+  /// Mandatory path for all field photos. Fails before saving an untagged file.
+  static Future<PhotoRecord> saveGeotagged(
+    Uint8List bytes, {
+    double? latitude,
+    double? longitude,
+    double? altitude,
+    double? accuracy,
+    DateTime? gpsFixedAt,
+    DateTime? capturedAt,
+    Directory? dir,
+    bool preserveExistingGps = true,
+  }) =>
+      save(bytes,
+          latitude: latitude,
+          longitude: longitude,
+          altitude: altitude,
+          accuracy: accuracy,
+          gpsFixedAt: gpsFixedAt,
+          capturedAt: capturedAt,
+          dir: dir,
+          requireGeotag: true,
+          preserveExistingGps: preserveExistingGps);
 
   /// Lists all saved photos, newest first.
   static Future<List<PhotoRecord>> list({Directory? dir}) async {
@@ -218,7 +291,8 @@ class PhotoStore {
     try {
       final decoded = img.decodeImage(bytes);
       if (decoded == null) {
-        return Uint8List.fromList(bytes.length <= 64 * 1024 ? bytes : bytes.sublist(0, 64 * 1024));
+        return Uint8List.fromList(
+            bytes.length <= 64 * 1024 ? bytes : bytes.sublist(0, 64 * 1024));
       }
       final thumb = img.copyResize(
         decoded,
@@ -230,7 +304,8 @@ class PhotoStore {
         img.encodeJpg(thumb, quality: _thumbQuality),
       );
     } catch (_) {
-      return Uint8List.fromList(bytes.length <= 64 * 1024 ? bytes : bytes.sublist(0, 64 * 1024));
+      return Uint8List.fromList(
+          bytes.length <= 64 * 1024 ? bytes : bytes.sublist(0, 64 * 1024));
     }
   }
 

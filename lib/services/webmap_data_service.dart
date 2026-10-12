@@ -33,6 +33,38 @@ class WebMapDataService {
     for (final s in sessions) {
       final feature = await _sessionToFeature(s);
       if (feature != null) features.add(feature);
+      // A survey may contain several independent polygons/traces in addition
+      // to its site point. Export every spatial answer, with a stable field ID.
+      Map<String, dynamic> response;
+      try {
+        response = (jsonDecode(s.responses) as Map).cast<String, dynamic>();
+      } catch (_) {
+        continue;
+      }
+      final answers = response['answers'];
+      if (answers is! Map) continue;
+      for (final entry in answers.entries) {
+        dynamic geometry = entry.value;
+        if (geometry is String) {
+          try {
+            geometry = jsonDecode(geometry);
+          } catch (_) {
+            continue;
+          }
+        }
+        if (geometry is! Map ||
+            !['LineString', 'Polygon'].contains(geometry['type']) ||
+            geometry['coordinates'] is! List) continue;
+        final properties = await _buildProperties(
+            s, response, geometry['type'].toString(), '');
+        properties['id'] = '${s.externalId ?? s.id}:${entry.key}';
+        properties['question_name'] = entry.key.toString();
+        features.add({
+          'type': 'Feature',
+          'geometry': Map<String, dynamic>.from(geometry),
+          'properties': properties
+        });
+      }
     }
 
     return {
@@ -56,8 +88,35 @@ class WebMapDataService {
 
     // Try GIS feature first (feature_type)
     final featureType = resp['feature_type']?.toString();
-    if (featureType == 'point' || featureType == 'line' || featureType == 'polygon') {
+    if (featureType == 'point' ||
+        featureType == 'line' ||
+        featureType == 'polygon') {
       return _gisFeatureToGeoJson(s, resp, featureType!);
+    }
+
+    if (resp['workflow'] == 'guided_visit_v1' && resp['visit'] is Map) {
+      final site = resp['visit']['site_after'];
+      if (site is Map) {
+        dynamic geometry = site['geometry'];
+        if (geometry == null &&
+            site['latitude'] is num &&
+            site['longitude'] is num) {
+          geometry = {
+            'type': 'Point',
+            'coordinates': [site['longitude'], site['latitude']],
+          };
+        }
+        if (geometry is Map && geometry['type'] is String) {
+          final photo = resp['photo'];
+          final photoPath = photo is Map ? photo['path']?.toString() ?? '' : '';
+          return {
+            'type': 'Feature',
+            'geometry': Map<String, dynamic>.from(geometry),
+            'properties': await _buildProperties(
+                s, resp, geometry['type'].toString(), photoPath),
+          };
+        }
+      }
     }
 
     // Try survey response with geopoint answer
@@ -119,7 +178,8 @@ class WebMapDataService {
       } else {
         if (coords.length < 3) return null;
         final closed = List<List<double>>.from(coords);
-        if (closed.first[0] != closed.last[0] || closed.first[1] != closed.last[1]) {
+        if (closed.first[0] != closed.last[0] ||
+            closed.first[1] != closed.last[1]) {
           closed.add(List<double>.from(closed.first));
         }
         geometry = {
@@ -166,7 +226,10 @@ class WebMapDataService {
         }
         if (candidate != null && candidate.isNotEmpty) {
           // Prefer the one that looks like a photo file
-          if (candidate.contains('photos') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.png')) {
+          if (candidate.contains('photos') ||
+              candidate.endsWith('.jpg') ||
+              candidate.endsWith('.jpeg') ||
+              candidate.endsWith('.png')) {
             photoPath = candidate;
             break;
           }
@@ -195,8 +258,8 @@ class WebMapDataService {
   }
 
   /// Shared attribute extraction: surveyor, submitted_at, flattened answers, photo thumbnail.
-  Future<Map<String, dynamic>> _buildProperties(
-      SurveySession s, Map<String, dynamic> resp, String geometryType, String photoPath) async {
+  Future<Map<String, dynamic>> _buildProperties(SurveySession s,
+      Map<String, dynamic> resp, String geometryType, String photoPath) async {
     final answers = resp['answers'];
     final flattened = <String, dynamic>{};
     if (answers is Map) {
@@ -239,7 +302,8 @@ class WebMapDataService {
     return {
       'id': s.externalId ?? s.id.toString(),
       'project_name': projectName,
-      'surveyor': resp['user_name']?.toString() ?? resp['surveyor']?.toString() ?? '',
+      'surveyor':
+          resp['user_name']?.toString() ?? resp['surveyor']?.toString() ?? '',
       'submitted_at': s.createdAt.toIso8601String(),
       'form_name': resp['form_name']?.toString() ?? '',
       'geometry_type': geometryType,
@@ -250,6 +314,15 @@ class WebMapDataService {
       if (photoPath.isNotEmpty) 'photo_relative_path': photoPath,
       if (thumbnailBase64 != null) 'thumbnail_base64': thumbnailBase64,
       'status': s.status,
+      if (resp['workflow'] == 'guided_visit_v1' && resp['visit'] is Map) ...{
+        'visit_id': resp['visit']['id'],
+        'site_id': resp['visit']['site_id'],
+        'visit_state': resp['visit']['state'],
+        'site_sync': resp['visit']['site_sync'],
+        'site_status': resp['visit']['site_after'] is Map
+            ? resp['visit']['site_after']['status']
+            : null,
+      },
     };
   }
 
@@ -356,8 +429,12 @@ class WebMapDataService {
       if (decoded == null) return null;
       final thumb = img.copyResize(
         decoded,
-        width: decoded.width > decoded.height ? PhotoStore.maxThumbDimension : null,
-        height: decoded.height >= decoded.width ? PhotoStore.maxThumbDimension : null,
+        width: decoded.width > decoded.height
+            ? PhotoStore.maxThumbDimension
+            : null,
+        height: decoded.height >= decoded.width
+            ? PhotoStore.maxThumbDimension
+            : null,
         interpolation: img.Interpolation.linear,
       );
       return Uint8List.fromList(img.encodeJpg(thumb, quality: 70));

@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:mapbanai/services/geotag_writer.dart';
 import 'package:mapbanai/services/photo_store.dart';
+import 'package:mapbanai/services/location_service.dart';
+
+import 'helpers/test_utils.dart';
 
 /// Decodes GPS EXIF back to decimal degrees using the (independent) exif
 /// package. Returns null when no GPS tag is present.
@@ -40,6 +43,116 @@ Uint8List makeJpeg() {
 
 void main() {
   group('GeotagWriter', () {
+    test('rounding near degree boundary retains a valid GPS fix', () async {
+      final result = GeotagWriter.embedGps(makeJpeg(),
+          latitude: 23.999999999, longitude: 90.999999999);
+      expect(GeotagWriter.hasEmbeddedGps(result.bytes), isTrue);
+      final gps = await readGps(result.bytes);
+      expect(gps!.lat, closeTo(24, 1e-6));
+      expect(gps.lng, closeTo(91, 1e-6));
+    });
+    for (final endian in [Endian.little, Endian.big]) {
+      test('preserves out-of-line camera metadata with $endian EXIF', () async {
+        final tiff = Uint8List(44);
+        final data = ByteData.sublistView(tiff);
+        tiff[0] = endian == Endian.little ? 73 : 77;
+        tiff[1] = tiff[0];
+        data.setUint16(2, 42, endian);
+        data.setUint32(4, 8, endian);
+        data.setUint16(8, 2, endian);
+        data.setUint16(10, 0x010f, endian); // Camera make, out-of-line ASCII
+        data.setUint16(12, 2, endian);
+        data.setUint32(14, 6, endian);
+        data.setUint32(18, 38, endian);
+        data.setUint16(22, 0x0112, endian); // Orientation
+        data.setUint16(24, 3, endian);
+        data.setUint32(26, 1, endian);
+        data.setUint16(30, 6, endian);
+        tiff.setAll(38, [67, 65, 77, 69, 82, 0]);
+        final app1 = Uint8List(10 + tiff.length);
+        app1.setAll(0, [255, 225, 0, tiff.length + 8, 69, 120, 105, 102, 0, 0]);
+        app1.setAll(10, tiff);
+        final jpeg = _joinSegments(makeJpeg(), app1);
+        final result = GeotagWriter.embedGps(jpeg,
+            latitude: -23.5, longitude: -90.5, altitude: -12.3);
+        expect(result.status, GeotagWriter.patched);
+        final tags = await readExifFromBytes(result.bytes);
+        expect(tags['Image Make']!.printable, 'CAMER');
+        expect(tags['Image Orientation'], isNotNull);
+        final gps = await readGps(result.bytes);
+        expect(gps!.lat, closeTo(-23.5, 1e-6));
+        expect(gps.lng, closeTo(-90.5, 1e-6));
+        expect(
+            GeotagWriter.readGps(result.bytes)!.altitude, closeTo(-12.3, 1e-6));
+        expect(img.decodeImage(result.bytes), isNotNull);
+      });
+    }
+    test('replaces an existing camera fix when fresh GPS is mandatory',
+        () async {
+      final original =
+          GeotagWriter.embedGps(makeJpeg(), latitude: 1, longitude: 2).bytes;
+      final result = GeotagWriter.embedGps(original,
+          latitude: -23.5, longitude: 90.5, preserveExistingGps: false);
+      final gps = await readGps(result.bytes);
+      expect(gps!.lat, closeTo(-23.5, 1e-6));
+      expect(gps.lng, closeTo(90.5, 1e-6));
+      expect(img.decodeImage(result.bytes), isNotNull);
+    });
+
+    test('rejects NaN and infinite coordinates', () {
+      expect(
+          GeotagWriter.embedGps(makeJpeg(), latitude: double.nan, longitude: 2)
+              .status,
+          GeotagWriter.unchanged);
+      expect(
+          GeotagWriter.embedGps(makeJpeg(),
+                  latitude: 2, longitude: double.infinity)
+              .status,
+          GeotagWriter.unchanged);
+    });
+
+    test('GPS pointer without valid coordinates does not count as a geotag',
+        () {
+      final tagged =
+          GeotagWriter.embedGps(makeJpeg(), latitude: 1, longitude: 2).bytes;
+      final invalid = Uint8List.fromList(tagged);
+      invalid.fillRange(40, 44, 255);
+      expect(GeotagWriter.hasEmbeddedGps(invalid), isFalse);
+      final repaired =
+          GeotagWriter.embedGps(invalid, latitude: 3, longitude: 4);
+      expect(GeotagWriter.readGps(repaired.bytes)!.latitude, closeTo(3, 1e-6));
+    });
+
+    test('photo fix accepts any accuracy but rejects stale/invalid coordinates',
+        () {
+      final fix = testPosition();
+      expect(LocationService.isUsablePhotoFix(fix, fix.timestamp), isTrue);
+      expect(
+          LocationService.isUsablePhotoFix(
+              fix, fix.timestamp.add(const Duration(seconds: 31))),
+          isFalse);
+      expect(
+          LocationService.isUsablePhotoFix(
+              testPosition(accuracy: 26), fix.timestamp),
+          isTrue);
+      expect(
+          LocationService.isUsablePhotoFix(
+              testPosition(accuracy: 0), fix.timestamp),
+          isTrue);
+      expect(
+          LocationService.isUsablePhotoFix(
+              testPosition(accuracy: double.nan), fix.timestamp),
+          isTrue);
+      expect(
+          LocationService.isUsablePhotoFix(
+              testPosition(accuracy: 26), fix.timestamp,
+              maximumAccuracy: 25),
+          isFalse);
+      expect(
+          LocationService.isUsablePhotoFix(
+              testPosition(lat: double.nan), fix.timestamp),
+          isFalse);
+    });
     test('inserts EXIF GPS into a JPEG without EXIF', () async {
       final jpeg = makeJpeg();
       final result = GeotagWriter.embedGps(
@@ -113,7 +226,8 @@ void main() {
     });
 
     test('leaves non-JPEG bytes untouched', () {
-      final png = Uint8List.fromList(img.encodePng(img.Image(width: 2, height: 2)));
+      final png =
+          Uint8List.fromList(img.encodePng(img.Image(width: 2, height: 2)));
       final result = GeotagWriter.embedGps(png, latitude: 1, longitude: 2);
       expect(result.status, GeotagWriter.unchanged);
       expect(result.bytes, equals(png));
@@ -129,7 +243,8 @@ void main() {
     test('hasEmbeddedGps detects camera GPS and rejects plain JPEGs', () {
       final plain = makeJpeg();
       expect(GeotagWriter.hasEmbeddedGps(plain), isFalse);
-      final tagged = GeotagWriter.embedGps(plain, latitude: 1, longitude: 2).bytes;
+      final tagged =
+          GeotagWriter.embedGps(plain, latitude: 1, longitude: 2).bytes;
       expect(GeotagWriter.hasEmbeddedGps(tagged), isTrue);
       expect(GeotagWriter.hasEmbeddedGps(Uint8List(0)), isFalse);
     });
@@ -188,8 +303,67 @@ void main() {
       expect(restored.gpsStatus, GeotagWriter.inserted);
     });
 
+    test('mandatory capture rejects missing GPS without writing a file',
+        () async {
+      await expectLater(PhotoStore.saveGeotagged(makeJpeg(), dir: photoDir),
+          throwsFormatException);
+      expect(await PhotoStore.list(dir: photoDir), isEmpty);
+    });
+
+    test('poor photo accuracy is retained as metadata without blocking save',
+        () async {
+      final fixedAt = DateTime.utc(2026, 10, 12);
+      final record = await PhotoStore.saveGeotagged(makeJpeg(),
+          latitude: 23.5,
+          longitude: 90.5,
+          accuracy: 180,
+          gpsFixedAt: fixedAt,
+          dir: photoDir);
+      expect(record.isGeotagged, isTrue);
+      final restored = (await PhotoStore.list(dir: photoDir)).single;
+      expect(restored.accuracy, 180);
+      expect(restored.gpsFixedAt, fixedAt);
+      final unknown = await PhotoStore.saveGeotagged(makeJpeg(),
+          latitude: 23.6, longitude: 90.6, accuracy: double.nan, dir: photoDir);
+      expect(unknown.isGeotagged, isTrue);
+      expect(unknown.accuracy, isNull);
+    });
+
+    test('mandatory capture converts PNG and verifies GPS in the saved JPEG',
+        () async {
+      final png =
+          Uint8List.fromList(img.encodePng(img.Image(width: 4, height: 4)));
+      final record = await PhotoStore.saveGeotagged(png,
+          latitude: 23.5, longitude: 90.5, dir: photoDir);
+      final bytes = await File(record.path).readAsBytes();
+      expect(bytes.take(2), [255, 216]);
+      expect(record.isGeotagged, isTrue);
+      expect((await readGps(bytes))!.lat, closeTo(23.5, 1e-6));
+    });
+
+    test('gallery sidecar agrees with preserved EXIF rather than fallback fix',
+        () async {
+      final tagged =
+          GeotagWriter.embedGps(makeJpeg(), latitude: 10, longitude: 20).bytes;
+      final record = await PhotoStore.saveGeotagged(tagged,
+          latitude: 30, longitude: 40, dir: photoDir);
+      expect(record.latitude, 10);
+      expect(record.longitude, 20);
+      expect(record.gpsStatus, GeotagWriter.deviceGeotag);
+    });
+
+    test('mandatory capture rejects unsupported or corrupt image bytes',
+        () async {
+      await expectLater(
+          PhotoStore.saveGeotagged(Uint8List.fromList([255, 216, 1]),
+              latitude: 1, longitude: 2, dir: photoDir),
+          throwsFormatException);
+      expect(await PhotoStore.list(dir: photoDir), isEmpty);
+    });
+
     test('records device geotag when camera already wrote GPS', () async {
-      final tagged = GeotagWriter.embedGps(makeJpeg(), latitude: 10, longitude: 20).bytes;
+      final tagged =
+          GeotagWriter.embedGps(makeJpeg(), latitude: 10, longitude: 20).bytes;
       final record = await PhotoStore.save(tagged, dir: photoDir);
       expect(record.gpsStatus, GeotagWriter.deviceGeotag);
       expect(record.isGeotagged, isTrue);
@@ -203,7 +377,8 @@ void main() {
     });
 
     test('keeps non-JPEG and reports no geotag', () async {
-      final png = Uint8List.fromList(img.encodePng(img.Image(width: 4, height: 4)));
+      final png =
+          Uint8List.fromList(img.encodePng(img.Image(width: 4, height: 4)));
       final record = await PhotoStore.save(
         png,
         latitude: 1.0,
@@ -255,7 +430,8 @@ Uint8List _joinSegments(Uint8List source, Uint8List app1Segment) {
     0x4A, 0x46, 0x49, 0x46, 0x00, // "JFIF\0"
     0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
   ]);
-  final out = Uint8List(2 + app0.length + app1Segment.length + source.length - 2);
+  final out =
+      Uint8List(2 + app0.length + app1Segment.length + source.length - 2);
   out[0] = 0xFF;
   out[1] = 0xD8;
   out.setAll(2, app0);

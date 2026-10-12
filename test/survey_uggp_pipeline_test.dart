@@ -3,13 +3,12 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
 import 'package:mapbanai/ui/survey_form_renderer.dart';
 
 /// End-to-end regression test for the UGGP-form bug report (v2.4.4):
 /// real xlsx bytes (English + Bengali labels, styled spans, once/coalesce
-/// calculations, nested group + repeat, a12-gated modules) go through
+/// calculations, nested groups, a12-gated modules) go through
 /// XlsFormParser straight into a pumped SurveyFormRenderer, proving the
 /// reported skip logic works on the actual pipeline — not just on
 /// hand-built models.
@@ -33,13 +32,17 @@ Uint8List _uggpLikeWorkbook() {
       TextCellValue('date'),
       TextCellValue('Interviewer Date'),
       TextCellValue('আজকের তারিখ'),
-      null, null,
+      null,
+      null,
       TextCellValue('once(today())'),
     ],
     [
       TextCellValue('calculate'),
       TextCellValue('start_time'),
-      null, null, null, null,
+      null,
+      null,
+      null,
+      null,
       TextCellValue("once(format-date-time(now(), '%H:%M'))"),
     ],
     [
@@ -88,14 +91,18 @@ Uint8List _uggpLikeWorkbook() {
       TextCellValue('integer'),
       TextCellValue('b02'),
       TextCellValue('Respondent Age'),
-      null, null,
+      null,
+      null,
       TextCellValue('. >= 0 and . <= 110'),
     ],
     [
-      TextCellValue('begin_repeat'),
+      TextCellValue('begin_group'),
       TextCellValue('hh_member_repeat'),
       TextCellValue('Household Member line number'),
-      null, null, null, null,
+      null,
+      null,
+      null,
+      null,
       TextCellValue('\${num_hh_members}'),
     ],
     [
@@ -108,12 +115,15 @@ Uint8List _uggpLikeWorkbook() {
       TextCellValue('b09'),
       TextCellValue('Relationship of \${b08} with household head'),
     ],
-    [TextCellValue('end_repeat')],
+    [TextCellValue('end_group')],
     [TextCellValue('end_group')],
     [
       TextCellValue('calculate'),
       TextCellValue('b06_total'),
-      null, null, null, null,
+      null,
+      null,
+      null,
+      null,
       TextCellValue('coalesce(\${c1}, 0) + coalesce(\${c2}, 0)'),
     ],
     [
@@ -130,7 +140,11 @@ Uint8List _uggpLikeWorkbook() {
     [TextCellValue('a12'), TextCellValue('1'), TextCellValue('Consent given')],
     [TextCellValue('a12'), TextCellValue('2'), TextCellValue('Absent')],
     [TextCellValue('a12'), TextCellValue('3'), TextCellValue('Unwilling')],
-    [TextCellValue('a12'), TextCellValue('4'), TextCellValue('Dwelling vacant')],
+    [
+      TextCellValue('a12'),
+      TextCellValue('4'),
+      TextCellValue('Dwelling vacant')
+    ],
     [TextCellValue('b09'), TextCellValue('1'), TextCellValue('Head')],
     [TextCellValue('b09'), TextCellValue('2'), TextCellValue('Spouse')],
   ]) {
@@ -154,12 +168,13 @@ void main() {
       // Bengali column maps to bn.
       expect(b01.labelTranslations['bn'], 'উত্তরদাতার নাম');
 
-      // Repeat nested inside the gated group.
+      // Nested group inside the gated group.
       final b08 = form.questions.firstWhere((q) => q.name == 'b08');
       expect(b08.groupPath, ['module_b', 'hh_member_repeat']);
-      final repeat = form.groups.firstWhere((g) => g.name == 'hh_member_repeat');
-      expect(repeat.isRepeat, isTrue);
-      expect(repeat.repeatCount, '\${num_hh_members}');
+      final repeat =
+          form.groups.firstWhere((g) => g.name == 'hh_member_repeat');
+      expect(repeat.isRepeat, isFalse);
+      expect(repeat.repeatCount, isNull);
 
       // once()/coalesce() calculations preserved verbatim.
       expect(
@@ -183,8 +198,8 @@ void main() {
 
       // Nothing answered yet: gated module hidden, end note visible
       // (empty != '1', matching ODK), no raw markup anywhere.
-      expect(
-          find.text('Name of the respondent', findRichText: true), findsNothing);
+      expect(find.text('Name of the respondent', findRichText: true),
+          findsNothing);
       expect(find.text('Module B: Household Information', findRichText: true),
           findsNothing);
       expect(find.textContaining('<span', findRichText: true), findsNothing);
@@ -199,8 +214,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Absent').last);
       await tester.pumpAndSettle();
-      expect(
-          find.text('Name of the respondent', findRichText: true), findsNothing);
+      expect(find.text('Name of the respondent', findRichText: true),
+          findsNothing);
       expect(
           find.text('Interview not completed. Save and finalise the form.',
               findRichText: true),
@@ -221,7 +236,8 @@ void main() {
           findsNothing);
     });
 
-    testWidgets('other non-consent options keep the module closed', (tester) async {
+    testWidgets('other non-consent options keep the module closed',
+        (tester) async {
       final form = XlsFormParser.parse(_uggpLikeWorkbook());
       for (final label in ['Unwilling', 'Dwelling vacant']) {
         await tester.pumpWidget(

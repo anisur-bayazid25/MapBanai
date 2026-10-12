@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/basemap_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mapbanai/services/map_service.dart';
@@ -20,7 +21,12 @@ class _GISMapScreenState extends State<GISMapScreen> {
   LatLng? _currentLocation;
   bool _followMe = false;
   String _selectedBasemapId = 'osm';
-  final Set<String> _visibleLayers = {'survey_points', 'survey_lines', 'survey_polygons'};
+  MapStyleChoice? _offlineBasemap;
+  final Set<String> _visibleLayers = {
+    'survey_points',
+    'survey_lines',
+    'survey_polygons'
+  };
 
   @override
   void initState() {
@@ -53,7 +59,8 @@ class _GISMapScreenState extends State<GISMapScreen> {
     _controller = controller;
     _addSourcesAndLayers();
     if (_currentLocation != null) {
-      controller.animateCamera(CameraUpdate.newLatLngZoom(_currentLocation!, 16));
+      controller
+          .animateCamera(CameraUpdate.newLatLngZoom(_currentLocation!, 16));
     }
   }
 
@@ -75,7 +82,8 @@ class _GISMapScreenState extends State<GISMapScreen> {
       _followMe = !_followMe;
     });
     if (_followMe && _currentLocation != null && _controller != null) {
-      _controller!.animateCamera(CameraUpdate.newLatLngZoom(_currentLocation!, 16));
+      _controller!
+          .animateCamera(CameraUpdate.newLatLngZoom(_currentLocation!, 16));
     }
   }
 
@@ -117,7 +125,8 @@ class _GISMapScreenState extends State<GISMapScreen> {
           ),
           IconButton(
             tooltip: _followMe ? 'Stop following' : 'Follow me',
-            icon: Icon(_followMe ? Icons.my_location : Icons.my_location_outlined),
+            icon: Icon(
+                _followMe ? Icons.my_location : Icons.my_location_outlined),
             onPressed: _toggleFollowMe,
           ),
           IconButton(
@@ -136,8 +145,12 @@ class _GISMapScreenState extends State<GISMapScreen> {
             ),
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
-            styleString: _buildStyleString(basemap),
+            styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
           ),
+          Positioned(
+              left: 8,
+              bottom: 8,
+              child: OfflineBasemapNotice(choice: _offlineBasemap)),
           if (_currentLocation != null)
             Positioned(
               bottom: 80,
@@ -218,8 +231,8 @@ class _GISMapScreenState extends State<GISMapScreen> {
             Text(
               'Feature Info',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -232,26 +245,18 @@ class _GISMapScreenState extends State<GISMapScreen> {
     );
   }
 
-  void _showBasemapDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Select Basemap'),
-        children: Basemap.defaults.map((basemap) {
-          return RadioListTile<String>(
-            title: Text(basemap.name),
-            value: basemap.id,
-            groupValue: _selectedBasemapId,
-            onChanged: (value) {
-              if (value != null) {
-                _onBasemapChanged(value);
-                Navigator.pop(context);
-              }
-            },
-          );
-        }).toList(),
-      ),
-    );
+  Future<void> _showBasemapDialog() async {
+    final choice =
+        await showBasemapPicker(context, selectedId: _selectedBasemapId);
+    if (choice == null || !mounted) return;
+    setState(() {
+      _selectedBasemapId = choice.id;
+      _offlineBasemap = choice;
+    });
+    if (choice.bounds != null) {
+      await _controller
+          ?.animateCamera(CameraUpdate.newLatLngBounds(choice.bounds!));
+    }
   }
 
   void _showLayerDialog() {
@@ -261,9 +266,17 @@ class _GISMapScreenState extends State<GISMapScreen> {
         builder: (context, setState) => SimpleDialog(
           title: const Text('Map Layers'),
           children: [
-            for (final layer in ['survey_points', 'survey_lines', 'survey_polygons'])
+            for (final layer in [
+              'survey_points',
+              'survey_lines',
+              'survey_polygons'
+            ])
               CheckboxListTile(
-                title: Text(layer.replaceAll('_', ' ').split(' ').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ')),
+                title: Text(layer
+                    .replaceAll('_', ' ')
+                    .split(' ')
+                    .map((w) => w[0].toUpperCase() + w.substring(1))
+                    .join(' ')),
                 value: _visibleLayers.contains(layer),
                 onChanged: (value) {
                   setState(() {

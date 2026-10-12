@@ -16,6 +16,7 @@ class TrackRecorder {
 
   DateTime? _startedAt;
   DateTime? _lastResumeAt;
+  DateTime? _pausedAt;
   Duration _pausedTotal = Duration.zero;
 
   TrackRecorder({
@@ -26,7 +27,7 @@ class TrackRecorder {
 
   Duration get elapsed {
     if (_startedAt == null) return Duration.zero;
-    final now = paused ? (_lastResumeAt ?? _startedAt!) : DateTime.now();
+    final now = paused ? (_pausedAt ?? _startedAt!) : DateTime.now();
     return now.difference(_startedAt!) - _pausedTotal;
   }
 
@@ -37,6 +38,10 @@ class TrackRecorder {
   }
 
   void start() {
+    if (running) {
+      if (paused) resume();
+      return;
+    }
     running = true;
     paused = false;
     _startedAt ??= DateTime.now();
@@ -46,13 +51,16 @@ class TrackRecorder {
   void pause() {
     if (!running || paused) return;
     paused = true;
-    _pausedTotal += DateTime.now().difference(_lastResumeAt ?? _startedAt!);
+    _pausedAt = DateTime.now();
   }
 
   void resume() {
     if (!running || !paused) return;
+    final now = DateTime.now();
+    if (_pausedAt != null) _pausedTotal += now.difference(_pausedAt!);
+    _pausedAt = null;
     paused = false;
-    _lastResumeAt = DateTime.now();
+    _lastResumeAt = now;
   }
 
   /// Feeds a fresh GPS fix. Returns true when the fix passed the filters
@@ -61,7 +69,9 @@ class TrackRecorder {
     latest = position;
     if (!running || paused) return false;
 
-    if (position.accuracy > maxAccuracyM) return false;
+    if (!position.accuracy.isFinite ||
+        position.accuracy < 0 ||
+        position.accuracy > maxAccuracyM) return false;
 
     final now = DateTime.now();
     final last = vertices.isEmpty ? null : vertices.last;
@@ -97,6 +107,7 @@ class TrackRecorder {
     paused = false;
     _startedAt = null;
     _lastResumeAt = null;
+    _pausedAt = null;
     _lastVertexTime = null;
     _pausedTotal = Duration.zero;
   }
@@ -111,6 +122,10 @@ class TrackRecorder {
   /// Captures the full recorder state (vertices + timing) so an in-progress
   /// recording can be stashed in a draft and resumed later via [restore].
   Map<String, dynamic> serialize() => {
+        'timing_version': 2,
+        'saved_at': DateTime.now().toIso8601String(),
+        'elapsed_ms': elapsed.inMilliseconds,
+        'paused_at': _pausedAt?.toIso8601String(),
         'running': running,
         'paused': paused,
         'started_at': _startedAt?.toIso8601String(),
@@ -139,6 +154,23 @@ class TrackRecorder {
     _pausedTotal = Duration(
       milliseconds: (json['paused_total_ms'] as num?)?.toInt() ?? 0,
     );
+    _pausedAt = DateTime.tryParse(json['paused_at'] ?? '');
+    // A stored draft is idle; time spent away must not count as recording.
+    final now = DateTime.now();
+    if (json['timing_version'] == 2) {
+      final elapsedMs = (json['elapsed_ms'] as num?)?.toInt() ?? 0;
+      _startedAt =
+          now.subtract(Duration(milliseconds: elapsedMs < 0 ? 0 : elapsedMs));
+      _pausedTotal = Duration.zero;
+      _pausedAt = paused ? now : null;
+      _lastResumeAt = now;
+    } else {
+      // Older drafts used incorrect pause arithmetic. Keep vertices, restart timing.
+      _startedAt = now;
+      _pausedTotal = Duration.zero;
+      _pausedAt = paused ? now : null;
+      _lastResumeAt = now;
+    }
     _lastVertexTime = DateTime.tryParse(json['last_vertex_time'] ?? '');
     final raw = json['vertices'];
     if (raw is List) {

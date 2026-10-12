@@ -6,7 +6,8 @@ import 'package:mapbanai/services/xlsx_reader.dart';
 /// Parses XLSForm (.xlsx) workbooks into [SurveyForm] definitions.
 ///
 /// Reads the standard `survey`, `choices` and optional `settings` sheets.
-/// Supported: all core question types, select_one/select_multiple with list
+/// Supported subset: text, numeric, date/time, image, geopoint, notes and
+/// calculated fields, select_one/select_multiple with list
 /// references, dropdown appearance, required, relevance, constraint,
 /// constraint_message, default, read_only and calculate rows.
 ///
@@ -61,43 +62,71 @@ class XlsFormParser {
     // Localized column maps for the survey sheet.
     final labelColMap = _localizedColumns(headers, 'label');
     final hintColMap = _localizedColumns(headers, 'hint');
-    final constraintMsgColMap = _localizedColumns(headers, 'constraint_message');
+    final constraintMsgColMap =
+        _localizedColumns(headers, 'constraint_message');
 
     final questions = <Question>[];
     final groups = <GroupInfo>[];
     final groupStack = <GroupInfo>[];
+    final names = <String>{};
+    final warnings = <String>[];
+    if (settings['version'] != null && settings['version'] is! int) {
+      warnings.add(
+          'Version "${settings['version']}" is nonnumeric; MapBanai uses internal version 1. Use a numeric version to preserve the revision.');
+    }
     for (int i = 1; i < rows.length; i++) {
       final row = rows[i];
       final typeRaw = _cell(row, typeCol);
-      if (typeRaw == null || typeRaw.trim().isEmpty) continue;
+      if (typeRaw == null || typeRaw.trim().isEmpty) {
+        if (_cell(row, nameCol) != null) {
+          throw XlsFormParseException(
+              'Row ${i + 1}: question has a name but no type');
+        }
+        continue;
+      }
+      for (final column in ['choice_filter', 'parameters']) {
+        if (_cell(row, headers[column] ?? -1) != null) {
+          throw XlsFormParseException(
+              'Row ${i + 1}: "$column" is not supported. Import would change the form behavior. Remove this column for a simple form, or use an XLSForm client that supports it.');
+        }
+      }
 
-      // ODK containers: track group membership (with relevance!) instead of
-      // silently dropping them. begin_repeat is tracked the same way so its
-      // relevance/repeat_count survive; the renderer shows one instance.
-      final keyword = typeRaw
-          .trim()
-          .split(RegExp(r'\s+'))
-          .first
-          .toLowerCase()
-          .replaceAll(RegExp('[_ ]'), '');
-      if (keyword == 'begingroup' || keyword == 'beginrepeat') {
-        final name = (_cell(row, nameCol) ?? '').trim();
-        if (name.isNotEmpty) {
-          final group = _parseGroup(
+      final keyword =
+          typeRaw.trim().toLowerCase().replaceAll(RegExp(r'[_\s]'), '');
+      if (keyword == 'beginrepeat' || keyword == 'endrepeat') {
+        throw XlsFormParseException(
+            'Row ${i + 1}: repeat groups are not supported. Multiple records cannot be stored safely in this version. Use one submission per feature, or use ODK Collect for repeated records.');
+      }
+      if (keyword == 'endgroup') {
+        if (groupStack.isEmpty) {
+          throw XlsFormParseException(
+              'Row ${i + 1}: end_group has no matching begin_group');
+        }
+        groupStack.removeLast();
+        continue;
+      }
+      final name = (_cell(row, nameCol) ?? '').trim();
+      if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name)) {
+        throw XlsFormParseException(
+            'Row ${i + 1}: invalid or missing name "$name". Use letters, digits and underscores, beginning with a letter or underscore.');
+      }
+      if (!names.add(name)) {
+        throw XlsFormParseException('Row ${i + 1}: duplicate name "$name"');
+      }
+      if (keyword == 'begingroup') {
+        final group = _parseGroup(
             row: row,
             headers: headers,
             name: name,
             labelColMap: labelColMap,
-            isRepeat: keyword == 'beginrepeat',
-          );
-          if (!groups.any((g) => g.name == name)) groups.add(group);
-          groupStack.add(group);
-        }
+            isRepeat: false);
+        groups.add(group);
+        groupStack.add(group);
         continue;
       }
-      if (keyword == 'endgroup' || keyword == 'endrepeat') {
-        if (groupStack.isNotEmpty) groupStack.removeLast();
-        continue;
+      if (_isStructuralOrMeta(typeRaw)) {
+        warnings
+            .add('Row ${i + 1}: metadata "$typeRaw" ($name) is not collected.');
       }
 
       final parsed = _parseQuestion(
@@ -113,6 +142,10 @@ class XlsFormParser {
         groupPath: [for (final g in groupStack) g.name],
       );
       if (parsed != null) questions.add(parsed);
+    }
+
+    if (groupStack.isNotEmpty) {
+      throw XlsFormParseException('Unclosed group: ${groupStack.last.name}');
     }
 
     if (questions.isEmpty) {
@@ -133,7 +166,16 @@ class XlsFormParser {
     }
     final languages = languageSet.toList()..sort();
     String? defaultLang;
-    if (languages.isNotEmpty) {
+    final configuredLanguage = settings['default_language'] as String?;
+    if (configuredLanguage != null) {
+      final code = _extractLanguageCode('label::$configuredLanguage');
+      if (!languages.contains(code)) {
+        throw XlsFormParseException(
+            'Default language "$configuredLanguage" has no translated labels');
+      }
+      defaultLang = code;
+    }
+    if (languages.isNotEmpty && defaultLang == null) {
       if (languages.contains('en')) {
         defaultLang = 'en';
       } else {
@@ -154,6 +196,7 @@ class XlsFormParser {
       languages: languages,
       defaultLanguage: defaultLang,
       groups: groups,
+      importWarnings: warnings,
     );
   }
 
@@ -170,7 +213,10 @@ class XlsFormParser {
     for (int c = 0; c < firstRow.length; c++) {
       final header = firstRow[c]?.trim().toLowerCase();
       if (header == null || header.isEmpty) continue;
-      if (!map.containsKey(header)) map[header] = c;
+      if (map.containsKey(header)) {
+        throw XlsFormParseException('Duplicate column "$header"');
+      }
+      map[header] = c;
     }
     return map;
   }
@@ -257,7 +303,11 @@ class XlsFormParser {
   static int? _localizedColumn(Map<String, int> headers, String field) {
     final exact = headers[field];
     if (exact != null) return exact;
-    for (final candidate in ['$field::english (en)', '$field::en', '$field::english']) {
+    for (final candidate in [
+      '$field::english (en)',
+      '$field::en',
+      '$field::english'
+    ]) {
       final hit = headers[candidate];
       if (hit != null) return hit;
     }
@@ -288,7 +338,8 @@ class XlsFormParser {
       if (entry.key == 'form_title' ||
           entry.key == 'form_id' ||
           entry.key == 'form_description' ||
-          entry.key == 'version') {
+          entry.key == 'version' ||
+          entry.key == 'default_language') {
         fieldCols[entry.key] = entry.value;
       }
     }
@@ -321,21 +372,37 @@ class XlsFormParser {
     final listCol = headers['list_name'];
     final nameCol = headers['name'];
     final labelColMap = _localizedColumns(headers, 'label');
-    if (listCol == null || nameCol == null || labelColMap.isEmpty) return result;
+    if (listCol == null || nameCol == null || labelColMap.isEmpty) {
+      throw XlsFormParseException(
+          'Choices sheet must have list_name, name and label columns');
+    }
 
     for (int i = 1; i < rows.length; i++) {
       final listName = _cell(rows[i], listCol);
       final name = _cell(rows[i], nameCol);
-      if (listName == null || name == null) continue;
+      if (rows[i].every((value) => value == null || value.trim().isEmpty))
+        continue;
+      if (listName == null || name == null) {
+        throw XlsFormParseException(
+            'Choices row ${i + 1}: missing list_name or name');
+      }
+      if (RegExp(r'\s').hasMatch(name)) {
+        throw XlsFormParseException(
+            'Choices row ${i + 1}: choice names cannot contain spaces');
+      }
+      if (result[listName]?.any((choice) => choice.name == name) == true) {
+        throw XlsFormParseException(
+            'Choices row ${i + 1}: duplicate choice "$name" in "$listName"');
+      }
 
       final raw = _collectLocalizedRaw(rows[i], labelColMap);
-      if (raw.isEmpty) continue;
+      if (raw.isEmpty)
+        throw XlsFormParseException('Choices row ${i + 1}: missing label');
       final defaultLabel = _pickDefaultLabel(raw);
       if (defaultLabel.isEmpty) continue;
       final translations = _translationsFromRaw(raw);
-      result
-          .putIfAbsent(listName, () => [])
-          .add(Choice(name: name, label: defaultLabel, labelTranslations: translations));
+      result.putIfAbsent(listName, () => []).add(Choice(
+          name: name, label: defaultLabel, labelTranslations: translations));
     }
     return result;
   }
@@ -410,6 +477,23 @@ class XlsFormParser {
       }
     }
 
+    final defaultValue = _cell(row, headers['default'] ?? -1) ??
+        (typeRaw.toLowerCase() == 'today' ? 'today()' : null);
+    if (questionChoices != null &&
+        defaultValue != null &&
+        !defaultValue.contains(r'${') &&
+        !RegExp(r'^[a-zA-Z][a-zA-Z0-9_-]*\s*\(').hasMatch(defaultValue)) {
+      final defaults = type == QuestionType.select_multiple
+          ? defaultValue.split(RegExp(r'\s+'))
+          : [defaultValue];
+      for (final value in defaults) {
+        if (!questionChoices.any((choice) => choice.name == value)) {
+          throw XlsFormParseException(
+              'Row ${rowIndex + 1}: default choice "$value" does not exist in "$listName"');
+        }
+      }
+    }
+
     // Label handling (multi-language)
     final labelRaw = _collectLocalizedRaw(row, labelColMap);
     final defaultLabel = _pickDefaultLabel(labelRaw);
@@ -443,14 +527,19 @@ class XlsFormParser {
       label: effectiveLabel,
       type: type,
       hint: hintDefault ?? fallbackHint,
-      required: _parseBool(_cell(row, headers['required'] ?? -1)),
+      required: _parseBool(_cell(row, headers['required'] ?? -1), rowIndex + 1),
       relevance: _cell(row, headers['relevant'] ?? headers['relevance'] ?? -1),
       constraint: _cell(row, headers['constraint'] ?? -1),
       constraintMessage: constraintDefault ?? fallbackConstraint,
       choices: questionChoices,
-      defaultValue: _cell(row, headers['default'] ?? -1),
-      readOnly: _parseBool(_cell(row, headers['read_only'] ?? -1)),
+      defaultValue: defaultValue,
+      readOnly: _parseBool(
+          _cell(row, headers['read_only'] ?? headers['readonly'] ?? -1),
+          rowIndex + 1),
       calculation: _cell(row, headers['calculation'] ?? -1),
+      metadataType: ['today', 'username'].contains(typeRaw.toLowerCase())
+          ? typeRaw.toLowerCase()
+          : null,
       labelTranslations: labelTranslations,
       hintTranslations: hintTranslations,
       constraintMessageTranslations: constraintTranslations,
@@ -468,19 +557,12 @@ class XlsFormParser {
       // Auto-computed metadata (ODK `meta`): captured by the device/OS.
       case 'start':
       case 'end':
-      case 'today':
       case 'deviceid':
-      case 'username':
       case 'simserial':
       case 'subscriberid':
       case 'phonenumber':
       case 'audit':
       case 'backgroundaudio':
-      case 'geotrace':
-      case 'geoshape':
-      case 'file':
-      case 'audio':
-      case 'video':
         return true;
       // Structural containers: flattened into a single linear form.
       case 'begingroup':
@@ -497,7 +579,8 @@ class XlsFormParser {
     String raw, {
     String? appearance,
   }) {
-    final tokens = raw.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    final tokens =
+        raw.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
     var keyword = tokens.first.toLowerCase();
     var appearanceValue = appearance?.toLowerCase() ?? '';
 
@@ -519,6 +602,8 @@ class XlsFormParser {
       );
     }
     switch (keyword) {
+      case 'username':
+        return (type: QuestionType.text, listName: null);
       case 'note':
         return (type: QuestionType.note, listName: null);
       case 'int':
@@ -528,12 +613,12 @@ class XlsFormParser {
         return (type: QuestionType.decimal, listName: null);
       case 'calculate':
         return (type: QuestionType.calculated, listName: null);
+      case 'today':
       case 'date':
         return (type: QuestionType.date, listName: null);
       case 'time':
         return (type: QuestionType.time, listName: null);
       case 'datetime':
-      case 'datetimeethiopian':
         return (type: QuestionType.datetime, listName: null);
       case 'image':
       case 'photo':
@@ -542,6 +627,10 @@ class XlsFormParser {
         return (type: QuestionType.text, listName: null);
       case 'geopoint':
         return (type: QuestionType.geopoint, listName: null);
+      case 'geoshape':
+        return (type: QuestionType.geoshape, listName: null);
+      case 'geotrace':
+        return (type: QuestionType.geotrace, listName: null);
       case 'hidden':
         return (type: QuestionType.hidden, listName: null);
       case 'yesno':
@@ -556,16 +645,21 @@ class XlsFormParser {
           listName: _listName(tokens),
         );
       case 'select_multiple':
-        return (type: QuestionType.select_multiple, listName: _listName(tokens));
+        return (
+          type: QuestionType.select_multiple,
+          listName: _listName(tokens)
+        );
       default:
         throw XlsFormParseException(
-          'Unsupported question type "$raw"',
+          'Unsupported question type "$raw". Replace it with a supported type or use ODK Collect for this form',
         );
     }
   }
 
   static String? _listName(List<String> tokens) {
-    if (tokens.length < 2) return null;
+    if (tokens.length < 2)
+      throw XlsFormParseException(
+          'Select question is missing its choices list name');
     for (final token in tokens.skip(1)) {
       if (token.startsWith('@')) continue;
       return token;
@@ -573,16 +667,24 @@ class XlsFormParser {
     return null;
   }
 
-  static bool _parseBool(String? value) {
+  static bool _parseBool(String? value, int row) {
     if (value == null) return false;
     switch (value.toLowerCase()) {
       case 'yes':
       case 'true':
       case '1':
+      case 'true()':
       case 'y':
         return true;
-      default:
+      case 'no':
+      case 'false':
+      case 'false()':
+      case '0':
+      case 'n':
         return false;
+      default:
+        throw XlsFormParseException(
+            'Row $row: dynamic or invalid required/read_only value "$value" is not supported. Use yes/no for a fixed rule');
     }
   }
 

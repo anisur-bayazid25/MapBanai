@@ -55,12 +55,33 @@ class DataExportService {
     // Write data rows
     for (final response in responses) {
       final row = headers
-          .map((header) => _escapeCSV(response[header]?.toString() ?? ''))
+          .map((header) => _escapeCSV(_csvValue(response[header])))
           .toList();
       csv.writeln(row.join(','));
     }
 
     return csv.toString();
+  }
+
+  static String _csvValue(dynamic value) {
+    if (value == null) return '';
+    if (value is Map && ['Polygon', 'LineString'].contains(value['type'])) {
+      final coordinates = value['coordinates'];
+      final vertices = value['type'] == 'Polygon' &&
+              coordinates is List &&
+              coordinates.isNotEmpty
+          ? coordinates.first
+          : coordinates;
+      if (vertices is List) {
+        return vertices
+            .whereType<List>()
+            .where((v) => v.length >= 2)
+            .map((v) => '${v[1]} ${v[0]} ${v.length > 2 ? v[2] : 0} 0')
+            .join(';');
+      }
+    }
+    if (value is Map || value is List) return jsonEncode(value);
+    return value.toString();
   }
 
   static String _escapeCSV(String value) {
@@ -84,9 +105,8 @@ class DataImportService {
         return [SurveyForm.fromJson(Map<String, dynamic>.from(json))];
       } else if (json is Map && json.containsKey('forms')) {
         // Multiple forms export
-        final forms = (json['forms'] as List)
-            .map((f) => SurveyForm.fromJson(f))
-            .toList();
+        final forms =
+            (json['forms'] as List).map((f) => SurveyForm.fromJson(f)).toList();
         return forms;
       } else if (json is List) {
         // Array of forms

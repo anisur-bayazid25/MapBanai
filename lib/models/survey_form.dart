@@ -27,6 +27,9 @@ class SurveyForm {
   /// relevance AND every enclosing group's relevance hold.
   final List<GroupInfo> groups;
 
+  /// Import limitations that must be shown before field use.
+  final List<String> importWarnings;
+
   /// Group lookup by name (first definition wins).
   Map<String, GroupInfo> get groupByName {
     final map = <String, GroupInfo>{};
@@ -42,6 +45,7 @@ class SurveyForm {
     required this.description,
     required this.questions,
     this.version = 1,
+    this.importWarnings = const [],
     List<String>? languages,
     this.defaultLanguage,
     List<GroupInfo>? groups,
@@ -72,30 +76,39 @@ class SurveyForm {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'description': description,
-    'questions': questions.map((q) => q.toJson()).toList(),
-    'version': version,
-    if (languages.isNotEmpty) 'languages': languages,
-    if (defaultLanguage != null) 'default_language': defaultLanguage,
-    if (groups.isNotEmpty) 'groups': groups.map((g) => g.toJson()).toList(),
-  };
+        'id': id,
+        'name': name,
+        'description': description,
+        'questions': questions.map((q) => q.toJson()).toList(),
+        'version': version,
+        if (importWarnings.isNotEmpty) 'import_warnings': importWarnings,
+        if (languages.isNotEmpty) 'languages': languages,
+        if (defaultLanguage != null) 'default_language': defaultLanguage,
+        if (groups.isNotEmpty) 'groups': groups.map((g) => g.toJson()).toList(),
+      };
 
   factory SurveyForm.fromJson(Map<String, dynamic> json) => SurveyForm(
-    id: json['id'] ?? '',
-    name: json['name'] ?? '',
-    description: json['description'] ?? '',
-    questions: (json['questions'] as List?)
-        ?.map((q) => Question.fromJson(q as Map<String, dynamic>))
-        .toList() ?? [],
-    version: json['version'] ?? 1,
-    languages: (json['languages'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-    defaultLanguage: json['default_language'] as String?,
-    groups: (json['groups'] as List?)
-        ?.map((g) => GroupInfo.fromJson(g as Map<String, dynamic>))
-        .toList() ?? const [],
-  );
+        id: json['id'] ?? '',
+        name: json['name'] ?? '',
+        description: json['description'] ?? '',
+        questions: (json['questions'] as List?)
+                ?.map((q) => Question.fromJson(q as Map<String, dynamic>))
+                .toList() ??
+            [],
+        version: json['version'] ?? 1,
+        importWarnings: (json['import_warnings'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
+        languages:
+            (json['languages'] as List?)?.map((e) => e.toString()).toList() ??
+                const [],
+        defaultLanguage: json['default_language'] as String?,
+        groups: (json['groups'] as List?)
+                ?.map((g) => GroupInfo.fromJson(g as Map<String, dynamic>))
+                .toList() ??
+            const [],
+      );
 }
 
 /// An ODK `begin_group` / `begin_repeat` container.
@@ -138,13 +151,14 @@ class GroupInfo {
   }
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'label': label,
-    if (relevance != null) 'relevance': relevance,
-    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
-    if (isRepeat) 'is_repeat': true,
-    if (repeatCount != null) 'repeat_count': repeatCount,
-  };
+        'name': name,
+        'label': label,
+        if (relevance != null) 'relevance': relevance,
+        if (labelTranslations.isNotEmpty)
+          'label_translations': labelTranslations,
+        if (isRepeat) 'is_repeat': true,
+        if (repeatCount != null) 'repeat_count': repeatCount,
+      };
 
   factory GroupInfo.fromJson(Map<String, dynamic> json) {
     final raw = json['label_translations'];
@@ -155,7 +169,8 @@ class GroupInfo {
       labelTranslations: raw is Map
           ? Map<String, String>.fromEntries(
               raw.entries.map(
-                (e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString()),
+                (e) => MapEntry(
+                    e.key.toString().toLowerCase(), e.value.toString()),
               ),
             )
           : const {},
@@ -177,6 +192,7 @@ class Question {
   final List<Choice>? choices; // For select/radio/checkbox types
   final String? defaultValue;
   final bool readOnly;
+  final String? metadataType;
   final String? calculation; // e.g., "${width} * ${length}"
 
   /// Language -> translation for label. Keys are lower-cased language codes
@@ -203,13 +219,15 @@ class Question {
     this.defaultValue,
     this.readOnly = false,
     this.calculation,
+    this.metadataType,
     Map<String, String>? labelTranslations,
     Map<String, String>? hintTranslations,
     Map<String, String>? constraintMessageTranslations,
     List<String>? groupPath,
   })  : labelTranslations = labelTranslations ?? const {},
         hintTranslations = hintTranslations ?? const {},
-        constraintMessageTranslations = constraintMessageTranslations ?? const {},
+        constraintMessageTranslations =
+            constraintMessageTranslations ?? const {},
         groupPath = groupPath ?? const [];
 
   /// Returns the label for [languageCode] (e.g. 'bn'), falling back to
@@ -217,7 +235,9 @@ class Question {
   String labelFor(String? languageCode) {
     if (languageCode == null || languageCode == 'default') return label;
     final code = languageCode.toLowerCase();
-    return labelTranslations[code] ?? labelTranslations[code.toLowerCase()] ?? label;
+    return labelTranslations[code] ??
+        labelTranslations[code.toLowerCase()] ??
+        label;
   }
 
   String? hintFor(String? languageCode) {
@@ -241,31 +261,34 @@ class Question {
       (choices != null && choices!.any((c) => c.labelTranslations.isNotEmpty));
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'label': label,
-    'type': type.toString().split('.').last,
-    'hint': hint,
-    'required': required,
-    'relevance': relevance,
-    'constraint': constraint,
-    'constraint_message': constraintMessage,
-    'choices': choices?.map((c) => c.toJson()).toList(),
-    'default': defaultValue,
-    'read_only': readOnly,
-    'calculation': calculation,
-    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
-    if (hintTranslations.isNotEmpty) 'hint_translations': hintTranslations,
-    if (constraintMessageTranslations.isNotEmpty)
-      'constraint_message_translations': constraintMessageTranslations,
-    if (groupPath.isNotEmpty) 'group_path': groupPath,
-  };
+        'name': name,
+        'label': label,
+        'type': type.toString().split('.').last,
+        'hint': hint,
+        'required': required,
+        'relevance': relevance,
+        'constraint': constraint,
+        'constraint_message': constraintMessage,
+        'choices': choices?.map((c) => c.toJson()).toList(),
+        'default': defaultValue,
+        'read_only': readOnly,
+        'calculation': calculation,
+        if (metadataType != null) 'metadata_type': metadataType,
+        if (labelTranslations.isNotEmpty)
+          'label_translations': labelTranslations,
+        if (hintTranslations.isNotEmpty) 'hint_translations': hintTranslations,
+        if (constraintMessageTranslations.isNotEmpty)
+          'constraint_message_translations': constraintMessageTranslations,
+        if (groupPath.isNotEmpty) 'group_path': groupPath,
+      };
 
   factory Question.fromJson(Map<String, dynamic> json) {
     Map<String, String> _readMap(String key) {
       final raw = json[key];
       if (raw is Map) {
         return Map<String, String>.fromEntries(
-          raw.entries.map((e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
+          raw.entries.map((e) =>
+              MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
         );
       }
       return const {};
@@ -286,13 +309,14 @@ class Question {
       defaultValue: json['default'],
       readOnly: json['read_only'] ?? false,
       calculation: json['calculation'],
+      metadataType: json['metadata_type'] as String?,
       labelTranslations: _readMap('label_translations'),
       hintTranslations: _readMap('hint_translations'),
-      constraintMessageTranslations: _readMap('constraint_message_translations'),
-      groupPath: (json['group_path'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      constraintMessageTranslations:
+          _readMap('constraint_message_translations'),
+      groupPath:
+          (json['group_path'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
     );
   }
 
@@ -315,6 +339,8 @@ enum QuestionType {
   datetime,
   image,
   geopoint,
+  geoshape,
+  geotrace,
   calculated,
   note,
   gps_accuracy,
@@ -347,6 +373,10 @@ QuestionType _parseQuestionType(String? type) {
       return QuestionType.image;
     case 'geopoint':
       return QuestionType.geopoint;
+    case 'geoshape':
+      return QuestionType.geoshape;
+    case 'geotrace':
+      return QuestionType.geotrace;
     case 'calculated':
       return QuestionType.calculated;
     case 'note':
@@ -367,7 +397,10 @@ class Choice {
   /// Language -> translation for choice label.
   final Map<String, String> labelTranslations;
 
-  Choice({required this.name, required this.label, Map<String, String>? labelTranslations})
+  Choice(
+      {required this.name,
+      required this.label,
+      Map<String, String>? labelTranslations})
       : labelTranslations = labelTranslations ?? const {};
 
   String labelFor(String? languageCode) {
@@ -377,17 +410,19 @@ class Choice {
   }
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'label': label,
-    if (labelTranslations.isNotEmpty) 'label_translations': labelTranslations,
-  };
+        'name': name,
+        'label': label,
+        if (labelTranslations.isNotEmpty)
+          'label_translations': labelTranslations,
+      };
 
   factory Choice.fromJson(Map<String, dynamic> json) {
     Map<String, String> map = const {};
     final raw = json['label_translations'];
     if (raw is Map) {
       map = Map<String, String>.fromEntries(
-        raw.entries.map((e) => MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
+        raw.entries.map((e) =>
+            MapEntry(e.key.toString().toLowerCase(), e.value.toString())),
       );
     }
     return Choice(
@@ -402,113 +437,113 @@ class Choice {
 
 class SurveyExamples {
   static SurveyForm riverBankSurvey() => SurveyForm(
-    id: 'riverbank_v1',
-    name: 'Riverbank Inspection',
-    description: 'Field assessment of riverbank conditions',
-    questions: [
-      Question(
-        name: 'site_name',
-        label: 'Site name',
-        type: QuestionType.text,
-        required: true,
-        hint: 'e.g., Jones Creek North Section',
-      ),
-      Question(
-        name: 'erosion_present',
-        label: 'Is erosion visible?',
-        type: QuestionType.select_one,
-        required: true,
-        choices: [
-          Choice(name: 'yes', label: 'Yes'),
-          Choice(name: 'no', label: 'No'),
-          Choice(name: 'unclear', label: 'Unclear'),
+        id: 'riverbank_v1',
+        name: 'Riverbank Inspection',
+        description: 'Field assessment of riverbank conditions',
+        questions: [
+          Question(
+            name: 'site_name',
+            label: 'Site name',
+            type: QuestionType.text,
+            required: true,
+            hint: 'e.g., Jones Creek North Section',
+          ),
+          Question(
+            name: 'erosion_present',
+            label: 'Is erosion visible?',
+            type: QuestionType.select_one,
+            required: true,
+            choices: [
+              Choice(name: 'yes', label: 'Yes'),
+              Choice(name: 'no', label: 'No'),
+              Choice(name: 'unclear', label: 'Unclear'),
+            ],
+          ),
+          Question(
+            name: 'erosion_severity',
+            label: 'Erosion severity',
+            type: QuestionType.select_one,
+            relevance: "\${erosion_present} = 'yes'",
+            required: true,
+            choices: [
+              Choice(name: 'mild', label: 'Mild'),
+              Choice(name: 'moderate', label: 'Moderate'),
+              Choice(name: 'severe', label: 'Severe'),
+            ],
+          ),
+          Question(
+            name: 'erosion_width',
+            label: 'Estimated erosion width (meters)',
+            type: QuestionType.decimal,
+            relevance: "\${erosion_present} = 'yes'",
+            constraint: '. > 0 and . < 100',
+            constraintMessage: 'Width must be between 0 and 100 meters',
+          ),
+          Question(
+            name: 'vegetation_coverage',
+            label: 'Vegetation coverage (%)',
+            type: QuestionType.integer,
+            constraint: '. >= 0 and . <= 100',
+            constraintMessage: 'Must be between 0 and 100%',
+          ),
+          Question(
+            name: 'notes',
+            label: 'Additional observations',
+            type: QuestionType.text,
+            hint: 'Any other relevant details',
+          ),
         ],
-      ),
-      Question(
-        name: 'erosion_severity',
-        label: 'Erosion severity',
-        type: QuestionType.select_one,
-        relevance: "\${erosion_present} = 'yes'",
-        required: true,
-        choices: [
-          Choice(name: 'mild', label: 'Mild'),
-          Choice(name: 'moderate', label: 'Moderate'),
-          Choice(name: 'severe', label: 'Severe'),
-        ],
-      ),
-      Question(
-        name: 'erosion_width',
-        label: 'Estimated erosion width (meters)',
-        type: QuestionType.decimal,
-        relevance: "\${erosion_present} = 'yes'",
-        constraint: '. > 0 and . < 100',
-        constraintMessage: 'Width must be between 0 and 100 meters',
-      ),
-      Question(
-        name: 'vegetation_coverage',
-        label: 'Vegetation coverage (%)',
-        type: QuestionType.integer,
-        constraint: '. >= 0 and . <= 100',
-        constraintMessage: 'Must be between 0 and 100%',
-      ),
-      Question(
-        name: 'notes',
-        label: 'Additional observations',
-        type: QuestionType.text,
-        hint: 'Any other relevant details',
-      ),
-    ],
-  );
+      );
 
   static SurveyForm infrastructureSurvey() => SurveyForm(
-    id: 'infrastructure_v1',
-    name: 'Infrastructure Assessment',
-    description: 'Condition assessment of water infrastructure',
-    questions: [
-      Question(
-        name: 'structure_type',
-        label: 'Structure type',
-        type: QuestionType.select_one,
-        required: true,
-        choices: [
-          Choice(name: 'culvert', label: 'Culvert'),
-          Choice(name: 'bridge', label: 'Bridge'),
-          Choice(name: 'dam', label: 'Dam'),
-          Choice(name: 'weir', label: 'Weir'),
+        id: 'infrastructure_v1',
+        name: 'Infrastructure Assessment',
+        description: 'Condition assessment of water infrastructure',
+        questions: [
+          Question(
+            name: 'structure_type',
+            label: 'Structure type',
+            type: QuestionType.select_one,
+            required: true,
+            choices: [
+              Choice(name: 'culvert', label: 'Culvert'),
+              Choice(name: 'bridge', label: 'Bridge'),
+              Choice(name: 'dam', label: 'Dam'),
+              Choice(name: 'weir', label: 'Weir'),
+            ],
+          ),
+          Question(
+            name: 'condition',
+            label: 'Overall condition',
+            type: QuestionType.select_one,
+            required: true,
+            choices: [
+              Choice(name: 'good', label: 'Good'),
+              Choice(name: 'fair', label: 'Fair'),
+              Choice(name: 'poor', label: 'Poor'),
+            ],
+          ),
+          Question(
+            name: 'maintenance_needed',
+            label: 'Does maintenance appear needed?',
+            type: QuestionType.select_one,
+            required: true,
+            choices: [
+              Choice(name: 'yes', label: 'Yes'),
+              Choice(name: 'no', label: 'No'),
+            ],
+          ),
+          Question(
+            name: 'maintenance_type',
+            label: 'Type of maintenance needed',
+            type: QuestionType.select_multiple,
+            relevance: "\${maintenance_needed} = 'yes'",
+            choices: [
+              Choice(name: 'cleaning', label: 'Cleaning'),
+              Choice(name: 'repair', label: 'Repair'),
+              Choice(name: 'replacement', label: 'Replacement'),
+            ],
+          ),
         ],
-      ),
-      Question(
-        name: 'condition',
-        label: 'Overall condition',
-        type: QuestionType.select_one,
-        required: true,
-        choices: [
-          Choice(name: 'good', label: 'Good'),
-          Choice(name: 'fair', label: 'Fair'),
-          Choice(name: 'poor', label: 'Poor'),
-        ],
-      ),
-      Question(
-        name: 'maintenance_needed',
-        label: 'Does maintenance appear needed?',
-        type: QuestionType.select_one,
-        required: true,
-        choices: [
-          Choice(name: 'yes', label: 'Yes'),
-          Choice(name: 'no', label: 'No'),
-        ],
-      ),
-      Question(
-        name: 'maintenance_type',
-        label: 'Type of maintenance needed',
-        type: QuestionType.select_multiple,
-        relevance: "\${maintenance_needed} = 'yes'",
-        choices: [
-          Choice(name: 'cleaning', label: 'Cleaning'),
-          Choice(name: 'repair', label: 'Repair'),
-          Choice(name: 'replacement', label: 'Replacement'),
-        ],
-      ),
-    ],
-  );
+      );
 }

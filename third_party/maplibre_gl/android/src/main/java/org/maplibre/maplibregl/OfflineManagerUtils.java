@@ -154,7 +154,9 @@ abstract class OfflineManagerUtils {
               public void onError(String error) {
                 Log.e(TAG, "Error: " + error);
                 // Reset downloading state
-                _offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE);
+                if (_offlineRegion != null) {
+                  _offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE);
+                }
                 channelHandler.onError("mapboxInvalidRegionDefinition", error, null);
                 result.error("mapboxInvalidRegionDefinition", error, null);
               }
@@ -238,7 +240,8 @@ abstract class OfflineManagerUtils {
               public void onList(OfflineRegion[] offlineRegions) {
                 for (OfflineRegion offlineRegion : offlineRegions) {
                   if (offlineRegion.getId() != id) continue;
-
+                  offlineRegion.setDownloadState(OfflineRegion.STATE_INACTIVE);
+                  offlineRegion.setObserver(null);
                   offlineRegion.delete(
                       new OfflineRegion.OfflineRegionDeleteCallback() {
                         @Override
@@ -268,6 +271,56 @@ abstract class OfflineManagerUtils {
                 result.error("RegionListError", error, null);
               }
             });
+  }
+
+  static void regionStatus(MethodChannel.Result result, Context context, long id) {
+    OfflineManager.Companion.getInstance(context).listOfflineRegions(
+        new OfflineManager.ListOfflineRegionsCallback() {
+          @Override public void onList(OfflineRegion[] regions) {
+            for (OfflineRegion region : regions) {
+              if (region.getId() != id) continue;
+              region.getStatus(new OfflineRegion.OfflineRegionStatusCallback() {
+                @Override public void onStatus(OfflineRegionStatus status) {
+                  Map<String, Object> values = new HashMap<>();
+                  values.put("complete", status.isComplete());
+                  values.put("completed", status.getCompletedResourceCount());
+                  values.put("required", status.getRequiredResourceCount());
+                  values.put("bytes", status.getCompletedResourceSize());
+                  values.put("tiles", status.getCompletedTileCount());
+                  values.put("active", status.getDownloadState() == OfflineRegion.STATE_ACTIVE);
+                  result.success(values);
+                }
+                @Override public void onError(String error) {
+                  result.error("RegionStatusError", error, null);
+                }
+              });
+              return;
+            }
+            result.error("RegionNotFound", "Offline map package no longer exists", null);
+          }
+          @Override public void onError(String error) {
+            result.error("RegionListError", error, null);
+          }
+        });
+  }
+
+  static void regionDownloadState(MethodChannel.Result result, Context context,
+      long id, boolean active) {
+    OfflineManager.Companion.getInstance(context).listOfflineRegions(
+        new OfflineManager.ListOfflineRegionsCallback() {
+          @Override public void onList(OfflineRegion[] regions) {
+            for (OfflineRegion region : regions) {
+              if (region.getId() != id) continue;
+              region.setDownloadState(active ? OfflineRegion.STATE_ACTIVE : OfflineRegion.STATE_INACTIVE);
+              result.success(null);
+              return;
+            }
+            result.error("RegionNotFound", "Offline map package no longer exists", null);
+          }
+          @Override public void onError(String error) {
+            result.error("RegionListError", error, null);
+          }
+        });
   }
 
   private static double calculateDownloadingProgress(

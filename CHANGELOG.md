@@ -4,6 +4,34 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.6.0] - 2026-10-12
+
+- Added linked guided visits, durable drafts and retryable map updates.
+- Added provider-approved offline map packages and shared basemap selection.
+- Added site revision history, changed-only GeoJSON export and explicit team conflict resolution.
+- Added field quality checks and inspection links.
+- Photo GPS accuracy is recorded/displayed without an accuracy gate; EXIF coordinates remain mandatory.
+- Saved visits retain their original form definition; restored histories retain working photo links.
+- Scoped site clearing preserves other projects; release CI requires signing and runs tests/analysis.
+
+The unpublished 2.5 fixes below are included in this release.
+
+## [2.5.0] - 2026-10-12
+
+### Changed
+- Study Area now supports verification/update/new-feature/review/not-found statuses, retained original data, change notes, point/line/polygon editing and revised GeoJSON/HTML/CSV/XLSX export.
+- Photo capture requires verified JPEG EXIF GPS tags and a fresh quality location for camera captures.
+- XLSForm import validates unsupported features explicitly, handles prefixed Excel XML and defaults, and supports editable dates and line/polygon questions.
+
+### Fixed
+- Cross-question constraints and asynchronous form saving; failed saves retain answers.
+- Duplicate-name project routing and cancelled resumed GIS drafts.
+- Edits requeue data/photos for sync; older upload requests cannot acknowledge newer edits.
+- Full backup attachments, integrity checks, cross-install photo paths and safe restore connection handling.
+- Track pause/draft timing and survey geometry exports.
+
+Re-import existing XLSForms to use parser fixes. See FIELD_WORKFLOW.md for the field procedure and supported-feature boundaries.
+
 ## [2.4.4] - 2026-08-23
 
 ### Fixed

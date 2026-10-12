@@ -5,6 +5,7 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/feature_detail_sheet.dart';
+import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:mapbanai/ui/survey_form_renderer.dart';
 
 /// Shows the answers saved in a survey session (or the GIS feature captured),
@@ -39,16 +40,23 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   }
 
   Future<void> _load() async {
+    final current = await _database.getSurveySession(_session.id);
+    if (current != null) _session = current;
     Map<String, dynamic> responses;
     try {
-      responses =
-          jsonDecode(_session.responses) as Map<String, dynamic>;
+      responses = jsonDecode(_session.responses) as Map<String, dynamic>;
     } catch (_) {
       responses = {};
     }
     SurveyForm? form;
+    final snapshot = responses['form_snapshot'];
+    if (snapshot is Map) {
+      try {
+        form = SurveyForm.fromJson(Map<String, dynamic>.from(snapshot));
+      } catch (_) {}
+    }
     final formName = responses['form_name'] as String?;
-    if (formName != null) {
+    if (form == null && formName != null) {
       final stored = await _database.getStoredFormByName(
         formName,
         projectId: _session.projectId,
@@ -80,13 +88,17 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   Future<void> _editAnswers() async {
     final form = _form;
     if (form == null) return;
-    final currentAnswers = (_responses?['answers'] as Map?)?.cast<String, dynamic>() ?? {};
+    final currentAnswers =
+        (_responses?['answers'] as Map?)?.cast<String, dynamic>() ?? {};
+    final username = await _database.getSetting('user_name');
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
           appBar: AppBar(title: Text('Edit — ${form.name}')),
           body: SurveyFormRenderer(
             form: form,
+            initialUsername: username,
             initialAnswers: currentAnswers,
             onSave: (answers) async {
               await _saveEditedAnswers(answers, form);
@@ -119,7 +131,8 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     );
     if (!mounted) return;
     setState(() {
-      _session = _session.copyWith(title: title, responses: jsonEncode(responses));
+      _session =
+          _session.copyWith(title: title, responses: jsonEncode(responses));
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Answers updated')),
@@ -194,7 +207,8 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete response',
-      message: 'Delete "${_session.title}"? This cannot be undone.',
+      message: 'Delete "${_session.title}"? This cannot be undone.'
+          '${_responses?['workflow'] == 'guided_visit_v1' ? ' Study Area revision history will remain.' : ''}',
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -235,8 +249,8 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                 Text(
                   _session.title,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -245,7 +259,42 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 12),
-                if (_form != null) ...[
+                if (_responses?['workflow'] == 'guided_visit_v1' &&
+                    _responses?['visit'] is Map) ...[
+                  _kvTile(
+                      'Visit ID', _responses!['visit']['id']?.toString() ?? ''),
+                  _kvTile('Baseline feature',
+                      _responses!['visit']['site_id']?.toString() ?? ''),
+                  _kvTile('Map update',
+                      _responses!['visit']['site_sync']?.toString() ?? ''),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => GuidedVisitScreen(
+                            projectId: _session.projectId,
+                            resumeSessionId: _session.id,
+                            database: _database),
+                      ));
+                      if (mounted) await _load();
+                    },
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Review visit / retry map update'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => GuidedVisitScreen(
+                            projectId: _session.projectId, database: _database),
+                      ));
+                      if (mounted) await _load();
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Start another visit'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_form != null &&
+                    _responses?['workflow'] != 'guided_visit_v1') ...[
                   if (_session.status == 'saved')
                     FilledButton.icon(
                       onPressed: _editAnswers,
@@ -284,16 +333,19 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   }
 
   List<Widget> _answerEntries() {
-    final answers = (_responses?['answers'] as Map?)?.cast<String, dynamic>() ?? {};
+    final answers =
+        (_responses?['answers'] as Map?)?.cast<String, dynamic>() ?? {};
     if (answers.isEmpty) {
       return [
-        Text('No answers recorded.', style: TextStyle(color: Colors.grey.shade600)),
+        Text('No answers recorded.',
+            style: TextStyle(color: Colors.grey.shade600)),
       ];
     }
     final entries = <Widget>[];
     answers.forEach((key, value) {
       final label = _labelFor(key) ?? key;
-      final text = value == null || value.toString().isEmpty ? '—' : value.toString();
+      final text =
+          value == null || value.toString().isEmpty ? '—' : value.toString();
       entries.add(
         _kvTile(label, text),
       );
@@ -319,7 +371,8 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
         _kvTile('Length', '${(r['length_m'] as num).toStringAsFixed(1)} m'),
       if (r['area_m2'] != null)
         _kvTile('Area', '${(r['area_m2'] as num).toStringAsFixed(1)} m²'),
-      if (r['recorded_at'] != null) _kvTile('Recorded', r['recorded_at'].toString()),
+      if (r['recorded_at'] != null)
+        _kvTile('Recorded', r['recorded_at'].toString()),
     ];
     final fields = r['fields'];
     if (fields is Map) {

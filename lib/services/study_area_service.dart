@@ -4,17 +4,33 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:excel/excel.dart' as excel_lib;
+import 'package:crypto/crypto.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:xml/xml.dart';
 
 /// Status of a study area site.
-enum StudyAreaStatus { pending, completed }
+enum StudyAreaStatus {
+  pending,
+  completed,
+  verified,
+  updated,
+  newFeature,
+  notFound,
+  needsReview
+}
 
 extension StudyAreaStatusX on StudyAreaStatus {
   static StudyAreaStatus fromString(String? raw) {
     if (raw == null) return StudyAreaStatus.pending;
     final v = raw.trim().toLowerCase();
+    for (final status in StudyAreaStatus.values) {
+      if (status.name.toLowerCase() == v) return status;
+    }
+    if (v == 'new') return StudyAreaStatus.newFeature;
+    if (v == 'not_found') return StudyAreaStatus.notFound;
+    if (v == 'needs_review') return StudyAreaStatus.needsReview;
     if (v == 'completed' ||
         v == 'complete' ||
         v == 'done' ||
@@ -29,23 +45,125 @@ extension StudyAreaStatusX on StudyAreaStatus {
     return StudyAreaStatus.pending;
   }
 
-  String get label => this == StudyAreaStatus.completed ? 'Completed' : 'Pending';
+  String get label => switch (this) {
+        StudyAreaStatus.pending => 'Pending verification',
+        StudyAreaStatus.completed => 'Completed (legacy)',
+        StudyAreaStatus.verified => 'Verified unchanged',
+        StudyAreaStatus.updated => 'Updated',
+        StudyAreaStatus.newFeature => 'New feature',
+        StudyAreaStatus.notFound => 'Not found',
+        StudyAreaStatus.needsReview => 'Needs review',
+      };
 
-  String get colorHex =>
-      this == StudyAreaStatus.completed ? '#2E7D32' : '#E53935';
+  String get colorHex => switch (this) {
+        StudyAreaStatus.pending => '#E53935',
+        StudyAreaStatus.completed || StudyAreaStatus.verified => '#2E7D32',
+        StudyAreaStatus.updated => '#1565C0',
+        StudyAreaStatus.newFeature => '#7B1FA2',
+        StudyAreaStatus.notFound => '#616161',
+        StudyAreaStatus.needsReview => '#EF6C00',
+      };
 
   /// Material color value for map circle.
-  String get mapColor =>
-      this == StudyAreaStatus.completed ? '#2E7D32' : '#E53935';
+  String get mapColor => colorHex;
 }
 
 /// A single site point in Study Area Mode.
+class StudyAreaRevision {
+  final String id;
+  final String? parentId;
+  final DateTime timestamp;
+  final String author;
+  final String action;
+  final Map<String, dynamic>? before;
+  final Map<String, dynamic> after;
+  final String? visitId;
+  final int? sessionId;
+  final int? formId;
+  final int? projectId;
+  final String? projectExternalId;
+  final String? photoPath;
+
+  StudyAreaRevision(
+      {required this.id,
+      this.parentId,
+      required this.timestamp,
+      required this.author,
+      this.action = 'edit',
+      this.before,
+      required this.after,
+      this.visitId,
+      this.sessionId,
+      this.formId,
+      this.projectId,
+      this.projectExternalId,
+      this.photoPath});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'parent_id': parentId,
+        'timestamp': timestamp.toUtc().toIso8601String(),
+        'author': author,
+        'action': action,
+        'before': before,
+        'after': after,
+        'visit_id': visitId,
+        'session_id': sessionId,
+        'form_id': formId,
+        'project_id': projectId,
+        'project_external_id': projectExternalId,
+        'photo_path': photoPath
+      };
+
+  factory StudyAreaRevision.fromJson(Map<String, dynamic> json) =>
+      StudyAreaRevision(
+          id: json['id'] as String,
+          parentId: json['parent_id'] as String?,
+          timestamp: DateTime.parse(json['timestamp'] as String),
+          author: json['author']?.toString() ?? 'Unknown',
+          action: json['action']?.toString() ?? 'edit',
+          before: json['before'] is Map
+              ? Map<String, dynamic>.from(json['before'])
+              : null,
+          after: Map<String, dynamic>.from(json['after'] as Map),
+          visitId: json['visit_id'] as String?,
+          sessionId: (json['session_id'] as num?)?.toInt(),
+          formId: (json['form_id'] as num?)?.toInt(),
+          projectId: (json['project_id'] as num?)?.toInt(),
+          projectExternalId: json['project_external_id'] as String?,
+          photoPath: json['photo_path'] as String?);
+}
+
+/// Stable comparison ignores map key order while retaining field types.
+String studyAreaCanonicalJson(dynamic value) {
+  dynamic sorted(dynamic item) {
+    if (item is Map) {
+      final keys = item.keys.map((k) => k.toString()).toList()..sort();
+      return {for (final key in keys) key: sorted(item[key])};
+    }
+    if (item is List) return item.map(sorted).toList();
+    return item;
+  }
+
+  return jsonEncode(sorted(value));
+}
+
 class StudyAreaSite {
   final String id;
   double latitude;
   double longitude;
   Map<String, String> attributes;
   StudyAreaStatus status;
+  Map<String, dynamic>? geometry;
+  Map<String, dynamic>? sourceProperties;
+  Map<String, dynamic>? original;
+  DateTime? updatedAt;
+  String changeNote;
+  int revision;
+  String? revisionId;
+  List<StudyAreaRevision> history;
+  int? projectId;
+  String? projectExternalId;
 
   StudyAreaSite({
     required this.id,
@@ -53,7 +171,100 @@ class StudyAreaSite {
     required this.longitude,
     Map<String, String>? attributes,
     this.status = StudyAreaStatus.pending,
-  }) : attributes = attributes ?? {};
+    this.geometry,
+    this.sourceProperties,
+    this.original,
+    this.updatedAt,
+    this.changeNote = '',
+    this.revision = 0,
+    this.revisionId,
+    List<StudyAreaRevision>? history,
+    this.projectId,
+    this.projectExternalId,
+  })  : attributes = attributes ?? {},
+        history = history ?? [] {
+    revisionId ??= revisionToken;
+  }
+
+  Map<String, dynamic> stateSnapshot() => {
+        'id': id,
+        'project_id': projectId,
+        'project_external_id': projectExternalId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'geometry': currentGeometry,
+        'attributes': attributes,
+        'source_properties': sourceProperties,
+        'status': status.name,
+        'change_note': changeNote
+      };
+
+  String get revisionToken =>
+      revisionId ??
+      sha256
+          .convert(utf8.encode(studyAreaCanonicalJson(comparisonSnapshot())))
+          .toString();
+
+  /// Local database IDs differ between phones; they never define lineage.
+  Map<String, dynamic> comparisonSnapshot() =>
+      stateSnapshot()..remove('project_id');
+  bool get hasChanges => history.isNotEmpty
+      ? history.any((r) => r.action != 'import')
+      : original != null ||
+          updatedAt != null ||
+          status == StudyAreaStatus.newFeature;
+
+  Map<String, dynamic> get currentGeometry =>
+      geometry ??
+      {
+        'type': 'Point',
+        'coordinates': [longitude, latitude],
+      };
+
+  /// Keeps the first imported baseline when revisiting a feature repeatedly.
+  StudyAreaSite revised(
+      {required double latitude,
+      required double longitude,
+      required Map<String, String> attributes,
+      required StudyAreaStatus status,
+      String changeNote = ''}) {
+    final moved = this.latitude != latitude || this.longitude != longitude;
+    if (moved && currentGeometry['type'] != 'Point') {
+      throw const FormatException(
+          'Use Redraw geometry to change line/polygon vertices.');
+    }
+    final changed =
+        moved || jsonEncode(this.attributes) != jsonEncode(attributes);
+    return StudyAreaSite(
+        id: id,
+        latitude: latitude,
+        longitude: longitude,
+        attributes: attributes,
+        status: changed && status == StudyAreaStatus.verified
+            ? StudyAreaStatus.updated
+            : status,
+        geometry: moved
+            ? {
+                'type': 'Point',
+                'coordinates': [longitude, latitude]
+              }
+            : currentGeometry,
+        sourceProperties: sourceProperties,
+        revision: revision,
+        revisionId: revisionToken,
+        history: List.from(history),
+        projectId: projectId,
+        projectExternalId: projectExternalId,
+        original: original ??
+            {
+              'geometry': currentGeometry,
+              'source_properties': sourceProperties,
+              'attributes': Map<String, String>.from(this.attributes),
+              'status': this.status.name
+            },
+        updatedAt: DateTime.now().toUtc(),
+        changeNote: changeNote);
+  }
 
   String get displayName =>
       attributes['name'] ??
@@ -69,6 +280,16 @@ class StudyAreaSite {
         'longitude': longitude,
         'attributes': attributes,
         'status': status.name,
+        'geometry': currentGeometry,
+        'source_properties': sourceProperties,
+        'original': original,
+        'updated_at': updatedAt?.toIso8601String(),
+        'change_note': changeNote,
+        'revision': revision,
+        'revision_id': revisionToken,
+        'history': history.map((r) => r.toJson()).toList(),
+        'project_id': projectId,
+        'project_external_id': projectExternalId,
       };
 
   factory StudyAreaSite.fromJson(Map<String, dynamic> json) {
@@ -81,22 +302,56 @@ class StudyAreaSite {
           ) ??
           {},
       status: StudyAreaStatusX.fromString(json['status']?.toString()),
+      sourceProperties: json['source_properties'] is Map
+          ? Map<String, dynamic>.from(json['source_properties'])
+          : null,
+      geometry: json['geometry'] is Map
+          ? Map<String, dynamic>.from(json['geometry'])
+          : null,
+      original: json['original'] is Map
+          ? Map<String, dynamic>.from(json['original'])
+          : null,
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      changeNote: json['change_note']?.toString() ?? '',
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
+      revisionId: json['revision_id']?.toString(),
+      history: (json['history'] as List? ?? [])
+          .map((r) =>
+              StudyAreaRevision.fromJson(Map<String, dynamic>.from(r as Map)))
+          .toList(),
+      projectId: (json['project_id'] as num?)?.toInt(),
+      projectExternalId: json['project_external_id'] as String?,
     );
   }
 
   Map<String, dynamic> toGeoJsonFeature() {
     return {
       'type': 'Feature',
-      'geometry': {
-        'type': 'Point',
-        'coordinates': [longitude, latitude],
-      },
+      'id': id,
+      'geometry': currentGeometry,
       'properties': {
+        for (final entry in attributes.entries)
+          entry.key: sourceProperties?.containsKey(entry.key) == true &&
+                  (sourceProperties![entry.key]?.toString() ?? '') ==
+                      entry.value
+              ? sourceProperties![entry.key]
+              : entry.value,
         'id': id,
         'status': status.name,
         'latitude': latitude,
         'longitude': longitude,
-        ...attributes,
+        'mapbanai_revision': {
+          'original': original,
+          'updated_at': updatedAt?.toIso8601String(),
+          'change_note': changeNote,
+          'revision': revision,
+          'revision_id': revisionToken,
+          'history': history.map((r) => r.toJson()).toList(),
+          'project_id': projectId,
+          'project_external_id': projectExternalId,
+          'attributes': attributes,
+          'source_properties': sourceProperties,
+        },
       },
     };
   }
@@ -151,6 +406,7 @@ class StudyAreaService {
     'point_x',
     'easting_lon',
   ];
+
   /// Column names that typically hold WKT geometry strings.
   static const List<String> _wktAliases = [
     'wkt',
@@ -223,6 +479,8 @@ class StudyAreaService {
     }
     if (lat == null ||
         lon == null ||
+        !lat.isFinite ||
+        !lon.isFinite ||
         lat < -90 ||
         lat > 90 ||
         lon < -180 ||
@@ -257,14 +515,26 @@ class StudyAreaService {
     final id = idVal.trim().isEmpty
         ? '${idPrefix}${rowNumber}_${lat}_$lon'
         : idVal.trim();
+    Map<String, dynamic>? decodedMap(String key) {
+      final raw = attrs[key];
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    }
+
     return StudyAreaSite(
       id: id,
       latitude: lat,
       longitude: lon,
       attributes: attrs,
       status: status,
+      geometry: decodedMap('geometry_json'),
+      original: decodedMap('original_json'),
+      updatedAt: DateTime.tryParse(attrs['updated_at'] ?? ''),
+      changeNote: attrs['change_note'] ?? '',
     );
   }
+
   static const List<String> _statusAliases = [
     'status',
     'state',
@@ -330,6 +600,51 @@ class StudyAreaService {
   // ── CSV parsing ──────────────────────────────────────────────────
 
   /// Parses CSV content (UTF-8 string) into sites. Supports quoted fields.
+  static List<double>? _firstCoordinate(dynamic coordinates) {
+    if (coordinates is! List || coordinates.isEmpty) return null;
+    if (coordinates.length >= 2 &&
+        coordinates[0] is num &&
+        coordinates[1] is num) {
+      return [
+        (coordinates[0] as num).toDouble(),
+        (coordinates[1] as num).toDouble()
+      ];
+    }
+    for (final child in coordinates) {
+      final found = _firstCoordinate(child);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  static List<double>? _geometryCoordinate(Map geometry) {
+    final point = _firstCoordinate(geometry['coordinates']);
+    if (point != null) return point;
+    for (final child
+        in geometry['geometries'] is List ? geometry['geometries'] : []) {
+      if (child is Map) {
+        final result = _geometryCoordinate(child);
+        if (result != null) return result;
+      }
+    }
+    return null;
+  }
+
+  static String toGeoJson(List<StudyAreaSite> sites,
+          {bool changedOnly = false}) =>
+      const JsonEncoder.withIndent('  ').convert({
+        'type': 'FeatureCollection',
+        'features': sites
+            .where((s) => !changedOnly || s.hasChanges)
+            .map((s) => s.toGeoJsonFeature())
+            .toList(),
+        'mapbanai_exchange': {
+          'version': 1,
+          'changed_only': changedOnly,
+          'exported_at': DateTime.now().toUtc().toIso8601String()
+        },
+      });
+
   static List<StudyAreaSite> parseCsv(String content) {
     final rows = _parseCsvRows(content);
     if (rows.isEmpty) return [];
@@ -419,37 +734,35 @@ class StudyAreaService {
   /// Minimal CSV row parser handling quoted fields, commas and escaped quotes.
   static List<List<String>> _parseCsvRows(String content) {
     final rows = <List<String>>[];
-    final lines = content.split(RegExp(r'\r?\n'));
-    for (final rawLine in lines) {
-      if (rawLine.trim().isEmpty && rows.isEmpty) continue;
-      // If line is empty after header, keep as empty row to allow skipping.
-      final row = <String>[];
-      final buf = StringBuffer();
-      bool inQuotes = false;
-      for (int i = 0; i < rawLine.length; i++) {
-        final ch = rawLine[i];
-        if (ch == '"') {
-          if (inQuotes && i + 1 < rawLine.length && rawLine[i + 1] == '"') {
-            buf.write('"');
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (ch == ',' && !inQuotes) {
-          row.add(buf.toString());
-          buf.clear();
+    var row = <String>[];
+    final value = StringBuffer();
+    var quoted = false;
+    for (var i = 0; i < content.length; i++) {
+      final ch = content[i];
+      if (ch == '"') {
+        if (quoted && i + 1 < content.length && content[i + 1] == '"') {
+          value.write('"');
+          i++;
         } else {
-          buf.write(ch);
+          quoted = !quoted;
         }
+      } else if (ch == ',' && !quoted) {
+        row.add(value.toString());
+        value.clear();
+      } else if ((ch == '\n' || ch == '\r') && !quoted) {
+        row.add(value.toString());
+        value.clear();
+        rows.add(row);
+        row = [];
+        if (ch == '\r' && i + 1 < content.length && content[i + 1] == '\n') i++;
+      } else {
+        value.write(ch);
       }
-      row.add(buf.toString());
-      // Only add if not completely empty line after header detection.
-      // Keep rows that have at least one non-empty or we are past header.
-      rows.add(row);
     }
-    // Remove trailing empty rows.
-    while (rows.isNotEmpty && rows.last.every((c) => c.trim().isEmpty)) {
-      rows.removeLast();
+    if (quoted) throw const FormatException('Unclosed quoted CSV field');
+    if (value.isNotEmpty || row.isNotEmpty) {
+      row.add(value.toString());
+      rows.add(row);
     }
     return rows;
   }
@@ -460,7 +773,8 @@ class StudyAreaService {
     final decoded = jsonDecode(content);
     List<dynamic> features;
     if (decoded is Map<String, dynamic>) {
-      if (decoded['type'] == 'FeatureCollection' && decoded['features'] is List) {
+      if (decoded['type'] == 'FeatureCollection' &&
+          decoded['features'] is List) {
         features = decoded['features'] as List;
       } else if (decoded['type'] == 'Feature') {
         features = [decoded];
@@ -491,17 +805,12 @@ class StudyAreaService {
 
       double? lon;
       double? lat;
-      // Preferred: real GeoJSON Point geometry.
       final geom = f['geometry'];
       if (geom is Map) {
-        final type = geom['type']?.toString();
-        final coords = geom['coordinates'];
-        if ((type == 'Point' ||
-                (type == null && coords is List)) &&
-            coords is List &&
-            coords.length >= 2) {
-          lon = (coords[0] as num?)?.toDouble();
-          lat = (coords[1] as num?)?.toDouble();
+        final first = _geometryCoordinate(geom);
+        if (first != null) {
+          lon = first[0];
+          lat = first[1];
         }
       }
       // Fallback: a WKT point stored in a property (e.g. "wkt", "geom").
@@ -516,14 +825,19 @@ class StudyAreaService {
         }
       }
       if (lat == null || lon == null) continue;
-      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+      if (!lat.isFinite ||
+          !lon.isFinite ||
+          lat < -90 ||
+          lat > 90 ||
+          lon < -180 ||
+          lon > 180) continue;
 
       final attrs = <String, String>{};
       String rawStatus = '';
       for (final entry in props.entries) {
         final k = entry.key.toString();
         final v = entry.value?.toString() ?? '';
-        attrs[k] = v;
+        if (k != 'mapbanai_revision') attrs[k] = v;
         if (_statusAliases.contains(k.toLowerCase())) {
           rawStatus = v;
         }
@@ -538,18 +852,45 @@ class StudyAreaService {
         }
       }
       final status = StudyAreaStatusX.fromString(rawStatus);
-      final idVal = props['id']?.toString() ??
+      final idVal = f['id']?.toString() ??
+          props['id']?.toString() ??
           props['site_id']?.toString() ??
           props['name']?.toString() ??
           'geojson_${idx}';
-      final id = idVal.trim().isEmpty ? 'geojson_${idx}_${lat}_${lon}' : idVal.trim();
+      final id =
+          idVal.trim().isEmpty ? 'geojson_${idx}_${lat}_${lon}' : idVal.trim();
 
+      final metadata = props['mapbanai_revision'] is Map
+          ? Map<String, dynamic>.from(props['mapbanai_revision'])
+          : <String, dynamic>{};
       sites.add(StudyAreaSite(
         id: id,
         latitude: lat,
         longitude: lon,
-        attributes: attrs,
+        attributes: metadata['attributes'] is Map
+            ? (metadata['attributes'] as Map)
+                .map((k, v) => MapEntry(k.toString(), v.toString()))
+            : attrs,
         status: status,
+        sourceProperties: metadata.containsKey('source_properties')
+            ? (metadata['source_properties'] is Map
+                ? Map<String, dynamic>.from(metadata['source_properties'])
+                : null)
+            : props,
+        geometry: geom is Map ? Map<String, dynamic>.from(geom) : null,
+        original: metadata['original'] is Map
+            ? Map<String, dynamic>.from(metadata['original'])
+            : null,
+        updatedAt: DateTime.tryParse(metadata['updated_at']?.toString() ?? ''),
+        changeNote: metadata['change_note']?.toString() ?? '',
+        revision: (metadata['revision'] as num?)?.toInt() ?? 0,
+        revisionId: metadata['revision_id']?.toString(),
+        history: (metadata['history'] as List? ?? [])
+            .map((r) =>
+                StudyAreaRevision.fromJson(Map<String, dynamic>.from(r as Map)))
+            .toList(),
+        projectId: (metadata['project_id'] as num?)?.toInt(),
+        projectExternalId: metadata['project_external_id'] as String?,
       ));
     }
     if (sites.isEmpty && features.isNotEmpty) {
@@ -587,28 +928,54 @@ class StudyAreaService {
         if (key.isNotEmpty) attrs[key] = val;
       }
 
-      // Extract coordinates from a Point geometry...
-      double? lon;
-      double? lat;
-      XmlElement? point = pm.findElements('Point').firstOrNull;
-      if (point == null) {
-        final points = pm.findAllElements('Point');
-        if (points.isNotEmpty) point = points.first;
+      List<List<double>> coordinates(XmlElement element) {
+        final text =
+            element.findAllElements('coordinates').firstOrNull?.innerText ?? '';
+        return text
+            .trim()
+            .split(RegExp(r'\s+'))
+            .where((v) => v.isNotEmpty)
+            .map((v) => v.split(',').map(double.parse).toList())
+            .toList();
       }
-      if (point != null) {
-        final coordEl = point.findElements('coordinates').firstOrNull;
-        if (coordEl != null) {
-          final coordText = coordEl.innerText.trim();
-          if (coordText.isNotEmpty) {
-            final firstCoord = coordText.split(RegExp(r'\s+')).first;
-            final parts = firstCoord.split(',');
-            if (parts.length >= 2) {
-              lon = double.tryParse(parts[0].trim());
-              lat = double.tryParse(parts[1].trim());
-            }
-          }
+
+      Map<String, dynamic>? readGeometry(XmlElement element) {
+        final type = element.name.local;
+        if (type == 'Point') {
+          final points = coordinates(element);
+          return points.isEmpty
+              ? null
+              : {'type': 'Point', 'coordinates': points.first};
         }
+        if (type == 'LineString')
+          return {'type': 'LineString', 'coordinates': coordinates(element)};
+        if (type == 'Polygon')
+          return {
+            'type': 'Polygon',
+            'coordinates':
+                element.findAllElements('LinearRing').map(coordinates).toList()
+          };
+        final geometries = element.childElements
+            .map(readGeometry)
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        if (geometries.isEmpty) return null;
+        if (geometries.length == 1) return geometries.first;
+        final types = geometries.map((g) => g['type']).toSet();
+        if (types.length == 1 &&
+            const ['Point', 'LineString', 'Polygon'].contains(types.first)) {
+          return {
+            'type': 'Multi${types.first}',
+            'coordinates': geometries.map((g) => g['coordinates']).toList()
+          };
+        }
+        return {'type': 'GeometryCollection', 'geometries': geometries};
       }
+
+      final geometry = readGeometry(pm);
+      final reference = geometry == null ? null : _geometryCoordinate(geometry);
+      double? lon = reference?[0];
+      double? lat = reference?[1];
       // ...or from a WKT string inside the attributes (some tools embed
       // "POINT (lon lat)" in ExtendedData instead of real geometry).
       if (lat == null || lon == null) {
@@ -623,6 +990,8 @@ class StudyAreaService {
       }
       if (lat == null ||
           lon == null ||
+          !lat.isFinite ||
+          !lon.isFinite ||
           lat < -90 ||
           lat > 90 ||
           lon < -180 ||
@@ -638,8 +1007,10 @@ class StudyAreaService {
         }
       }
       final status = StudyAreaStatusX.fromString(rawStatus);
-      final idVal = attrs['id'] ?? attrs['site_id'] ?? name;
-      final id = idVal.trim().isEmpty ? 'kml_${idx}_${lat}_${lon}' : idVal.trim();
+      final idVal =
+          pm.getAttribute('id') ?? attrs['id'] ?? attrs['site_id'] ?? name;
+      final id =
+          idVal.trim().isEmpty ? 'kml_${idx}_${lat}_${lon}' : idVal.trim();
 
       sites.add(StudyAreaSite(
         id: id,
@@ -647,6 +1018,7 @@ class StudyAreaService {
         longitude: lon,
         attributes: attrs,
         status: status,
+        geometry: geometry,
       ));
     }
     return sites;
@@ -684,15 +1056,91 @@ class StudyAreaService {
 
   // ── Shapefile (.shp geometry only) ──────────────────────────────
 
-  /// Minimal ESRI Shapefile reader: extracts one site per record using the
-  /// first vertex of each shape (Point/PolyLine/Polygon/MultiPoint, incl. Z/M
-  /// variants). The attribute table (.dbf) is NOT read yet — name the sites
-  /// afterwards in the app if needed.
+  /// Imports shape geometries and adjacent DBF attributes. Geographic WGS84
+  /// coordinates are required; a supplied projected PRJ is rejected.
   static List<StudyAreaSite> parseShapefile(File file) {
     if (!file.existsSync()) {
       throw FileSystemException('Shapefile file not found', file.path);
     }
-    return parseShapefileBytes(file.readAsBytesSync());
+    final base = file.path.substring(0, file.path.lastIndexOf('.'));
+    final projection = File('$base.prj');
+    if (projection.existsSync()) {
+      final prj = projection.readAsStringSync().toUpperCase();
+      if (prj.contains('PROJCS') ||
+          prj.contains('PROJCRS') ||
+          !(prj.contains('WGS_1984') ||
+              prj.contains('WGS 84') ||
+              prj.contains('WGS84'))) {
+        throw const FormatException(
+            'Reproject shapefile to WGS84 (EPSG:4326) before importing.');
+      }
+    }
+    final sites = parseShapefileBytes(file.readAsBytesSync());
+    final dbf = File('$base.dbf');
+    if (dbf.existsSync()) {
+      final bytes = dbf.readAsBytesSync();
+      if (bytes.length < 32)
+        throw const FormatException('Invalid shapefile attribute table');
+      final bd = ByteData.sublistView(bytes);
+      final count = bd.getUint32(4, Endian.little);
+      final header = bd.getUint16(8, Endian.little);
+      final recordLength = bd.getUint16(10, Endian.little);
+      final cpg = File('$base.cpg');
+      final encoding =
+          cpg.existsSync() ? cpg.readAsStringSync().trim().toUpperCase() : '';
+      String decode(List<int> bytes) =>
+          encoding == 'UTF-8' || encoding == 'UTF8' || encoding == '65001'
+              ? utf8.decode(bytes)
+              : latin1.decode(bytes);
+      final fields = <({String name, String type, int length})>[];
+      for (var offset = 32;
+          offset + 32 <= header && bytes[offset] != 13;
+          offset += 32) {
+        final name = latin1.decode(bytes
+            .sublist(offset, offset + 11)
+            .takeWhile((v) => v != 0)
+            .toList());
+        fields.add((
+          name: name,
+          type: String.fromCharCode(bytes[offset + 11]),
+          length: bytes[offset + 16]
+        ));
+      }
+      for (final site in sites) {
+        final index = int.tryParse(site.id.replaceFirst('shp_', ''));
+        if (index == null || index < 1 || index > count) continue;
+        var offset = header + (index - 1) * recordLength + 1;
+        if (offset + recordLength - 1 > bytes.length)
+          throw const FormatException('Truncated shapefile attribute table');
+        final attrs = <String, String>{};
+        final raw = <String, dynamic>{};
+        for (final field in fields) {
+          final value =
+              decode(bytes.sublist(offset, offset + field.length)).trim();
+          offset += field.length;
+          attrs[field.name] = value;
+          raw[field.name] = field.type == 'N' || field.type == 'F'
+              ? num.tryParse(value) ?? value
+              : value;
+        }
+        site.attributes = attrs;
+        site.sourceProperties = raw;
+      }
+    }
+    return sites.map((site) {
+      final importedId = site.attributes['id'] ??
+          site.attributes['site_id'] ??
+          site.attributes['fid'];
+      if (importedId == null || importedId.trim().isEmpty) return site;
+      return StudyAreaSite(
+          id: importedId.trim(),
+          latitude: site.latitude,
+          longitude: site.longitude,
+          geometry: site.geometry,
+          attributes: site.attributes,
+          sourceProperties: site.sourceProperties,
+          status: StudyAreaStatusX.fromString(site.attributes['status']));
+    }).toList();
   }
 
   static List<StudyAreaSite> parseShapefileBytes(Uint8List bytes) {
@@ -701,8 +1149,10 @@ class StudyAreaService {
     }
     final bd = ByteData.sublistView(bytes);
     int beInt32(int o) =>
-        (bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) |
-            bytes[o + 3];
+        (bytes[o] << 24) |
+        (bytes[o + 1] << 16) |
+        (bytes[o + 2] << 8) |
+        bytes[o + 3];
     final sites = <StudyAreaSite>[];
     int off = 100; // skip the 100-byte file header
     int idx = 0;
@@ -713,6 +1163,7 @@ class StudyAreaService {
       final recOff = off + 8;
       final shapeType = bd.getInt32(recOff, Endian.little);
       idx++;
+      Map<String, dynamic>? geometry;
       double? lon;
       double? lat;
       switch (shapeType) {
@@ -728,7 +1179,16 @@ class StudyAreaService {
         case 18: // MultiPointZ
         case 28: // MultiPointM
           final numPoints = bd.getInt32(recOff + 36, Endian.little);
-          if (numPoints > 0 && contentLen >= 40 + 16) {
+          if (numPoints > 0 && contentLen >= 40 + numPoints * 16) {
+            geometry = {
+              'type': 'MultiPoint',
+              'coordinates': List.generate(
+                  numPoints,
+                  (i) => [
+                        bd.getFloat64(recOff + 40 + i * 16, Endian.little),
+                        bd.getFloat64(recOff + 48 + i * 16, Endian.little)
+                      ])
+            };
             lon = bd.getFloat64(recOff + 40, Endian.little);
             lat = bd.getFloat64(recOff + 48, Endian.little);
           }
@@ -744,7 +1204,45 @@ class StudyAreaService {
           final pointsStart = recOff + 44 + numParts * 4;
           if (numPoints > 0 &&
               numParts > 0 &&
-              pointsStart + 16 <= recOff + contentLen) {
+              pointsStart + numPoints * 16 <= recOff + contentLen) {
+            final starts = List.generate(numParts,
+                (i) => bd.getInt32(recOff + 44 + i * 4, Endian.little));
+            starts.add(numPoints);
+            final parts = <List<List<double>>>[];
+            for (var part = 0; part < numParts; part++) {
+              if (starts[part] < 0 ||
+                  starts[part + 1] > numPoints ||
+                  starts[part] > starts[part + 1])
+                throw const FormatException('Invalid shape parts');
+              parts.add([
+                for (var i = starts[part]; i < starts[part + 1]; i++)
+                  [
+                    bd.getFloat64(pointsStart + i * 16, Endian.little),
+                    bd.getFloat64(pointsStart + i * 16 + 8, Endian.little)
+                  ]
+              ]);
+            }
+            if (shapeType == 5 || shapeType == 15 || shapeType == 25) {
+              final polygons = <List<List<List<double>>>>[];
+              for (final ring in parts) {
+                var area = 0.0;
+                for (var i = 0; i < ring.length - 1; i++) {
+                  area +=
+                      ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+                }
+                if (area < 0 || polygons.isEmpty)
+                  polygons.add([ring]);
+                else
+                  polygons.last.add(ring);
+              }
+              geometry = polygons.length == 1
+                  ? {'type': 'Polygon', 'coordinates': polygons.first}
+                  : {'type': 'MultiPolygon', 'coordinates': polygons};
+            } else {
+              geometry = parts.length == 1
+                  ? {'type': 'LineString', 'coordinates': parts.first}
+                  : {'type': 'MultiLineString', 'coordinates': parts};
+            }
             lon = bd.getFloat64(pointsStart, Endian.little);
             lat = bd.getFloat64(pointsStart + 8, Endian.little);
           }
@@ -763,6 +1261,7 @@ class StudyAreaService {
           latitude: lat,
           longitude: lon,
           attributes: const {},
+          geometry: geometry,
         ));
       }
       off += 8 + contentLen;
@@ -772,8 +1271,7 @@ class StudyAreaService {
 
   // ── GeoPackage ───────────────────────────────────────────────────
 
-  /// Parses a GeoPackage file on disk. Supports point layers stored as
-  /// GeoPackage geometry blobs (GP header + WKB).
+  /// Imports WGS84 feature layers with standard WKB geometries and envelopes.
   static Future<List<StudyAreaSite>> parseGeoPackage(File file) async {
     if (!file.existsSync()) {
       throw FileSystemException('GeoPackage file not found', file.path);
@@ -787,7 +1285,8 @@ class StudyAreaService {
     }
   }
 
-  static Future<List<StudyAreaSite>> parseGeoPackageBytes(Uint8List bytes) async {
+  static Future<List<StudyAreaSite>> parseGeoPackageBytes(
+      Uint8List bytes) async {
     final tempDir = await Directory.systemTemp.createTemp('study_area_gpkg_');
     final tempFile = File('${tempDir.path}/temp.gpkg');
     await tempFile.writeAsBytes(bytes, flush: true);
@@ -831,6 +1330,10 @@ class StudyAreaService {
 
     for (final entry in tables) {
       final table = entry['table'] as String;
+      if (entry['srs_id'] != null && entry['srs_id'] != 4326) {
+        throw FormatException(
+            'GeoPackage $table uses CRS ${entry['srs_id']}. Reproject it to WGS84 (EPSG:4326) before importing.');
+      }
       // Safely quote table name.
       final safeTable = table.replaceAll('"', '""');
       // Discover geometry column.
@@ -843,7 +1346,13 @@ class StudyAreaService {
       } catch (_) {}
       geomCol ??= 'geometry';
       // Also try 'geom'
-      final candidates = [geomCol, 'geometry', 'geom', 'the_geom', 'wkb_geometry'];
+      final candidates = [
+        geomCol,
+        'geometry',
+        'geom',
+        'the_geom',
+        'wkb_geometry'
+      ];
       String? workingGeom;
       for (final cand in candidates) {
         try {
@@ -875,11 +1384,17 @@ class StudyAreaService {
           } else {
             continue;
           }
-          final point = _parseGpkgPoint(bytes);
+          final geometry = _parseGpkgGeometry(bytes);
+          final point = geometry == null ? null : _geometryCoordinate(geometry);
           if (point == null) continue;
           final lat = point[1];
           final lon = point[0];
-          if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+          if (!lat.isFinite ||
+              !lon.isFinite ||
+              lat < -90 ||
+              lat > 90 ||
+              lon < -180 ||
+              lon > 180) continue;
 
           final attrs = <String, String>{};
           for (final col in colNames) {
@@ -900,14 +1415,16 @@ class StudyAreaService {
               attrs['fid'] ??
               attrs['feature_id'] ??
               '${table}_$idx';
-          final id =
-              idVal.trim().isEmpty ? '${table}_${idx}_${lat}_${lon}' : idVal.trim();
+          final id = idVal.trim().isEmpty
+              ? '${table}_${idx}_${lat}_${lon}'
+              : idVal.trim();
           sites.add(StudyAreaSite(
             id: id,
             latitude: lat,
             longitude: lon,
             attributes: attrs,
             status: status,
+            geometry: geometry,
           ));
         }
       } catch (_) {
@@ -918,43 +1435,96 @@ class StudyAreaService {
     return sites;
   }
 
-  /// Parses a GeoPackage geometry blob (GP header + WKB). Returns [lon, lat] for Point.
-  static List<double>? _parseGpkgPoint(Uint8List blob) {
-    if (blob.length < 8) return null;
-    // Check magic 'GP' if present.
-    int wkbOffset = 0;
-    if (blob[0] == 0x47 && blob[1] == 0x50) {
-      // Modern GP header: magic 2 + version 1 + flags 1 + srs_id 4 = 8.
-      wkbOffset = 8;
-      // Validate little endian flag? For now assume little endian WKB.
-    }
-    if (blob.length < wkbOffset + 5) return null;
-    final wkb = blob.sublist(wkbOffset);
-    // WKB: byteOrder 1, type 4 bytes, then coords.
-    final byteOrder = wkb[0];
-    final isLittle = byteOrder == 1;
-    if (wkb.length < 5) return null;
-    final type = isLittle
-        ? (wkb[1] | (wkb[2] << 8) | (wkb[3] << 16) | (wkb[4] << 24))
-        : ((wkb[1] << 24) | (wkb[2] << 16) | (wkb[3] << 8) | wkb[4]);
-    // Mask out Z/M flags (high bits). GeoPackage uses standard WKB types; type & 0xFF gives base.
-    final baseType = type & 0xFF;
-    // Some WKB encodes type with envelope flags in high bits; still point is 1.
-    if (baseType != 1) {
-      // For non-point, try to extract first coordinate if it's a line/polygon?
-      // We treat as unsupported for study area but try to parse as point anyway if length matches point.
-      if (wkb.length >= 21) {
-        // Attempt to read as point even if type says otherwise (fallback).
-      } else {
-        return null;
+  /// Parses standard WKB geometry after an optional GeoPackage envelope.
+  static Map<String, dynamic>? _parseGpkgGeometry(Uint8List blob) {
+    try {
+      var offset = 0;
+      if (blob.length >= 8 && blob[0] == 0x47 && blob[1] == 0x50) {
+        final envelope = (blob[3] >> 1) & 7;
+        if (envelope > 4) return null;
+        offset = 8 + [0, 32, 48, 48, 64][envelope];
       }
+      final bd = ByteData.sublistView(blob);
+      Map<String, dynamic> readGeometry() {
+        final endian = bd.getUint8(offset++) == 1 ? Endian.little : Endian.big;
+        final raw = bd.getUint32(offset, endian);
+        offset += 4;
+        final type = (raw & 0x0fffffff) % 1000;
+        final dimensions = 2 +
+            ((raw & 0x80000000 != 0 ||
+                    (raw & 0x0fffffff) ~/ 1000 == 1 ||
+                    (raw & 0x0fffffff) ~/ 1000 == 3)
+                ? 1
+                : 0) +
+            ((raw & 0x40000000 != 0 || (raw & 0x0fffffff) ~/ 1000 >= 2)
+                ? 1
+                : 0);
+        if (raw & 0x20000000 != 0) offset += 4;
+        int count() {
+          final value = bd.getUint32(offset, endian);
+          offset += 4;
+          if (value > blob.length ~/ 8)
+            throw const FormatException('Invalid WKB count');
+          return value;
+        }
+
+        List<double> point() {
+          final result = <double>[];
+          for (var i = 0; i < dimensions; i++) {
+            result.add(bd.getFloat64(offset, endian));
+            offset += 8;
+          }
+          return result;
+        }
+
+        switch (type) {
+          case 1:
+            return {'type': 'Point', 'coordinates': point()};
+          case 2:
+            final n = count();
+            return {
+              'type': 'LineString',
+              'coordinates': List.generate(n, (_) => point())
+            };
+          case 3:
+            final n = count();
+            return {
+              'type': 'Polygon',
+              'coordinates': List.generate(n, (_) {
+                final vertices = count();
+                return List.generate(vertices, (_) => point());
+              })
+            };
+          case 4:
+          case 5:
+          case 6:
+            final n = count();
+            final children = List.generate(n, (_) => readGeometry());
+            return {
+              'type': {
+                4: 'MultiPoint',
+                5: 'MultiLineString',
+                6: 'MultiPolygon'
+              }[type],
+              'coordinates': children.map((g) => g['coordinates']).toList()
+            };
+          case 7:
+            final n = count();
+            return {
+              'type': 'GeometryCollection',
+              'geometries': List.generate(n, (_) => readGeometry())
+            };
+          default:
+            throw const FormatException('Unsupported WKB geometry');
+        }
+      }
+
+      return readGeometry();
+    } on RangeError {
+      return null;
+    } on FormatException {
+      return null;
     }
-    if (wkb.length < 21) return null;
-    final bd = ByteData.sublistView(wkb);
-    // After 1+4 header, coords: double lon, double lat.
-    final lon = bd.getFloat64(5, isLittle ? Endian.little : Endian.big);
-    final lat = bd.getFloat64(13, isLittle ? Endian.little : Endian.big);
-    return [lon, lat];
   }
 
   // ── Generic dispatcher ───────────────────────────────────────────
@@ -1088,9 +1658,8 @@ class StudyAreaService {
       for (int r = 1; r < table.rows.length; r++) {
         final row = table.rows[r];
         if (row.every((c) => c?.value == null)) continue;
-        String cell(int idx) => idx < row.length
-            ? (row[idx]?.value?.toString().trim() ?? '')
-            : '';
+        String cell(int idx) =>
+            idx < row.length ? (row[idx]?.value?.toString().trim() ?? '') : '';
         final site = _siteFromRow(
           headers: headers,
           latCol: latCol,
@@ -1122,7 +1691,17 @@ class StudyAreaService {
     }
     final attrKeys = keys.toList()..sort();
     // Ensure core keys are first for readability, but attrKeys already sorted.
-    final headers = ['id', 'latitude', 'longitude', 'status', ...attrKeys];
+    final headers = [
+      'id',
+      'latitude',
+      'longitude',
+      'status',
+      'geometry_json',
+      'updated_at',
+      'change_note',
+      'original_json',
+      ...attrKeys
+    ];
     // Avoid duplicating status if already in attrs.
     final dedupedHeaders = <String>[];
     final seen = <String>{};
@@ -1144,6 +1723,14 @@ class StudyAreaService {
           row.add(s.longitude.toStringAsFixed(7));
         } else if (low == 'status') {
           row.add(s.status.name);
+        } else if (low == 'geometry_json') {
+          row.add(jsonEncode(s.currentGeometry));
+        } else if (low == 'original_json') {
+          row.add(s.original == null ? '' : jsonEncode(s.original));
+        } else if (low == 'updated_at') {
+          row.add(s.updatedAt?.toIso8601String() ?? '');
+        } else if (low == 'change_note') {
+          row.add(s.changeNote);
         } else {
           row.add(s.attributes[h] ?? '');
         }
@@ -1170,7 +1757,17 @@ class StudyAreaService {
       keys.addAll(s.attributes.keys);
     }
     final attrKeys = keys.toList()..sort();
-    final headers = ['id', 'latitude', 'longitude', 'status', ...attrKeys];
+    final headers = [
+      'id',
+      'latitude',
+      'longitude',
+      'status',
+      'geometry_json',
+      'updated_at',
+      'change_note',
+      'original_json',
+      ...attrKeys
+    ];
     final dedupedHeaders = <String>[];
     final seen = <String>{};
     for (final h in headers) {
@@ -1191,7 +1788,13 @@ class StudyAreaService {
         } else if (low == 'status') {
           row.add(excel_lib.TextCellValue(s.status.name));
         } else {
-          final val = s.attributes[h] ?? '';
+          final val = switch (low) {
+            'geometry_json' => jsonEncode(s.currentGeometry),
+            'original_json' => s.original == null ? '' : jsonEncode(s.original),
+            'updated_at' => s.updatedAt?.toIso8601String() ?? '',
+            'change_note' => s.changeNote,
+            _ => s.attributes[h] ?? '',
+          };
           // Try numeric?
           final numVal = double.tryParse(val);
           if (numVal != null && val.trim().isNotEmpty) {
@@ -1206,6 +1809,36 @@ class StudyAreaService {
     // Auto-fit not needed.
     final bytes = excel.encode();
     return Uint8List.fromList(bytes ?? []);
+  }
+
+  /// Portable map: Leaflet and feature data are embedded; basemap tiles need internet.
+  static Future<String> toHtml(List<StudyAreaSite> sites) async {
+    final css = await rootBundle.loadString('assets/leaflet/leaflet.css');
+    final js = await rootBundle.loadString('assets/leaflet/leaflet.js');
+    final data = toGeoJson(sites).replaceAll('<', r'\u003c');
+    final colors = jsonEncode(
+        {for (final s in StudyAreaStatus.values) s.name: s.colorHex});
+    return '''<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>MapBanai Study Area</title><style>$css
+
+html,body,#map{height:100%;margin:0}#legend{position:absolute;bottom:20px;left:10px;z-index:1000;background:white;padding:12px;font:14px sans-serif;max-width:80%}</style></head><body><div id="map"></div><div id="legend">Map tiles require internet. Feature data works offline.<br><label>Status <select id="status"><option value="">All features</option></select></label></div><script>$js</script><script>
+
+const data=$data, colors=$colors;
+
+const map=L.map('map').setView([23.81,90.41],12);
+
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors'}).addTo(map);
+
+const select=document.getElementById('status');
+
+Object.keys(colors).forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;o.style.color=colors[s];select.appendChild(o)});
+
+let layer;
+
+function render(){if(layer)map.removeLayer(layer);layer=L.geoJSON(data,{filter:f=>!select.value||f.properties.status===select.value,style:f=>({color:colors[f.properties.status]||'#E53935',weight:3,fillOpacity:0.25}),pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:7,color:colors[f.properties.status]||'#E53935'}),onEachFeature:(f,l)=>{const box=document.createElement('div');Object.entries(f.properties).forEach(([key,value])=>{const row=document.createElement('div');row.textContent=key+': '+(typeof value==='object'?JSON.stringify(value):value);box.appendChild(row)});l.bindPopup(box)}}).addTo(map);if(layer.getBounds().isValid())map.fitBounds(layer.getBounds(),{padding:[20,20]})}
+
+select.onchange=render;render();
+
+</script></body></html>''';
   }
 
   static String _escapeCsv(String value) {

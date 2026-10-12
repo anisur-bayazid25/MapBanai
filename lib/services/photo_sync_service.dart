@@ -25,7 +25,8 @@ class PhotoSyncResult {
       '${skippedOversized > 0 ? ', $skippedOversized skipped (too large)' : ''}'
       '${failed > 0 ? ', $failed failed' : ''}';
 
-  bool get allSucceeded => failed == 0 && skippedOversized == 0 && total == synced;
+  bool get allSucceeded =>
+      failed == 0 && skippedOversized == 0 && total == synced;
 }
 
 class PhotoSyncService {
@@ -61,7 +62,9 @@ class PhotoSyncService {
           ..where((t) => t.photoSyncedAt.isNull())
           ..where((t) => t.status.equals('draft').not()))
         .get();
-    return all.where((s) => _extractAllPhotoPaths(s.responses).isNotEmpty).toList();
+    return all
+        .where((s) => _extractAllPhotoPaths(s.responses).isNotEmpty)
+        .toList();
   }
 
   String _extractPhotoPath(String responsesJson) {
@@ -106,19 +109,29 @@ class PhotoSyncService {
               // Not a JSON string with path — ignore
             }
             // Also handle direct path string without JSON wrapper (just path)
-            if (candidate == null && value.contains('photos') && value.contains('.jpg')) {
+            if (candidate == null &&
+                value.contains('photos') &&
+                value.contains('.jpg')) {
               // Heuristic: if value looks like a photo path, treat as candidate
               // but only if it points under photos directory
-              if (value.contains('/') && (value.endsWith('.jpg') || value.endsWith('.jpeg') || value.endsWith('.png'))) {
+              if (value.contains('/') &&
+                  (value.endsWith('.jpg') ||
+                      value.endsWith('.jpeg') ||
+                      value.endsWith('.png'))) {
                 candidate = value;
               }
             }
           } else if (value is Map<String, dynamic> && value['path'] is String) {
             candidate = value['path'] as String;
           }
-          if (candidate != null && candidate.isNotEmpty && !paths.contains(candidate)) {
+          if (candidate != null &&
+              candidate.isNotEmpty &&
+              !paths.contains(candidate)) {
             // Only queue if it points under app's photos directory (or at least looks like a photo file)
-            if (candidate.contains('photos') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.png')) {
+            if (candidate.contains('photos') ||
+                candidate.endsWith('.jpg') ||
+                candidate.endsWith('.jpeg') ||
+                candidate.endsWith('.png')) {
               paths.add(candidate);
             }
           }
@@ -197,7 +210,8 @@ class PhotoSyncService {
 
     final total = allPhotoPaths.length;
     if (total == 0) {
-      return const PhotoSyncResult(total: 0, synced: 0, failed: 0, skippedOversized: 0);
+      return const PhotoSyncResult(
+          total: 0, synced: 0, failed: 0, skippedOversized: 0);
     }
 
     int synced = 0;
@@ -293,10 +307,10 @@ class PhotoSyncService {
             succeeded = true;
             break;
           } else {
-            final msg = decoded is Map<String, dynamic> &&
-                    decoded['error'] is String
-                ? decoded['error'] as String
-                : 'Server returned ok:false';
+            final msg =
+                decoded is Map<String, dynamic> && decoded['error'] is String
+                    ? decoded['error'] as String
+                    : 'Server returned ok:false';
             throw Exception(msg);
           }
         } catch (_) {
@@ -315,8 +329,11 @@ class PhotoSyncService {
             (sessionPhotoSuccess[session.id] ?? 0) + 1;
         if (sessionPhotoSuccess[session.id] == sessionPhotoTotal[session.id]) {
           await (db.update(db.surveySessions)
-                ..where((t) => t.id.equals(session.id)))
-              .write(SurveySessionsCompanion(photoSyncedAt: Value(DateTime.now())));
+                ..where((t) =>
+                    t.id.equals(session.id) &
+                    t.responses.equals(session.responses)))
+              .write(SurveySessionsCompanion(
+                  photoSyncedAt: Value(DateTime.now())));
         }
       } else {
         failed++;
@@ -377,9 +394,8 @@ class PhotoSyncService {
         nextUri = currentUri.resolveUri(nextUri);
       }
       final host = nextUri.host.toLowerCase();
-      final isLoopback = host == '127.0.0.1' ||
-          host == 'localhost' ||
-          host == '::1';
+      final isLoopback =
+          host == '127.0.0.1' || host == 'localhost' || host == '::1';
       if (!(host.endsWith('.google.com') ||
           host.endsWith('.googleusercontent.com') ||
           isLoopback)) {

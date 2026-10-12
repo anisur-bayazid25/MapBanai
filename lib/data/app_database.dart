@@ -17,10 +17,12 @@ class Projects extends Table {
   RealColumn get gpsThresholdM => real().withDefault(const Constant(10))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
+
   /// Stable cross-device project identity used by the .mbproj package
   /// format. Null on databases migrated to schema 8 before any project was
   /// created; created/imported projects always get a value.
   TextColumn get externalId => text().nullable()();
+
   /// Project definition version; preserved across export/import.
   IntColumn get projectVersion => integer().withDefault(const Constant(1))();
 }
@@ -34,6 +36,7 @@ class SurveySessions extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
   DateTimeColumn get photoSyncedAt => dateTime().nullable()();
+
   /// Stable cross-device identity for sync deduplication. Generated once at
   /// creation time (UUID v4), not at sync time, and preserved via .mbproj
   /// if sessions were ever exported.
@@ -121,72 +124,75 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onUpgrade: (migrator, from, to) async {
-      if (from < 2) {
-        await migrator.addColumn(surveySessions, surveySessions.responses);
-      }
-      if (from < 3) {
-        await migrator.createTable(storedForms);
-      }
-      if (from < 4) {
-        await customStatement('DROP TABLE IF EXISTS field_tasks');
-        await migrator.createTable(appSettings);
-        await migrator.createTable(gpsLogs);
-      }
-      if (from < 5) {
-        await migrator.addColumn(projects, projects.description);
-        await migrator.addColumn(projects, projects.archived);
-        await migrator.addColumn(projects, projects.gpsThresholdM);
-      }
-      if (from < 6) {
-        await migrator.createTable(projectFields);
-      }
-      if (from < 7) {
-        await migrator.addColumn(storedForms, storedForms.projectId);
-        // Attach legacy (globally shared) forms to the active project so
-        // every project becomes independent going forward.
-        await customStatement(
-          'UPDATE stored_forms SET project_id = '
-          '(SELECT id FROM projects WHERE is_active = 1 LIMIT 1) '
-          'WHERE project_id IS NULL;'
-          'UPDATE stored_forms SET project_id = '
-          '(SELECT id FROM projects ORDER BY id LIMIT 1) '
-          'WHERE project_id IS NULL;',
-        );
-      }
-      if (from < 8) {
-        await migrator.addColumn(projects, projects.externalId);
-        await migrator.addColumn(projects, projects.projectVersion);
-        // Backfill stable ids for existing projects.
-        final existing = await select(projects).get();
-        for (final project in existing) {
-          if (project.externalId == null) {
-            await (update(projects)..where((row) => row.id.equals(project.id)))
-                .write(
-              ProjectsCompanion(externalId: Value(const Uuid().v4())),
+        onUpgrade: (migrator, from, to) async {
+          if (from < 2) {
+            await migrator.addColumn(surveySessions, surveySessions.responses);
+          }
+          if (from < 3) {
+            await migrator.createTable(storedForms);
+          }
+          if (from < 4) {
+            await customStatement('DROP TABLE IF EXISTS field_tasks');
+            await migrator.createTable(appSettings);
+            await migrator.createTable(gpsLogs);
+          }
+          if (from < 5) {
+            await migrator.addColumn(projects, projects.description);
+            await migrator.addColumn(projects, projects.archived);
+            await migrator.addColumn(projects, projects.gpsThresholdM);
+          }
+          if (from < 6) {
+            await migrator.createTable(projectFields);
+          }
+          if (from < 7) {
+            await migrator.addColumn(storedForms, storedForms.projectId);
+            // Attach legacy (globally shared) forms to the active project so
+            // every project becomes independent going forward.
+            await customStatement(
+              'UPDATE stored_forms SET project_id = '
+              '(SELECT id FROM projects WHERE is_active = 1 LIMIT 1) '
+              'WHERE project_id IS NULL;'
+              'UPDATE stored_forms SET project_id = '
+              '(SELECT id FROM projects ORDER BY id LIMIT 1) '
+              'WHERE project_id IS NULL;',
             );
           }
-        }
-      }
-      if (from < 9) {
-        await migrator.addColumn(surveySessions, surveySessions.syncedAt);
-        await migrator.addColumn(surveySessions, surveySessions.photoSyncedAt);
-        await migrator.createTable(syncConfigs);
-      }
-      if (from < 10) {
-        await migrator.addColumn(surveySessions, surveySessions.externalId);
-        final existing = await select(surveySessions).get();
-        for (final row in existing) {
-          if (row.externalId == null) {
-            await (update(surveySessions)..where((t) => t.id.equals(row.id)))
-                .write(
-              SurveySessionsCompanion(externalId: Value(const Uuid().v4())),
-            );
+          if (from < 8) {
+            await migrator.addColumn(projects, projects.externalId);
+            await migrator.addColumn(projects, projects.projectVersion);
+            // Backfill stable ids for existing projects.
+            final existing = await select(projects).get();
+            for (final project in existing) {
+              if (project.externalId == null) {
+                await (update(projects)
+                      ..where((row) => row.id.equals(project.id)))
+                    .write(
+                  ProjectsCompanion(externalId: Value(const Uuid().v4())),
+                );
+              }
+            }
           }
-        }
-      }
-    },
-  );
+          if (from < 9) {
+            await migrator.addColumn(surveySessions, surveySessions.syncedAt);
+            await migrator.addColumn(
+                surveySessions, surveySessions.photoSyncedAt);
+            await migrator.createTable(syncConfigs);
+          }
+          if (from < 10) {
+            await migrator.addColumn(surveySessions, surveySessions.externalId);
+            final existing = await select(surveySessions).get();
+            for (final row in existing) {
+              if (row.externalId == null) {
+                await (update(surveySessions)
+                      ..where((t) => t.id.equals(row.id)))
+                    .write(
+                  SurveySessionsCompanion(externalId: Value(const Uuid().v4())),
+                );
+              }
+            }
+          }
+        },
+      );
 
   Future<List<Project>> getProjects({bool includeArchived = false}) {
     final query = select(projects)
@@ -239,7 +245,8 @@ class AppDatabase extends _$AppDatabase {
     return getProjectByName(name);
   }
 
-  Future<int> insertProject(ProjectsCompanion entry) => into(projects).insert(entry);
+  Future<int> insertProject(ProjectsCompanion entry) =>
+      into(projects).insert(entry);
 
   Future<int> insertSurveySession(SurveySessionsCompanion entry) {
     final withExternalId = entry.externalId.present
@@ -285,9 +292,10 @@ class AppDatabase extends _$AppDatabase {
       SurveySessionsCompanion(
         title: title == null ? const Value.absent() : Value(title),
         status: status == null ? const Value.absent() : Value(status),
-        responses: responses == null
-            ? const Value.absent()
-            : Value(responses),
+        responses: responses == null ? const Value.absent() : Value(responses),
+        syncedAt: responses == null ? const Value.absent() : const Value(null),
+        photoSyncedAt:
+            responses == null ? const Value.absent() : const Value(null),
       ),
     );
   }
@@ -298,8 +306,10 @@ class AppDatabase extends _$AppDatabase {
   /// Deletes a project together with all its survey sessions/features,
   /// attribute fields, stored forms and sync config.
   Future<void> deleteProject(int id) async {
-    await (delete(surveySessions)..where((row) => row.projectId.equals(id))).go();
-    await (delete(projectFields)..where((row) => row.projectId.equals(id))).go();
+    await (delete(surveySessions)..where((row) => row.projectId.equals(id)))
+        .go();
+    await (delete(projectFields)..where((row) => row.projectId.equals(id)))
+        .go();
     await (delete(storedForms)..where((row) => row.projectId.equals(id))).go();
     await (delete(syncConfigs)..where((row) => row.projectId.equals(id))).go();
     await (delete(projects)..where((row) => row.id.equals(id))).go();
@@ -371,9 +381,8 @@ class AppDatabase extends _$AppDatabase {
         description: description == null
             ? const Value.absent()
             : Value(description.trim()),
-        gpsThresholdM: gpsThresholdM == null
-            ? const Value.absent()
-            : Value(gpsThresholdM),
+        gpsThresholdM:
+            gpsThresholdM == null ? const Value.absent() : Value(gpsThresholdM),
         archived: archived == null ? const Value.absent() : Value(archived),
       ),
     );
@@ -397,7 +406,8 @@ class AppDatabase extends _$AppDatabase {
   /// Counts of collected data for a project: (survey responses, GIS features).
   /// A session counts as a GIS feature when its responses JSON contains a
   /// `feature_type` key. Drafts are not collected data.
-  Future<({int survey, int gis})> responseCountsForProject(int projectId) async {
+  Future<({int survey, int gis})> responseCountsForProject(
+      int projectId) async {
     final count = surveySessions.id.count();
     final totalQuery = selectOnly(surveySessions)
       ..addColumns([count])
@@ -425,8 +435,7 @@ class AppDatabase extends _$AppDatabase {
       into(storedForms).insert(entry);
 
   Future<List<StoredForm>> getStoredForms() {
-    return (select(storedForms)
-          ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+    return (select(storedForms)..orderBy([(row) => OrderingTerm.asc(row.name)]))
         .get();
   }
 
@@ -449,8 +458,7 @@ class AppDatabase extends _$AppDatabase {
             ))
           .getSingleOrNull();
     }
-    return (select(storedForms)
-          ..where((row) => row.name.equals(name)))
+    return (select(storedForms)..where((row) => row.name.equals(name)))
         .getSingleOrNull();
   }
 
@@ -467,9 +475,8 @@ class AppDatabase extends _$AppDatabase {
     await (update(storedForms)..where((row) => row.id.equals(id))).write(
       StoredFormsCompanion(
         name: name == null ? const Value.absent() : Value(name),
-        description: description == null
-            ? const Value.absent()
-            : Value(description),
+        description:
+            description == null ? const Value.absent() : Value(description),
         json: json == null ? const Value.absent() : Value(json),
         version: version == null ? const Value.absent() : Value(version),
       ),
@@ -479,8 +486,7 @@ class AppDatabase extends _$AppDatabase {
   // ── App settings (key/value) ─────────────────────────────────
 
   Future<String?> getSetting(String key) async {
-    final row = await (select(appSettings)
-          ..where((t) => t.key.equals(key)))
+    final row = await (select(appSettings)..where((t) => t.key.equals(key)))
         .getSingleOrNull();
     return row?.value;
   }
@@ -497,7 +503,8 @@ class AppDatabase extends _$AppDatabase {
 
   // ── GPS logs ─────────────────────────────────────────────────
 
-  Future<int> insertGpsLog(GpsLogsCompanion entry) => into(gpsLogs).insert(entry);
+  Future<int> insertGpsLog(GpsLogsCompanion entry) =>
+      into(gpsLogs).insert(entry);
 
   Future<List<GpsLog>> getGpsLogs() {
     return (select(gpsLogs)

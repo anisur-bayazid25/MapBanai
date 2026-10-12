@@ -30,7 +30,8 @@ Uint8List _buildXlsx({
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 </Types>''',
   );
-  add('_rels/.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>');
+  add('_rels/.rels',
+      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>');
   final sheetRels = StringBuffer();
   final sheetEntries = StringBuffer();
   for (int i = 0; i < sheets.length; i++) {
@@ -48,9 +49,11 @@ Uint8List _buildXlsx({
     sheetRels.write(
       '<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>',
     );
-    final sst = StringBuffer('<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">');
+    final sst = StringBuffer(
+        '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">');
     for (final s in sharedStrings) {
-      sst.write('<si><t xml:space="preserve">${s.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</t></si>');
+      sst.write(
+          '<si><t xml:space="preserve">${s.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</t></si>');
     }
     sst.write('</sst>');
     add('xl/sharedStrings.xml', sst.toString());
@@ -58,13 +61,13 @@ Uint8List _buildXlsx({
   add(
     'xl/workbook.xml',
     '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    '<sheets>$sheetEntries</sheets></workbook>',
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets>$sheetEntries</sheets></workbook>',
   );
   add(
     'xl/_rels/workbook.xml.rels',
     '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    '$sheetRels</Relationships>',
+        '$sheetRels</Relationships>',
   );
 
   final bytes = ZipEncoder().encode(archive);
@@ -75,6 +78,65 @@ String _surveySheet(String body) =>
     '''<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>$body</sheetData></worksheet>''';
 
 void main() {
+  test('namespace-prefixed OOXML reads survey rows and relationship IDs', () {
+    final source = _buildXlsx(sheets: [
+      'survey'
+    ], sheetXml: {
+      'survey':
+          '<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData><x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>type</x:t></x:is></x:c><x:c r="B1" t="inlineStr"><x:is><x:t>name</x:t></x:is></x:c></x:row><x:row r="2"><x:c r="A2" t="inlineStr"><x:is><x:t>date</x:t></x:is></x:c><x:c r="B2" t="inlineStr"><x:is><x:t>visit</x:t></x:is></x:c></x:row></x:sheetData></x:worksheet>',
+    });
+    final archive = ZipDecoder().decodeBytes(source);
+    final workbook =
+        archive.files.firstWhere((file) => file.name == 'xl/workbook.xml');
+    var xml = utf8.decode(workbook.content as List<int>);
+    for (final tag in ['workbook', 'sheets', 'sheet']) {
+      xml = xml
+          .replaceAll('<$tag ', '<x:$tag ')
+          .replaceAll('<$tag>', '<x:$tag>')
+          .replaceAll('</$tag>', '</x:$tag>');
+    }
+    xml = xml.replaceFirst(
+        'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',
+        'xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"');
+    final bytes = utf8.encode(xml);
+    archive.addFile(ArchiveFile('xl/workbook.xml', bytes.length, bytes));
+    final form =
+        XlsFormParser.parse(Uint8List.fromList(ZipEncoder().encode(archive)!));
+    expect(form.questions.single.name, 'visit');
+    expect(form.questions.single.type, QuestionType.date);
+  });
+
+  test('styled numeric date/time cells and the 1904 epoch are decoded', () {
+    for (final epoch1904 in [false, true]) {
+      final source = _buildXlsx(sheets: [
+        'survey'
+      ], sheetXml: {
+        'survey': _surveySheet(
+            '<row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="2"><v>0.5</v></c><c r="C1"><v>45000</v></c></row>'),
+      });
+      final archive = ZipDecoder().decodeBytes(source);
+      final styles = utf8.encode(
+          '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="20"/></cellXfs></styleSheet>');
+      archive.addFile(ArchiveFile('xl/styles.xml', styles.length, styles));
+      if (epoch1904) {
+        final workbook =
+            archive.files.firstWhere((file) => file.name == 'xl/workbook.xml');
+        final xml = utf8
+            .decode(workbook.content as List<int>)
+            .replaceFirst('<sheets>', '<workbookPr date1904="1"/><sheets>');
+        final bytes = utf8.encode(xml);
+        archive.addFile(ArchiveFile('xl/workbook.xml', bytes.length, bytes));
+      }
+      final rows = XlsxWorkbookReader.read(
+              Uint8List.fromList(ZipEncoder().encode(archive)!))
+          .sheet('survey')!
+          .rows;
+      expect(rows.single[0], epoch1904 ? '1904-01-02' : '1900-01-01');
+      expect(rows.single[1], '12:00:00');
+      expect(rows.single[2], '45000');
+    }
+  });
+
   group('XlsxWorkbookReader', () {
     test('reads shared-strings workbook with correct column placement', () {
       final bytes = _buildXlsx(
@@ -200,7 +262,10 @@ void main() {
       final bytes = _buildXlsx(
         sheets: ['data'],
         includeSharedStringsFile: false,
-        sheetXml: {'data': _surveySheet('<row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c></row>')},
+        sheetXml: {
+          'data': _surveySheet(
+              '<row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c></row>')
+        },
       );
 
       expect(

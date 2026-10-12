@@ -11,10 +11,16 @@ permissions:
 jobs:
   build-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -25,8 +31,7 @@ jobs:
 
       - name: Decode keystore and create key.properties
         run: |
-          # Try new secret name first, then legacy; if neither is set, build with debug signing
-          # (release will still land, but in-place updates will require uninstall until secrets are set).
+          # Release builds must retain the production signing identity.
           if [ -n "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" ]; then
             printf '%s' "${{ secrets.MAPBANAI_KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
@@ -34,7 +39,6 @@ jobs:
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
             echo "storeFile=mapbanai-release.jks" >> android/key.properties
             echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes (MAPBANAI prefix)"
-            cat android/key.properties
           elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/mapbanai-release.jks
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
@@ -42,16 +46,11 @@ jobs:
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
             echo "storeFile=mapbanai-release.jks" >> android/key.properties
             echo "Keystore decoded: $(wc -c < android/mapbanai-release.jks) bytes (legacy name)"
-            cat android/key.properties
           else
-            echo "WARNING: No keystore secret found (set MAPBANAI_KEYSTORE_BASE64 + KEYSTORE_PASSWORD/KEY_PASSWORD/KEY_ALIAS) — building with debug signing; in-place updates will require uninstall until secrets are set." >&2
-            rm -f android/key.properties android/mapbanai-release.jks
+            echo "Release signing secrets are missing." >&2
+            exit 1
           fi
-          if [ -f android/key.properties ]; then
-            echo "Using release signing: $(cat android/key.properties | tr '\n' ' ')"
-          else
-            echo "Using debug signing (no key.properties)"
-          fi
+          echo "Release signing configured."
 
       - name: Install dependencies
         timeout-minutes: 10
@@ -60,8 +59,15 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
+      - name: Run tests
+        run: flutter test --concurrency=1
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
           files: build/app/outputs/flutter-apk/app-release.apk

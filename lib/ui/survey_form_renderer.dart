@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +9,7 @@ import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/photo_store.dart';
 import 'package:mapbanai/services/survey_logic.dart';
 import 'package:mapbanai/ui/photo_capture_screen.dart';
+import 'package:mapbanai/ui/geometry_capture_screen.dart';
 
 /// Renders a [SurveyForm] with ODK multi-language support.
 ///
@@ -17,13 +19,16 @@ import 'package:mapbanai/ui/photo_capture_screen.dart';
 class SurveyFormRenderer extends StatefulWidget {
   final SurveyForm form;
   final VoidCallback? onComplete;
-  final void Function(Map<String, dynamic> answers)? onSave;
-  final void Function(Map<String, dynamic> answers)? onSaveDraft;
+  final FutureOr<void> Function(Map<String, dynamic> answers)? onSave;
+  final FutureOr<void> Function(Map<String, dynamic> answers)? onSaveDraft;
   final Map<String, dynamic>? initialAnswers;
+
   /// Initial form language override (e.g. 'bn' or 'en'). If null, renderer
   /// picks the app locale when available, else the form's defaultLanguage
   /// or 'en' or first available language.
   final String? initialLanguage;
+  final String? initialUsername;
+  final ValueChanged<Map<String, dynamic>>? onAnswersChanged;
 
   const SurveyFormRenderer({
     required this.form,
@@ -32,6 +37,8 @@ class SurveyFormRenderer extends StatefulWidget {
     this.onSaveDraft,
     this.initialAnswers,
     this.initialLanguage,
+    this.initialUsername,
+    this.onAnswersChanged,
     super.key,
   });
 
@@ -40,6 +47,7 @@ class SurveyFormRenderer extends StatefulWidget {
 }
 
 class _SurveyFormRendererState extends State<SurveyFormRenderer> {
+  bool _saving = false;
   late Map<String, dynamic> _answers;
   late Map<String, TextEditingController> _controllers;
   late Set<String> _visibleQuestions;
@@ -65,7 +73,8 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
         _availableLanguages.contains(widget.initialLanguage!.toLowerCase())) {
       _formLanguage = widget.initialLanguage!.toLowerCase();
     } else if (widget.form.defaultLanguage != null &&
-        _availableLanguages.contains(widget.form.defaultLanguage!.toLowerCase())) {
+        _availableLanguages
+            .contains(widget.form.defaultLanguage!.toLowerCase())) {
       _formLanguage = widget.form.defaultLanguage!.toLowerCase();
     } else if (_availableLanguages.contains('en')) {
       _formLanguage = 'en';
@@ -73,6 +82,32 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       _formLanguage = _availableLanguages.first;
     } else {
       _formLanguage = 'default';
+    }
+
+    // Initialize every question type; preserve explicit existing answers.
+    for (final question in widget.form.questions) {
+      if (!_answers.containsKey(question.name) &&
+          question.metadataType == 'username' &&
+          widget.initialUsername != null) {
+        _answers[question.name] = widget.initialUsername;
+      }
+      if (!_answers.containsKey(question.name) &&
+          question.defaultValue != null) {
+        final defaultText = question.defaultValue!;
+        final isExpression = defaultText.contains(r'${') ||
+            RegExp(r'^[a-zA-Z][a-zA-Z0-9_-]*\s*\(').hasMatch(defaultText);
+        final raw = isExpression
+            ? (SurveyLogic.evaluateCalculation(defaultText, _answers) ??
+                defaultText)
+            : defaultText;
+        _answers[question.name] = switch (question.type) {
+          QuestionType.integer => int.tryParse(raw),
+          QuestionType.decimal => double.tryParse(raw),
+          QuestionType.select_multiple =>
+            raw.split(RegExp(r'\s+')).where((v) => v.isNotEmpty).toList(),
+          _ => raw,
+        };
+      }
     }
 
     // Initialize controllers for text-like fields
@@ -90,8 +125,12 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       }
     }
 
-    _updateVisibility();
     _updateCalculations();
+    _updateVisibility();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted)
+        widget.onAnswersChanged?.call(Map<String, dynamic>.from(_answers));
+    });
   }
 
   @override
@@ -99,10 +138,14 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     super.didChangeDependencies();
     // If app locale is bn/en and form supports it, prefer it on first load
     // unless user already manually switched (we only auto-switch once).
-    if (_availableLanguages.length > 1 && _formLanguage == 'en') {
+    if (widget.initialLanguage == null &&
+        widget.form.defaultLanguage == null &&
+        _availableLanguages.length > 1 &&
+        _formLanguage == 'en') {
       try {
         final appLocale = Localizations.localeOf(context).languageCode;
-        if (_availableLanguages.contains(appLocale) && appLocale != _formLanguage) {
+        if (_availableLanguages.contains(appLocale) &&
+            appLocale != _formLanguage) {
           // Don't force if form default is explicitly en; keep default.
           // Only auto-switch when form default was not explicitly en?
           // For simplicity, if app is bn and form has bn, switch to bn.
@@ -186,6 +229,9 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
         );
         if (result != null && _answers[question.name] != result) {
           _answers[question.name] = result;
+          final controller = _controllers[question.name];
+          if (controller != null && controller.text != result)
+            controller.text = result;
           changed = true;
         }
       }
@@ -198,6 +244,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       _updateCalculations();
       _updateVisibility();
     });
+    widget.onAnswersChanged?.call(Map<String, dynamic>.from(_answers));
   }
 
   String _languageDisplay(String code) {
@@ -228,13 +275,18 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.5)),
+        border:
+            Border.all(color: Theme.of(context).dividerColor.withOpacity(0.5)),
       ),
       child: Row(
         children: [
-          Icon(Icons.translate_outlined, size: 18, color: Theme.of(context).colorScheme.primary),
+          Icon(Icons.translate_outlined,
+              size: 18, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -242,12 +294,18 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
               children: [
                 Text(
                   l10n?.formLanguage ?? 'Form language',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 if (l10n != null)
                   Text(
                     l10n.formLanguageHint,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey.shade600),
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: Colors.grey.shade600),
                   ),
               ],
             ),
@@ -256,7 +314,10 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
           DropdownButton<String>(
             value: _formLanguage,
             underline: const SizedBox.shrink(),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
             onChanged: (value) {
               if (value != null) setState(() => _formLanguage = value);
             },
@@ -290,8 +351,8 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             text: _styledSpan(
               widget.form.name,
               Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+                    fontWeight: FontWeight.w700,
+                  ),
               _answers,
             ),
           ),
@@ -300,8 +361,8 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             text: _styledSpan(
               widget.form.description,
               Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
-              ),
+                    color: Colors.grey.shade600,
+                  ),
               _answers,
             ),
           ),
@@ -314,7 +375,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _saveForm,
+              onPressed: _saving ? null : _saveForm,
               icon: const Icon(Icons.save_outlined),
               label: Text(l10n?.saveResponses ?? 'Save responses'),
             ),
@@ -324,7 +385,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _saveDraft,
+                onPressed: _saving ? null : _saveDraft,
                 icon: const Icon(Icons.edit_note),
                 label: Text(l10n?.saveAsDraft ?? 'Save as draft'),
               ),
@@ -363,6 +424,7 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
 
       widgets.add(
         _QuestionWidget(
+          key: ValueKey(question.name),
           question: question,
           languageCode: _formLanguage,
           value: _answers[question.name],
@@ -388,8 +450,8 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
             text: _styledSpan(
               label,
               Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+                    fontWeight: FontWeight.w800,
+                  ),
               _answers,
             ),
           ),
@@ -400,7 +462,14 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
     );
   }
 
-  void _saveForm() {
+  Future<void> _saveForm() async {
+    if (_saving) return;
+    if (widget.form.groups.any((group) => group.isRepeat)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'This legacy form has unsupported repeats. Import a form with one submission per feature before collecting more data.')));
+      return;
+    }
     AppLocalizations? l10n;
     try {
       l10n = AppLocalizations.of(context);
@@ -415,37 +484,97 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
         continue;
       }
 
-      if (question.required && (_answers[question.name] == null || _answers[question.name].toString().isEmpty)) {
+      if (question.required &&
+          (_answers[question.name] == null ||
+              _answers[question.name].toString().trim().isEmpty ||
+              (_answers[question.name] is List &&
+                  (_answers[question.name] as List).isEmpty))) {
         final label = question.labelFor(_formLanguage);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n != null ? l10n.requiredField(label) : '$label is required')),
+          SnackBar(
+              content: Text(l10n != null
+                  ? l10n.requiredField(label)
+                  : '$label is required')),
         );
         return;
       }
 
+      final answer = _answers[question.name];
+      if (answer != null &&
+          answer.toString().trim().isNotEmpty &&
+          ((question.type == QuestionType.integer &&
+                  int.tryParse(answer.toString()) == null) ||
+              (question.type == QuestionType.decimal &&
+                  (double.tryParse(answer.toString()) == null ||
+                      !double.parse(answer.toString()).isFinite)))) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                '${question.labelFor(_formLanguage)}: enter a valid ${question.type == QuestionType.integer ? 'whole number' : 'number'}')));
+        return;
+      }
       final constraintError = SurveyLogic.evaluateConstraint(
         question.constraint,
         _answers[question.name],
         question.constraintMessageFor(_formLanguage),
+        answers: _answers,
       );
       if (constraintError != null) {
         final label = question.labelFor(_formLanguage);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n != null ? l10n.constraintError(label, constraintError) : '$label: $constraintError')),
+          SnackBar(
+              content: Text(l10n != null
+                  ? l10n.constraintError(label, constraintError)
+                  : '$label: $constraintError')),
         );
         return;
       }
     }
 
-    widget.onSave?.call(_answers);
-    widget.onComplete?.call();
+    await _persist(widget.onSave);
   }
 
   /// Saves whatever has been filled in so far without applying required /
   /// constraint validation, so interrupted surveys can be resumed later.
-  void _saveDraft() {
-    widget.onSaveDraft?.call(Map<String, dynamic>.from(_answers));
-    widget.onComplete?.call();
+  Future<void> _saveDraft() async {
+    if (widget.form.groups.any((group) => group.isRepeat)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Draft cannot be saved: repeated records are not supported. Import a form with one submission per feature.')));
+      return;
+    }
+    await _persist(widget.onSaveDraft);
+  }
+
+  Future<void> _persist(
+      FutureOr<void> Function(Map<String, dynamic>)? save) async {
+    if (_saving || save == null) return;
+    setState(() => _saving = true);
+    try {
+      final snapshot = Map<String, dynamic>.from(_answers);
+      for (final question in widget.form.questions) {
+        final value = snapshot[question.name];
+        if (value == null) continue;
+        if (question.type == QuestionType.integer) {
+          snapshot[question.name] = int.tryParse(value.toString()) ?? value;
+        } else if (question.type == QuestionType.decimal) {
+          snapshot[question.name] = double.tryParse(value.toString()) ?? value;
+        } else if (value is List) {
+          snapshot[question.name] = List<dynamic>.from(value);
+        }
+      }
+      await save(snapshot);
+      if (mounted) widget.onComplete?.call();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Could not save responses: $error. Your answers are still here.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 
@@ -472,8 +601,7 @@ InlineSpan _styledSpan(
           style: (base ?? const TextStyle()).copyWith(
             fontWeight: run.bold ? FontWeight.w700 : null,
             fontStyle: run.italic ? FontStyle.italic : null,
-            decoration:
-                run.underline ? TextDecoration.underline : null,
+            decoration: run.underline ? TextDecoration.underline : null,
             color: run.color != null ? Color(run.color!) : null,
           ),
         ),
@@ -499,13 +627,14 @@ class _QuestionWidget extends StatelessWidget {
     required this.onChanged,
     required this.answers,
     this.controller,
+    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     final baseLabelStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
-      fontWeight: FontWeight.w600,
-    );
+          fontWeight: FontWeight.w600,
+        );
     AppLocalizations? l10n;
     try {
       l10n = AppLocalizations.of(context);
@@ -530,8 +659,8 @@ class _QuestionWidget extends StatelessWidget {
                   TextSpan(
                     text: ' *',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.red,
-                    ),
+                          color: Colors.red,
+                        ),
                   ),
               ],
             ),
@@ -542,14 +671,19 @@ class _QuestionWidget extends StatelessWidget {
             text: _styledSpan(
               question.hintFor(languageCode)!,
               Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade600,
-              ),
+                    color: Colors.grey.shade600,
+                  ),
               answers,
             ),
           ),
         ],
         const SizedBox(height: 8),
-        _buildInputWidget(l10n),
+        AbsorbPointer(
+          absorbing: question.readOnly,
+          child: Opacity(
+              opacity: question.readOnly ? 0.65 : 1,
+              child: _buildInputWidget(l10n)),
+        ),
       ],
     );
   }
@@ -558,6 +692,7 @@ class _QuestionWidget extends StatelessWidget {
     switch (question.type) {
       case QuestionType.text:
         return TextField(
+          readOnly: question.readOnly,
           controller: controller,
           onChanged: onChanged,
           decoration: InputDecoration(
@@ -568,6 +703,7 @@ class _QuestionWidget extends StatelessWidget {
 
       case QuestionType.long_text:
         return TextField(
+          readOnly: question.readOnly,
           controller: controller,
           onChanged: onChanged,
           maxLines: 4,
@@ -580,8 +716,9 @@ class _QuestionWidget extends StatelessWidget {
 
       case QuestionType.integer:
         return TextField(
+          readOnly: question.readOnly,
           controller: controller,
-          onChanged: (text) => onChanged(int.tryParse(text)),
+          onChanged: (text) => onChanged(text),
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
@@ -591,8 +728,9 @@ class _QuestionWidget extends StatelessWidget {
 
       case QuestionType.decimal:
         return TextField(
+          readOnly: question.readOnly,
           controller: controller,
-          onChanged: (text) => onChanged(double.tryParse(text)),
+          onChanged: (text) => onChanged(text),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
@@ -619,11 +757,12 @@ class _QuestionWidget extends StatelessWidget {
             hintText: l10n?.selectOption ?? 'Select an option',
           ),
           items: question.choices?.map((choice) {
-            return DropdownMenuItem<String>(
-              value: choice.name,
-              child: Text(choice.labelFor(languageCode)),
-            );
-          }).toList() ?? [],
+                return DropdownMenuItem<String>(
+                  value: choice.name,
+                  child: Text(choice.labelFor(languageCode)),
+                );
+              }).toList() ??
+              [],
         );
 
       case QuestionType.dropdown:
@@ -635,11 +774,12 @@ class _QuestionWidget extends StatelessWidget {
             hintText: l10n?.chooseOption ?? 'Choose an option',
           ),
           items: question.choices?.map((choice) {
-            return DropdownMenuItem<String>(
-              value: choice.name,
-              child: Text(choice.labelFor(languageCode)),
-            );
-          }).toList() ?? [],
+                return DropdownMenuItem<String>(
+                  value: choice.name,
+                  child: Text(choice.labelFor(languageCode)),
+                );
+              }).toList() ??
+              [],
         );
 
       case QuestionType.select_multiple:
@@ -669,6 +809,15 @@ class _QuestionWidget extends StatelessWidget {
           initialValue: value,
         );
 
+      case QuestionType.geoshape:
+      case QuestionType.geotrace:
+        return _GeometryField(
+            value: value,
+            onChanged: onChanged,
+            geometryType: question.type == QuestionType.geoshape
+                ? 'Polygon'
+                : 'LineString');
+
       case QuestionType.geopoint:
         return _GpsCaptureField(
           value: value,
@@ -684,7 +833,8 @@ class _QuestionWidget extends StatelessWidget {
         );
 
       case QuestionType.image:
-        return _PhotoField(value: value, onChanged: onChanged, languageCode: languageCode);
+        return _PhotoField(
+            value: value, onChanged: onChanged, languageCode: languageCode);
 
       case QuestionType.calculated:
         return Container(
@@ -696,13 +846,12 @@ class _QuestionWidget extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.functions_outlined, size: 20, color: Colors.grey),
+              const Icon(Icons.functions_outlined,
+                  size: 20, color: Colors.grey),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  value != null
-                      ? value.toString()
-                      : 'Not computed yet',
+                  value != null ? value.toString() : 'Not computed yet',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -797,6 +946,29 @@ class _MultiSelectFieldState extends State<_MultiSelectField> {
   }
 }
 
+DateTime? _parseDateValue(dynamic value) {
+  if (value is DateTime) return value.toLocal();
+  return DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+}
+
+TimeOfDay? _parseTimeValue(dynamic value) {
+  final date = _parseDateValue(value);
+  if (date != null) return TimeOfDay.fromDateTime(date);
+  final match = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AP]M))?$',
+          caseSensitive: false)
+      .firstMatch(value?.toString() ?? '');
+  if (match == null) return null;
+  var hour = int.parse(match[1]!);
+  final minute = int.parse(match[2]!);
+  final period = match[3]?.toUpperCase();
+  if (period != null) {
+    if (hour < 1 || hour > 12) return null;
+    hour = hour % 12 + (period == 'PM' ? 12 : 0);
+  }
+  if (hour > 23 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
 class _DatePickerField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final dynamic initialValue;
@@ -820,12 +992,12 @@ class _DatePickerField extends StatelessWidget {
       onTap: () async {
         final picked = await showDatePicker(
           context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2100),
+          initialDate: _parseDateValue(initialValue) ?? DateTime.now(),
+          firstDate: DateTime(1),
+          lastDate: DateTime(9999, 12, 31),
         );
         if (picked != null) {
-          onChanged(picked.toIso8601String());
+          onChanged(picked.toIso8601String().split('T').first);
         }
       },
       child: Container(
@@ -871,10 +1043,11 @@ class _TimePickerField extends StatelessWidget {
       onTap: () async {
         final picked = await showTimePicker(
           context: context,
-          initialTime: TimeOfDay.now(),
+          initialTime: _parseTimeValue(initialValue) ?? TimeOfDay.now(),
         );
         if (picked != null) {
-          onChanged(picked.format(context));
+          onChanged(
+              '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}:00');
         }
       },
       child: Container(
@@ -887,7 +1060,9 @@ class _TimePickerField extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              initialValue != null ? initialValue.toString() : (l10n?.selectTime ?? 'Select time'),
+              initialValue != null
+                  ? initialValue.toString()
+                  : (l10n?.selectTime ?? 'Select time'),
             ),
             const Icon(Icons.schedule_outlined),
           ],
@@ -918,14 +1093,14 @@ class _DateTimePickerField extends StatelessWidget {
       onTap: () async {
         final pickedDate = await showDatePicker(
           context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2100),
+          initialDate: _parseDateValue(initialValue) ?? DateTime.now(),
+          firstDate: DateTime(1),
+          lastDate: DateTime(9999, 12, 31),
         );
-        if (pickedDate == null) return;
+        if (pickedDate == null || !context.mounted) return;
         final pickedTime = await showTimePicker(
           context: context,
-          initialTime: TimeOfDay.now(),
+          initialTime: _parseTimeValue(initialValue) ?? TimeOfDay.now(),
         );
         if (pickedTime == null) return;
         final combined = DateTime(
@@ -948,7 +1123,10 @@ class _DateTimePickerField extends StatelessWidget {
           children: [
             Text(
               initialValue != null
-                  ? DateTime.tryParse(initialValue.toString())?.toLocal().toString() ?? initialValue.toString()
+                  ? DateTime.tryParse(initialValue.toString())
+                          ?.toLocal()
+                          .toString() ??
+                      initialValue.toString()
                   : (l10n?.selectDateTime ?? 'Select date and time'),
             ),
             const Icon(Icons.event_outlined),
@@ -1149,7 +1327,9 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              value != null ? 'Accuracy: $value m' : (l10n?.tapToMeasureAccuracy ?? 'Tap to measure accuracy'),
+              value != null
+                  ? 'Accuracy: $value m'
+                  : (l10n?.tapToMeasureAccuracy ?? 'Tap to measure accuracy'),
               style: TextStyle(
                 color: value != null ? Colors.blue : Colors.grey,
               ),
@@ -1176,7 +1356,10 @@ class _PhotoField extends StatelessWidget {
   final void Function(dynamic) onChanged;
   final String languageCode;
 
-  const _PhotoField({required this.value, required this.onChanged, this.languageCode = 'default'});
+  const _PhotoField(
+      {required this.value,
+      required this.onChanged,
+      this.languageCode = 'default'});
 
   PhotoRecord? get _photo {
     if (value is PhotoRecord) return value as PhotoRecord;
@@ -1243,7 +1426,8 @@ class _PhotoField extends StatelessWidget {
                 photo?.isGeotagged == true
                     ? Icons.photo_camera_outlined
                     : Icons.photo_camera_back_outlined,
-                color: photo?.isGeotagged == true ? Colors.green : Colors.orange,
+                color:
+                    photo?.isGeotagged == true ? Colors.green : Colors.orange,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1252,7 +1436,8 @@ class _PhotoField extends StatelessWidget {
                       ? 'Tap to attach photo (geotagged)'
                       : photo.isGeotagged
                           ? (l10n?.geotaggedPhoto ?? 'Geotagged photo attached')
-                          : (l10n?.photoAttached ?? 'Photo attached (not geotagged)'),
+                          : (l10n?.photoAttached ??
+                              'Photo attached (not geotagged)'),
                   style: TextStyle(
                     color: photo == null ? Colors.grey : Colors.blue.shade800,
                     fontSize: 13,
@@ -1267,12 +1452,62 @@ class _PhotoField extends StatelessWidget {
                 ),
               ElevatedButton(
                 onPressed: () => _capture(context),
-                child: Text(photo == null ? (l10n?.attachPhoto ?? 'Attach') : (l10n?.replacePhoto ?? 'Replace')),
+                child: Text(photo == null
+                    ? (l10n?.attachPhoto ?? 'Attach')
+                    : (l10n?.replacePhoto ?? 'Replace')),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+class _GeometryField extends StatelessWidget {
+  final dynamic value;
+  final ValueChanged<dynamic> onChanged;
+  final String geometryType;
+  const _GeometryField(
+      {required this.value,
+      required this.onChanged,
+      required this.geometryType});
+
+  Map<String, dynamic>? get _geometry {
+    if (value is Map) return Map<String, dynamic>.from(value as Map);
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value as String);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final geometry = _geometry;
+    return Row(children: [
+      Expanded(
+          child: Text(geometry == null
+              ? 'No geometry captured'
+              : '${geometry['type']} captured')),
+      if (geometry != null)
+        IconButton(
+            tooltip: 'Remove geometry',
+            onPressed: () => onChanged(null),
+            icon: const Icon(Icons.close)),
+      OutlinedButton.icon(
+          icon: const Icon(Icons.map_outlined),
+          label: Text(geometry == null ? 'Draw on map' : 'Edit on map'),
+          onPressed: () async {
+            final captured = await Navigator.of(context)
+                .push<Map<String, dynamic>>(MaterialPageRoute(
+                    builder: (_) => GeometryCaptureScreen(
+                        geometryType: geometryType,
+                        initialGeometry: geometry)));
+            if (captured != null) onChanged(captured);
+          }),
+    ]);
   }
 }

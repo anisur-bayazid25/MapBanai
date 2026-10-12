@@ -3,7 +3,7 @@ class AccuracyFilter {
   /// A fix is only acceptable when its accuracy is known and at or
   /// below the configured threshold.
   static bool isAcceptable(double? accuracy, double thresholdMeters) {
-    if (accuracy == null) return false;
+    if (accuracy == null || !accuracy.isFinite || accuracy < 0) return false;
     return accuracy <= thresholdMeters;
   }
 

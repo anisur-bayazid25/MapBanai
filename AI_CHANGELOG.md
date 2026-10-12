@@ -53,6 +53,17 @@ for the pre-sharing-subsystem analysis.
 
 ---
 
+## [2.5.0] — field revisit workflow and collection reliability (2026-10-12)
+
+- XLSX reader matches XML elements by local name, covering prefixed Office exports and styled Excel dates. XLSForm parser validates structure/features rather than dropping unsupported rows; repeats are rejected, including blocked saves for legacy imported repeats. Date defaults and editing, full-answer constraints, async save failure retention, metadata warnings, and geoshape/geotrace map capture are covered by regression tests. Imported form editing retains schema metadata, translations and groups.
+- Camera field capture calls mandatory PhotoStore.saveGeotagged, verifies embedded GPS EXIF, and obtains a <=30-second non-mock fix with <=25 m accuracy after returning from image_picker. Existing gallery GPS is retained. Exact shutter-time GPS remains a device-integration limitation.
+- Study Area keeps original baseline, typed source properties, current full GeoJSON geometry, status, note and timestamp. Imported multis/collections render/export intact. Drawing/editing supports single point/line/polygon exteriors; existing holes remain. Atomic serialized storage guards duplicate IDs/corruption. Portable HTML embeds Leaflet assets but its tiles need internet.
+- Project identity is passed by ID; exact form.projectId is used on save. Cancelling resumed GIS drafts clears the resume ID. Changing responses resets sync markers; conditional acknowledgements use the uploaded response snapshot. External sync servers still need stable-ID upserts.
+- Backup version 2 publishes only complete SQLite VACUUM snapshots with SHA256 attachment manifests. Restore validates, stages, remaps photo paths and rolls back replacement. Home and settings-provider connections close before replacement and reopen afterward. Failed rollback retains recovery files.
+- GPS timing version 2 records elapsed duration and restoration time, excluding pauses/draft idle time. Survey geometry answers are included in map export and ODK-style CSV vertex values.
+- Version bumped to 2.5.0+22. Windows build helper applies a process-scoped short JDK socket path. FIELD_WORKFLOW.md documents migration, limits, device checks and next improvements.
+- Verification: 316 automated tests passed; flutter analyze has zero errors, three pre-existing test warnings and 124 style/info notices. No connected Android device/emulator or live sync endpoint was available. No source commit/push/release publication performed.
+
 ## [2.4.4] — gating proof, smart-quote hardening, re-import notice
 
 ### User report
@@ -811,3 +822,11 @@ gps_logs (dropped field_tasks); 5: projects description/archived/
 gpsThresholdM; 6: project_fields; 7: stored_forms.projectId + legacy form
 attach; 8: projects.external_id; 9: survey_sessions.syncedAt/photoSyncedAt + sync_configs;
 10: survey_sessions.externalId (stable UUID, backfilled).
+
+## 2026-10-12 — 2.6.0 linked field workflow
+
+GuidedVisitService persists workflow metadata and form snapshots in survey_sessions without a schema migration. Finalization validates answers/evidence, persists the visit before applying its optimistic StudyAreaStore update, and retains pending work for idempotent retry. Stable project UUIDs avoid cross-device local-ID collisions. GeoJSON carries baseline/revision lineage; team conflicts require explicit choices. Scoped clear removes only displayed site IDs.
+
+FieldQualityService reports answer/evidence/GPS and nearby-feature issues without making photo accuracy mandatory. PhotoRecord stores optional accuracy/fix time; GPS geometry keeps its separate threshold. OfflineMapService validates permitted style resources recursively, budgets downloads and controls MapLibre regions through bundled Android method-channel extensions. Four map screens share completed package selection/attribution. Offline cache is excluded from backups. Backup restore now remaps revision attachment paths too.
+
+Release CI uses Java 17, requires the production signing secrets, runs serial Flutter tests and nonfatal-warning analysis, then publishes APK with RELEASE_NOTES.md. No device/emulator or live sync endpoint was available for integration validation. See FIELD_WORKFLOW.md for supported XLSForm boundaries and field checks.

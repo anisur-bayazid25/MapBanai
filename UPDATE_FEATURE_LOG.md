@@ -1,5 +1,20 @@
 # UPDATE_FEATURE_LOG
 
+## 2026-10-12 — field collection and baseline revision, 2.5.0+22
+
+| Check | Command / outcome |
+| --- | --- |
+| Version | `dart run tool/bump_version.dart minor` → 2.5.0+22 |
+| Full automated suite | `flutter test --reporter compact` → 316 passed |
+| Static analysis | `flutter analyze` → no errors, three existing unused-variable test warnings, 124 info/style notices |
+| Android debug | `flutter build apk --debug --no-pub` with process-local `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Windows\Temp` → built |
+| Android release | `powershell -NoProfile -File tool/build_android.ps1 -Mode release` → built `build/app/outputs/flutter-apk/app-release.apk` (116.5 MB); existing Kotlin metadata diagnostics emitted but Gradle completed successfully |
+| Signature | SDK 36 `apksigner verify --verbose` → verified v1 and v2, one signer |
+| Package metadata | SDK 36 `aapt dump badging` → com.mapbanai.mapbanai, version 2.5.0, code 22, minSdk 23 |
+| Whitespace | `git diff --check` → no whitespace errors |
+
+Implemented XLSForm/date/geometry fixes, mandatory EXIF geotags, Study Area baseline verification/edit/add/export, ID-based project routing, sync acknowledgement safeguards, full backup/restore and pause/draft timing. FIELD_WORKFLOW.md records usage and limitations. No Android device/emulator or live cloud endpoint was connected; camera/GNSS and server upserts require integration validation. No commit, push or GitHub release publication performed. Existing CARE form output files were inspected but not modified.
+
 Progress log for: Push MapBanai to GitHub + GitHub-Release-based in-app update checker.
 Repo: https://github.com/anisur-bayazid25/MapBanai
 
@@ -175,3 +190,12 @@ Manual follow-up: delete the orphaned v2.0.1-test release at https://github.com/
 ## FINAL STATUS (v2.2.0)
 - **v2.2.0 SHIPPED** — main = d48d9db, Release **v2.2.0** published 2026-08-21T07:07:42Z by github-actions with `app-release.apk` (116,453,433 B) — `flutter build apk --release` on tag `v2.2.0` succeeded, artifact attached. Local `flutter analyze` 74 infos (baseline only) + `flutter test` 202/202 green remain true; `dart run build_runner` 198 outputs.
 - **Manual checkpoint for Task 5 confirmed in log**: dummy `{"ok":true}` endpoint → Home Sync → *Syncing data…* → *Syncing photos (x/y)…* → summary; no config → *Set up cloud sync* routing; offline → *No internet connection* mapped via `_isOfflineError`. `Last synced` updates via `_refreshTick` after dialog.
+
+## 2026-10-12 — release preparation, 2.6.0+23
+
+- Final serial suite: `flutter test --concurrency=1 --reporter compact` — 345 tests passed.
+- Static analysis: `flutter analyze --no-fatal-infos --no-fatal-warnings` — no errors, three existing unused-variable test warnings, 226 info/style notices.
+- Final signed release: `powershell -NoProfile -File tool/build_android.ps1 -Mode release` — built 117.2 MB APK; existing Kotlin metadata diagnostics did not fail Gradle.
+- SDK 36 apksigner verification — v1/v2 signatures verified, one signer. aapt reports com.mapbanai.mapbanai, 2.6.0, code 23, minSdk 23.
+- Implemented all four recommended workflow improvements: linked visits, permitted offline map downloads, revision/team merge exports and field quality checks. GPS accuracy remains advisory for photos.
+- No Android device/emulator or live sync endpoint was connected. FIELD_WORKFLOW.md and RELEASE_NOTES.md document usage and remaining integration checks. User-owned outputs were not modified or staged.

@@ -188,6 +188,36 @@ void main() {
       expect(recorder.elapsed.inMilliseconds > p1.inMilliseconds, isTrue);
     });
 
+    test('pause preserves recorded elapsed time and excludes the pause',
+        () async {
+      final recorder = TrackRecorder()..start();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      final before = recorder.elapsed.inMilliseconds;
+      recorder.pause();
+      expect(recorder.elapsed.inMilliseconds, closeTo(before, 30));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(recorder.elapsed.inMilliseconds, closeTo(before, 30));
+      recorder.resume();
+      expect(recorder.elapsed.inMilliseconds, closeTo(before, 30));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(recorder.elapsed.inMilliseconds, greaterThan(before + 80));
+    });
+
+    test('draft restore excludes time spent away from recording', () {
+      final recorder = TrackRecorder();
+      recorder.restore({
+        'timing_version': 2,
+        'running': true,
+        'paused': true,
+        'elapsed_ms': 45000,
+        'started_at': '2000-01-01T00:00:00',
+        'vertices': [],
+      });
+      expect(recorder.elapsed.inSeconds, 45);
+      recorder.resume();
+      expect(recorder.elapsed.inSeconds, 45);
+    });
+
     test('serialize/restore round-trips vertices and running state', () {
       final source = TrackRecorder(
         minIntervalS: 0,

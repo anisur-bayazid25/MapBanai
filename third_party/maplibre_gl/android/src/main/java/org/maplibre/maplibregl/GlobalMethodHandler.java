@@ -115,6 +115,25 @@ class GlobalMethodHandler implements MethodChannel.MethodCallHandler {
       case "getListOfRegions":
         OfflineManagerUtils.regionsList(result, context);
         break;
+      case "getOfflineRegionStatus":
+        OfflineManagerUtils.regionStatus(result, context,
+            methodCall.<Number>argument("id").longValue());
+        break;
+      case "setOfflineRegionDownloadState":
+        OfflineManagerUtils.regionDownloadState(result, context,
+            methodCall.<Number>argument("id").longValue(),
+            Boolean.TRUE.equals(methodCall.argument("active")));
+        break;
+      case "getOfflineStorageInfo":
+        Map<String, Object> storage = new java.util.HashMap<>();
+        storage.put("freeBytes", context.getFilesDir().getUsableSpace());
+        long cacheBytes = 0;
+        for (String suffix : new String[]{"", "-wal", "-shm"}) {
+          cacheBytes += new File(context.getFilesDir(), DATABASE_NAME + suffix).length();
+        }
+        storage.put("cacheBytes", cacheBytes);
+        result.success(storage);
+        break;
       case "updateOfflineRegionMetadata":
         // Get download region arguments from caller
         Map<String, Object> metadata = (Map<String, Object>) methodCall.argument("metadata");

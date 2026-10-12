@@ -15,9 +15,10 @@ import 'package:mapbanai/ui/survey_form_detail_screen.dart';
 import 'package:provider/provider.dart';
 
 class SurveyScreen extends StatefulWidget {
-  const SurveyScreen({required this.projectName, super.key});
+  const SurveyScreen({required this.projectName, this.projectId, super.key});
 
   final String projectName;
+  final int? projectId;
 
   @override
   State<SurveyScreen> createState() => _SurveyScreenState();
@@ -26,7 +27,7 @@ class SurveyScreen extends StatefulWidget {
 class _SurveyScreenState extends State<SurveyScreen> {
   final AppDatabase _database = AppDatabase();
   late String _projectName = widget.projectName;
-  int? _projectId;
+  late int? _projectId = widget.projectId;
   List<StoredForm> _storedForms = [];
   bool _loading = true;
 
@@ -36,8 +37,12 @@ class _SurveyScreenState extends State<SurveyScreen> {
     _loadStoredForms();
   }
 
+  Future<Project?> _resolveProject() => _projectId != null
+      ? _database.getProjectById(_projectId!)
+      : _database.getProjectByName(_projectName);
+
   Future<void> _loadStoredForms() async {
-    final project = await _database.getProjectByName(_projectName);
+    final project = await _resolveProject();
     final projectId = project?.id;
     final rows = projectId == null
         ? <StoredForm>[]
@@ -123,17 +128,19 @@ class _SurveyScreenState extends State<SurveyScreen> {
       _showSnack('A project named "$clean" already exists');
       return;
     }
-    final project = await _database.getProjectByName(current);
+    final project = await _resolveProject();
     if (project == null || !mounted) return;
     await _database.updateProject(project.id, name: clean);
     if (!mounted) return;
-    context.read<ProjectState>().setSelectedProject(clean);
+    context
+        .read<ProjectState>()
+        .setSelectedProject(clean, projectId: project.id);
     setState(() => _projectName = clean);
     _showSnack('Project renamed to "$clean"');
   }
 
   Future<void> _openProjectSettings() async {
-    final project = await _database.getProjectByName(_projectName);
+    final project = await _resolveProject();
     if (project == null || !mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -143,7 +150,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
   }
 
   Future<void> _deleteProject() async {
-    final project = await _database.getProjectByName(_projectName);
+    final project = await _resolveProject();
     if (project == null || !mounted) return;
     final confirmed = await showConfirmDialog(
       context,
@@ -157,7 +164,10 @@ class _SurveyScreenState extends State<SurveyScreen> {
     if (!confirmed) return;
     await _database.deleteProject(project.id);
     if (!mounted) return;
-    if (_projectName == context.read<ProjectState>().selectedProject) {
+    final state = context.read<ProjectState>();
+    if (state.selectedProjectId != null
+        ? state.selectedProjectId == project.id
+        : _projectName == state.selectedProject) {
       context.read<ProjectState>().clearSelectedProject();
     }
     Navigator.of(context).pop();
@@ -165,7 +175,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
   }
 
   Future<void> _shareProject() async {
-    final project = await _database.getProjectByName(_projectName);
+    final project = await _resolveProject();
     if (project == null || !mounted) return;
     final flow = ProjectSharingFlow(database: _database);
     await showExportProjectOptions(context, flow: flow, project: project);
@@ -352,7 +362,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
       MaterialPageRoute(
         builder: (_) => SurveyFormDetailScreen(
           row: row,
-          projectName: widget.projectName,
+          projectName: _projectName,
         ),
       ),
     );
@@ -371,7 +381,8 @@ class _StoredFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final form = SurveyForm.fromJson(jsonDecode(row.json) as Map<String, dynamic>);
+    final form =
+        SurveyForm.fromJson(jsonDecode(row.json) as Map<String, dynamic>);
     return Card(
       elevation: 2,
       color: Colors.indigo.shade50,
@@ -388,16 +399,16 @@ class _StoredFormCard extends StatelessWidget {
                     Text(
                       form.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.indigo.shade900,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: Colors.indigo.shade900,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       form.description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade700,
-                      ),
+                            color: Colors.grey.shade700,
+                          ),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -428,5 +439,3 @@ class _StoredFormCard extends StatelessWidget {
     );
   }
 }
-
-

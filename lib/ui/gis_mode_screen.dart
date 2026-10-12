@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/basemap_picker.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show Point;
@@ -34,6 +35,7 @@ class _InfoFeature {
 
 class GisModeScreen extends StatefulWidget {
   final String projectName;
+  final int? projectId;
 
   /// When set, the screen restores an in-progress (draft) feature for this
   /// session id instead of starting fresh. The draft keeps saving to that
@@ -42,6 +44,7 @@ class GisModeScreen extends StatefulWidget {
 
   const GisModeScreen({
     required this.projectName,
+    this.projectId,
     this.resumeDraftId,
     super.key,
   });
@@ -68,6 +71,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   String _locationStatus = 'Checking permission...';
   bool _styleReady = false;
   String _selectedBasemapId = 'osm';
+  MapStyleChoice? _offlineBasemap;
 
   List<Project> _projects = [];
   int? _selectedProjectId;
@@ -109,11 +113,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
     });
 
     final current = projects.where(
-      (p) => p.name == widget.projectName,
+      (p) => widget.projectId != null
+          ? p.id == widget.projectId
+          : p.name == widget.projectName,
     );
     if (current.isNotEmpty) {
       await _selectProject(current.first.id, current.first.name);
-    } else if (projects.isNotEmpty) {
+    } else if (projects.isNotEmpty &&
+        widget.projectId == null &&
+        widget.resumeDraftId == null) {
       await _selectProject(projects.first.id, projects.first.name);
     } else {
       setState(() {
@@ -130,7 +138,16 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final id = widget.resumeDraftId;
     if (id == null) return;
     final row = await _database.getSurveySession(id);
-    if (row == null || !mounted) return;
+    if (row == null || !mounted || row.status != 'draft') return;
+    final project = await _database.getProjectById(row.projectId);
+    if (project == null || project.archived || !mounted) {
+      _showSnack(
+          'The draft project is unavailable. Restore the project before resuming.');
+      return;
+    }
+    if (_selectedProjectId != project.id) {
+      await _selectProject(project.id, project.name);
+    }
 
     Map<String, dynamic> responses;
     try {
@@ -156,9 +173,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
           );
         }
       } else if (featureType == 'line' || featureType == 'polygon') {
-        _draftType = featureType == 'line'
-            ? _DraftType.line
-            : _DraftType.polygon;
+        _draftType =
+            featureType == 'line' ? _DraftType.line : _DraftType.polygon;
         final raw = responses['recorder'];
         if (raw is Map<String, dynamic>) {
           _recorder.restore(raw);
@@ -227,18 +243,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final granted = await _locationService.ensurePermission();
     if (!mounted) return;
     setState(() {
-      _locationStatus = granted
-          ? 'GPS ready'
-          : 'Location permission not granted';
+      _locationStatus =
+          granted ? 'GPS ready' : 'Location permission not granted';
     });
     if (!granted) return;
 
     await _subscription?.cancel();
 
-    final recording =
-        foreground ??
-        ((_draftType == _DraftType.line ||
-                _draftType == _DraftType.polygon) &&
+    final recording = foreground ??
+        ((_draftType == _DraftType.line || _draftType == _DraftType.polygon) &&
             _recorder.running);
 
     // While recording a line/polygon the stream runs with a foreground
@@ -278,8 +291,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
             _draftPointFix == null) {
           _placePointAtCurrentFix();
         }
-        if (_draftType == _DraftType.line ||
-            _draftType == _DraftType.polygon) {
+        if (_draftType == _DraftType.line || _draftType == _DraftType.polygon) {
           if (!_recorder.running && _currentLocation != null) {
             if (_draftPlaceholder == null) {
               _placeDraftPlaceholder();
@@ -288,8 +300,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
             }
           }
         }
-        final recorded = _draftType == _DraftType.line ||
-            _draftType == _DraftType.polygon;
+        final recorded =
+            _draftType == _DraftType.line || _draftType == _DraftType.polygon;
         if (recorded && _recorder.add(position)) {
           _refreshDraftGeometry();
         }
@@ -359,7 +371,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (sessionId == null || !mounted) return;
     setState(() {
       _infoFeature = _InfoFeature(
-        sessionId: sessionId is int ? sessionId : int.tryParse('$sessionId') ?? 0,
+        sessionId:
+            sessionId is int ? sessionId : int.tryParse('$sessionId') ?? 0,
         title: title ?? 'Feature $sessionId',
         featureType: featureType ?? 'feature',
       );
@@ -489,8 +502,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
         'title': session.title,
       };
       try {
-        final responses =
-            jsonDecode(session.responses) as Map<String, dynamic>;
+        final responses = jsonDecode(session.responses) as Map<String, dynamic>;
         data['feature_type'] = responses['feature_type'] ?? 'unknown';
         await _addSurveyFeature(controller, responses, data);
       } catch (_) {
@@ -717,8 +729,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (controller == null || !_styleReady) return;
 
     final vertices = [
-      for (final p in _recorder.vertices)
-        LatLng(p.latitude, p.longitude),
+      for (final p in _recorder.vertices) LatLng(p.latitude, p.longitude),
     ];
     if (vertices.isEmpty) return;
 
@@ -793,8 +804,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     if (_draftType == _DraftType.line || _draftType == _DraftType.polygon) {
       final vertices = [
-        for (final p in _recorder.vertices)
-          (lat: p.latitude, lon: p.longitude),
+        for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
       ];
       final minVertices = _draftType == _DraftType.line ? 2 : 3;
       if (vertices.length < minVertices) {
@@ -806,16 +816,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
       }
       final result = await showFeatureDetailSheet(
         context,
-        featureType:
-            _draftType == _DraftType.line ? 'line' : 'polygon',
+        featureType: _draftType == _DraftType.line ? 'line' : 'polygon',
         vertices: vertices,
         fields: fields,
       );
       if (result != null) {
         await _removeDraftAnnotations();
         await _saveFeature(
-          featureType:
-              _draftType == _DraftType.line ? 'line' : 'polygon',
+          featureType: _draftType == _DraftType.line ? 'line' : 'polygon',
           result: result,
           vertices: vertices,
         );
@@ -858,8 +866,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     } else {
       final v = vertices ?? const [];
       responses['vertices'] = [
-        for (final p in v)
-          {'latitude': p.lat, 'longitude': p.lon},
+        for (final p in v) {'latitude': p.lat, 'longitude': p.lon},
       ];
       final length = GeometryService.polylineLengthM(v);
       if (featureType == 'line') {
@@ -883,6 +890,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final resumeDraftId = _resumeDraftSessionId;
     final int sessionId;
     if (resumeDraftId != null) {
+      final draft = await _database.getSurveySession(resumeDraftId);
+      if (draft == null ||
+          draft.projectId != projectId ||
+          draft.status != 'draft') {
+        throw StateError('The resumed draft no longer belongs to this project');
+      }
       await _database.updateSurveySession(
         resumeDraftId,
         title: title,
@@ -925,6 +938,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final wasRecording =
         (_draftType == _DraftType.line || _draftType == _DraftType.polygon) &&
             _recorder.running;
+    _resumeDraftSessionId = null;
     _recorder.reset();
     _ticker?.cancel();
     if (mounted) {
@@ -994,12 +1008,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
     } else {
       responses['recorder'] = _recorder.serialize();
       final pts = [
-        for (final p in _recorder.vertices)
-          (lat: p.latitude, lon: p.longitude),
+        for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
       ];
-      title = _draftType == _DraftType.line
-          ? 'Draft line'
-          : 'Draft polygon';
+      title = _draftType == _DraftType.line ? 'Draft line' : 'Draft polygon';
       if (pts.length >= 1) {
         title = '$title • ${pts.length} pts';
       }
@@ -1007,6 +1018,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     final targetId = _resumeDraftSessionId;
     if (targetId != null) {
+      final draft = await _database.getSurveySession(targetId);
+      if (draft == null ||
+          draft.projectId != projectId ||
+          draft.status != 'draft') {
+        throw StateError('The resumed draft no longer belongs to this project');
+      }
       await _database.updateSurveySession(
         targetId,
         title: title,
@@ -1233,28 +1250,18 @@ class _GisModeScreenState extends State<GisModeScreen> {
     );
   }
 
-  void _showBasemapDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Select Basemap'),
-        children: Basemap.defaults.map((basemap) {
-          return RadioListTile<String>(
-            title: Text(basemap.name),
-            value: basemap.id,
-            groupValue: _selectedBasemapId,
-            onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  _selectedBasemapId = value;
-                });
-                Navigator.pop(context);
-              }
-            },
-          );
-        }).toList(),
-      ),
-    );
+  Future<void> _showBasemapDialog() async {
+    final choice =
+        await showBasemapPicker(context, selectedId: _selectedBasemapId);
+    if (choice == null || !mounted) return;
+    setState(() {
+      _selectedBasemapId = choice.id;
+      _offlineBasemap = choice;
+    });
+    if (choice.bounds != null) {
+      await _controller
+          ?.animateCamera(CameraUpdate.newLatLngBounds(choice.bounds!));
+    }
   }
 
   Future<void> _showProjectPicker() async {
@@ -1357,7 +1364,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
             onMapClick: _onMapMeasureTap,
-            styleString: _buildStyleString(basemap),
+            styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
             myLocationEnabled: true,
             myLocationRenderMode: MyLocationRenderMode.normal,
             compassViewPosition: CompassViewPosition.bottomRight,
@@ -1368,6 +1375,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
               AnnotationType.fill,
             ],
           ),
+          Positioned(
+              left: 8,
+              bottom: 8,
+              child: OfflineBasemapNotice(choice: _offlineBasemap)),
           Positioned(
             top: 12,
             left: 12,
@@ -1448,9 +1459,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
               Icon(
                 Icons.work_outline,
                 size: 18,
-                color: _selectedProjectId == null
-                    ? Colors.orange
-                    : Colors.blue,
+                color: _selectedProjectId == null ? Colors.orange : Colors.blue,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1517,8 +1526,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
                   child: Text(
                     'Feature Info',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                 ),
                 IconButton(
@@ -1542,7 +1551,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
             else ...[
               Text(
                 info.title,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
@@ -1585,8 +1595,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final recording = _recorder.running;
     final vertices = _recorder.vertices.length;
     final points = [
-      for (final p in _recorder.vertices)
-        (lat: p.latitude, lon: p.longitude),
+      for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
     ];
 
     return Card(
@@ -1790,7 +1799,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     ];
     if (isArea && points.length >= 3) {
       metrics.insertAll(1, [
-        MeasureUnits.formatArea(GeometryService.polygonAreaM2(points), areaUnit),
+        MeasureUnits.formatArea(
+            GeometryService.polygonAreaM2(points), areaUnit),
         'P ${MeasureUnits.formatDistance(GeometryService.polygonPerimeterM(points), distanceUnit)}',
       ]);
     }
@@ -1813,7 +1823,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isArea ? 'Measure area — tap points on the map' : 'Measure distance — tap points on the map',
+                    isArea
+                        ? 'Measure area — tap points on the map'
+                        : 'Measure distance — tap points on the map',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1824,7 +1836,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              points.isEmpty ? 'Tap the map to add the first point' : metrics.join('  •  '),
+              points.isEmpty
+                  ? 'Tap the map to add the first point'
+                  : metrics.join('  •  '),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 4),
@@ -1924,7 +1938,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                         ? Colors.grey
                         : Colors.teal.shade700,
               ),
-              onPressed: _draftActive ? null : () => _toggleMeasureTool(_MeasureTool.distance),
+              onPressed: _draftActive
+                  ? null
+                  : () => _toggleMeasureTool(_MeasureTool.distance),
             ),
           ),
           Tooltip(
@@ -1939,7 +1955,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                         ? Colors.grey
                         : Colors.teal.shade700,
               ),
-              onPressed: _draftActive ? null : () => _toggleMeasureTool(_MeasureTool.area),
+              onPressed: _draftActive
+                  ? null
+                  : () => _toggleMeasureTool(_MeasureTool.area),
             ),
           ),
           Tooltip(

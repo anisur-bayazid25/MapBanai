@@ -19,8 +19,14 @@ class AppSettingsProvider extends ChangeNotifier {
 
   AppDatabase? _database;
   final bool _ownsDatabase;
+  bool _suspended = false;
+  late Future<void> _loadFuture;
 
-  AppDatabase get _db => _database ??= AppDatabase();
+  AppDatabase get _db {
+    if (_suspended)
+      throw StateError('Settings are suspended while restoring data');
+    return _database ??= AppDatabase();
+  }
 
   String get language => _language;
   ThemeMode get themeMode => _themeMode;
@@ -42,7 +48,24 @@ class AppSettingsProvider extends ChangeNotifier {
   AppSettingsProvider({AppDatabase? database})
       : _database = database,
         _ownsDatabase = database == null {
-    _load();
+    _loadFuture = _load();
+  }
+
+  /// Release the settings connection before replacing SQLite files.
+  Future<void> prepareForRestore() async {
+    if (!_ownsDatabase)
+      throw StateError('Cannot replace an externally owned settings database');
+    await _loadFuture;
+    _suspended = true;
+    await _database?.close();
+    _database = null;
+  }
+
+  Future<void> resumeAfterRestore() {
+    _suspended = false;
+    _language = 'system';
+    _themeMode = ThemeMode.system;
+    return reload();
   }
 
   Future<void> _load() async {
@@ -65,7 +88,7 @@ class AppSettingsProvider extends ChangeNotifier {
   }
 
   /// Reload from DB (useful after SettingsScreen writes directly).
-  Future<void> reload() => _load();
+  Future<void> reload() => _loadFuture = _load();
 
   Future<void> setLanguage(String code) async {
     if (!supportedLanguages.contains(code)) return;

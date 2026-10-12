@@ -5,9 +5,8 @@ import 'dart:typed_data';
 /// Strategy (device-friendly):
 ///  1. If the JPEG already contains GPS EXIF (e.g. the device camera wrote it),
 ///     nothing is done — the device geotag wins.
-///  2. If the JPEG has EXIF without GPS, the GPSInfo pointer + IFD is appended
-///     into the existing EXIF structure (preserving all other tags such as
-///     orientation), when the structure allows a safe patch.
+///  2. Append a replacement root IFD and GPS block, preserving original
+///     metadata offsets, orientation and thumbnails in either byte order.
 ///  3. If the JPEG has no EXIF at all, a minimal EXIF APP1 segment containing
 ///     GPS is inserted right after the SOI marker.
 class GeotagWriter {
@@ -30,15 +29,22 @@ class GeotagWriter {
     required double longitude,
     double? altitude,
     DateTime? capturedAt,
+    bool preserveExistingGps = true,
   }) {
     if (!_isJpeg(jpeg)) return (bytes: jpeg, status: unchanged);
-    if (latitude < -90 || latitude > 90 ||
-        longitude < -180 || longitude > 180) {
+    if (!latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
       return (bytes: jpeg, status: unchanged);
     }
 
     final exifSegment = _findExifSegment(jpeg);
-    if (exifSegment != null && _hasGps(exifSegment.data)) {
+    if (preserveExistingGps &&
+        exifSegment != null &&
+        _hasGps(exifSegment.data)) {
       return (bytes: jpeg, status: deviceGeotag);
     }
 
@@ -72,9 +78,86 @@ class GeotagWriter {
   /// True when the JPEG already carries GPS EXIF (written by the device
   /// camera or otherwise). Never modifies the bytes.
   static bool hasEmbeddedGps(Uint8List jpeg) {
-    if (!_isJpeg(jpeg)) return false;
-    final exifSegment = _findExifSegment(jpeg);
-    return exifSegment != null && _hasGps(exifSegment.data);
+    return readGps(jpeg) != null;
+  }
+
+  /// Reads and validates actual GPS values; a GPS pointer alone is not a fix.
+  static ({double latitude, double longitude, double? altitude})? readGps(
+      Uint8List jpeg) {
+    if (!_isJpeg(jpeg)) return null;
+    final segment = _findExifSegment(jpeg);
+    if (segment == null) return null;
+    return _readGps(segment.data);
+  }
+
+  static ({double latitude, double longitude, double? altitude})? _readGps(
+      Uint8List data) {
+    try {
+      final tiff = _tiffOf(data);
+      final header = _parseTiffHeader(tiff);
+      if (header == null) return null;
+      final root = _readIfd(tiff, header.ifd0Offset);
+      final pointer = root?.tags.indexOf(_tagGpsInfo) ?? -1;
+      if (pointer < 0 ||
+          root!.types[pointer] != 4 ||
+          root.counts[pointer] != 1) {
+        return null;
+      }
+      final gps = _readIfd(tiff, root.values[pointer]);
+      if (gps == null) return null;
+      String? reference(int tag) {
+        final index = gps.tags.indexOf(tag);
+        if (index < 0 || gps.types[index] != 2 || gps.counts[index] != 2) {
+          return null;
+        }
+        final code = header.type == 0
+            ? gps.values[index] & 255
+            : gps.values[index] >> 24;
+        return String.fromCharCode(code);
+      }
+
+      double? rational(int tag, int count) {
+        final index = gps.tags.indexOf(tag);
+        if (index < 0 || gps.types[index] != 5 || gps.counts[index] != count) {
+          return null;
+        }
+        final offset = gps.values[index];
+        if (offset < 0 || offset + count * 8 > tiff.length) return null;
+        var result = 0.0;
+        for (var i = 0; i < count; i++) {
+          final denominator = _u32(tiff, offset + i * 8 + 4, header.type);
+          if (denominator == 0) return null;
+          final value = _u32(tiff, offset + i * 8, header.type) / denominator;
+          if (count == 3 && i > 0 && value >= 60) return null;
+          result += value / (i == 0 ? 1 : (i == 1 ? 60 : 3600));
+        }
+        return result;
+      }
+
+      var latitude = rational(2, 3);
+      var longitude = rational(4, 3);
+      final latRef = reference(1);
+      final lonRef = reference(3);
+      if (latitude == null ||
+          longitude == null ||
+          latitude > 90 ||
+          longitude > 180 ||
+          !['N', 'S'].contains(latRef) ||
+          !['E', 'W'].contains(lonRef)) return null;
+      if (latRef == 'S') latitude = -latitude;
+      if (lonRef == 'W') longitude = -longitude;
+      var altitude = rational(6, 1);
+      final altRef = gps.tags.indexOf(5);
+      if (altitude != null && altRef >= 0) {
+        final ref = header.type == 0
+            ? gps.values[altRef] & 255
+            : gps.values[altRef] >> 24;
+        if (ref == 1) altitude = -altitude;
+      }
+      return (latitude: latitude, longitude: longitude, altitude: altitude);
+    } on RangeError {
+      return null;
+    }
   }
 
   // ── segment discovery ────────────────────────────────────────
@@ -113,11 +196,7 @@ class GeotagWriter {
   }
 
   static bool _hasGps(Uint8List segmentData) {
-    final tiff = _tiffOf(segmentData);
-    final header = _parseTiffHeader(tiff);
-    if (header == null) return false;
-    final ifd0 = _readIfd(tiff, header.ifd0Offset);
-    return ifd0?.tags.contains(_tagGpsInfo) ?? false;
+    return _readGps(segmentData) != null;
   }
 
   static Uint8List _tiffOf(Uint8List segmentData) {
@@ -133,10 +212,8 @@ class GeotagWriter {
     final type = (tiff[0] == 0x49 && tiff[1] == 0x49)
         ? 0
         : ((tiff[0] == 0x4D && tiff[1] == 0x4D) ? 1 : -1);
-    if (type < 0 || tiff[2] != 0x2A || tiff[3] != 0x00) return null;
-    final ifd0 = type == 0
-        ? tiff[4] | (tiff[5] << 8)
-        : (tiff[4] << 8) | tiff[5];
+    if (type < 0 || _u16(tiff, 2, type) != 42) return null;
+    final ifd0 = _u32(tiff, 4, type);
     if (ifd0 < 8 || ifd0 >= tiff.length) return null;
     return (ifd0Offset: ifd0, type: type);
   }
@@ -146,13 +223,20 @@ class GeotagWriter {
 
   static int _u32(Uint8List b, int off, int type) {
     if (type == 0) {
-      return b[off] | (b[off + 1] << 8) | (b[off + 2] << 16) | (b[off + 3] << 24);
+      return b[off] |
+          (b[off + 1] << 8) |
+          (b[off + 2] << 16) |
+          (b[off + 3] << 24);
     }
     return (b[off] << 24) | (b[off + 1] << 16) | (b[off + 2] << 8) | b[off + 3];
   }
 
-  static ({List<int> tags, List<int> types, List<int> counts, List<int> values})?
-      _readIfd(Uint8List tiff, int offset) {
+  static ({
+    List<int> tags,
+    List<int> types,
+    List<int> counts,
+    List<int> values
+  })? _readIfd(Uint8List tiff, int offset) {
     if (offset < 0 || offset + 2 > tiff.length) return null;
     final header = _parseTiffHeader(tiff);
     if (header == null) return null;
@@ -173,29 +257,6 @@ class GeotagWriter {
       values.add(_u32(tiff, e + 8, type));
     }
     return (tags: tags, types: types, counts: counts, values: values);
-  }
-
-  /// True when IFD0 and every IFD reachable through it (Exif, Interop) store
-  /// all values inline (≤4 bytes). Only such structures can be patched safely
-  /// by shifting the IFD chain by one entry without re-pointing data offsets.
-  static bool _isPatchable(Uint8List tiff) {
-    final header = _parseTiffHeader(tiff);
-    if (header == null) return false;
-    final visited = <int>{};
-    final queue = <int>[header.ifd0Offset];
-    while (queue.isNotEmpty) {
-      final offset = queue.removeLast();
-      if (!visited.add(offset)) continue;
-      final ifd = _readIfd(tiff, offset);
-      if (ifd == null) return false;
-      for (int i = 0; i < ifd.tags.length; i++) {
-        if (_typeSize(ifd.types[i]) * ifd.counts[i] > 4) return false;
-        if (ifd.tags[i] == _tagExifIfd || ifd.tags[i] == 0xA005) {
-          queue.add(ifd.values[i]);
-        }
-      }
-    }
-    return true;
   }
 
   static int _typeSize(int fieldType) {
@@ -228,67 +289,60 @@ class GeotagWriter {
     final header = _parseTiffHeader(tiff);
     if (header == null) return null;
     final ifd0 = _readIfd(tiff, header.ifd0Offset);
-    if (ifd0 == null || !_isPatchable(tiff)) return null;
-    if (ifd0.tags.contains(_tagGpsInfo)) return null;
+    if (ifd0 == null) return null;
+    final oldEnd = header.ifd0Offset + 2 + ifd0.tags.length * 12;
+    if (oldEnd + 4 > tiff.length) return null;
 
-    final type = header.type;
-    final entrySize = 12;
-    final n = ifd0.tags.length;
-
-    final ifd0End = header.ifd0Offset + 2 + n * entrySize + 4;
-    final tailStart = ifd0End;
-    final tail = Uint8List.fromList(tiff.sublist(tailStart, tiff.length));
-
-    final gpsIfdOffset = tailStart + tail.length + entrySize;
+    // Append a replacement root IFD. Original payload offsets, EXIF sub-IFDs
+    // and thumbnail links remain unchanged, including out-of-line camera tags.
+    final kept = <int>[
+      for (var i = 0; i < ifd0.tags.length; i++)
+        if (ifd0.tags[i] != _tagGpsInfo) i,
+    ]..sort((a, b) => ifd0.tags[a].compareTo(ifd0.tags[b]));
+    final rootOffset = tiff.length;
+    final gpsOffset = rootOffset + 2 + (kept.length + 1) * 12 + 4;
     final gpsBlock = _buildGpsBlock(
-      gpsIfdOffset,
+      gpsOffset,
       latitude: latitude,
       longitude: longitude,
       altitude: altitude,
       capturedAt: capturedAt,
+      type: header.type,
     );
-
-    final newTiff = Uint8List(tiff.length + entrySize + gpsBlock.length);
-
-    // Header + IFD0 area (count now n+1) — copy, then fix offsets in-place.
-    newTiff.setAll(0, tiff.sublist(0, tailStart));
-    final ifd0Offset = header.ifd0Offset;
-    _writeU16(newTiff, ifd0Offset, n + 1, type);
-    for (int i = 0; i < n; i++) {
-      final e = ifd0Offset + 2 + i * entrySize;
-      _writeU16(newTiff, e, ifd0.tags[i], type);
-      _writeU16(newTiff, e + 2, ifd0.types[i], type);
-      _writeU32(newTiff, e + 4, ifd0.counts[i], type);
-      final value = ifd0.tags[i] == _tagExifIfd
-          ? ifd0.values[i] + entrySize
-          : ifd0.values[i];
-      _writeU32(newTiff, e + 8, value, type);
+    final newTiff = Uint8List(gpsOffset + gpsBlock.length);
+    newTiff.setAll(0, tiff);
+    _writeU32(newTiff, 4, rootOffset, header.type);
+    _writeU16(newTiff, rootOffset, kept.length + 1, header.type);
+    var entryOffset = rootOffset + 2;
+    var gpsWritten = false;
+    void writeGpsEntry() {
+      _writeU16(newTiff, entryOffset, _tagGpsInfo, header.type);
+      _writeU16(newTiff, entryOffset + 2, 4, header.type);
+      _writeU32(newTiff, entryOffset + 4, 1, header.type);
+      _writeU32(newTiff, entryOffset + 8, gpsOffset, header.type);
+      entryOffset += 12;
+      gpsWritten = true;
     }
-    // New GPSInfo entry
-    final gpsEntryOffset = ifd0Offset + 2 + n * entrySize;
-    _writeU16(newTiff, gpsEntryOffset, _tagGpsInfo, type);
-    _writeU16(newTiff, gpsEntryOffset + 2, 4, type); // LONG
-    _writeU32(newTiff, gpsEntryOffset + 4, 1, type);
-    _writeU32(newTiff, gpsEntryOffset + 8, gpsIfdOffset, type);
-    // Next-IFD pointer (0)
-    _writeU32(newTiff, gpsEntryOffset + entrySize, 0, type);
 
-    // Tail (Exif IFD + its data) moved by one entry
-    newTiff.setAll(tailStart + entrySize, tail);
-
-    // GPS IFD + data at the very end
-    newTiff.setAll(gpsIfdOffset, gpsBlock);
-
-    // Rebuild the full JPEG: SOI + APP1 (patched) + original after segment
+    for (final index in kept) {
+      if (!gpsWritten && ifd0.tags[index] > _tagGpsInfo) writeGpsEntry();
+      final oldEntry = header.ifd0Offset + 2 + index * 12;
+      newTiff.setAll(entryOffset, tiff.sublist(oldEntry, oldEntry + 12));
+      entryOffset += 12;
+    }
+    if (!gpsWritten) writeGpsEntry();
+    _writeU32(
+        newTiff, entryOffset, _u32(tiff, oldEnd, header.type), header.type);
+    newTiff.setAll(gpsOffset, gpsBlock);
+    if (newTiff.length + 8 > 65535) return null;
     final patchedSegment = _buildExifSegmentFromTiff(newTiff);
-
-    final out = Uint8List(jpeg.length - segment.data.length + patchedSegment.length);
+    final oldSegmentLength = segment.data.length + 4;
+    final out =
+        Uint8List(jpeg.length - oldSegmentLength + patchedSegment.length);
     out.setAll(0, jpeg.sublist(0, segment.offset));
     out.setAll(segment.offset, patchedSegment);
-    out.setAll(
-      segment.offset + patchedSegment.length,
-      jpeg.sublist(segment.offset + segment.data.length),
-    );
+    out.setAll(segment.offset + patchedSegment.length,
+        jpeg.sublist(segment.offset + oldSegmentLength));
     return out;
   }
 
@@ -335,10 +389,10 @@ class GeotagWriter {
       altitude: altitude,
       capturedAt: capturedAt,
     );
-    final ifd0Offset = 8;
+    const ifd0Offset = 8;
     // IFD0: Exif pointer + GPS pointer (+ next ptr) = 2 entries
-    final exifIfdOffset = ifd0Offset + 2 + 2 * 12 + 4;
-    final gpsIfdOffset = exifIfdOffset + 2 + 1 * 12 + 4;
+    const exifIfdOffset = ifd0Offset + 2 + 2 * 12 + 4;
+    const gpsIfdOffset = exifIfdOffset + 2 + 1 * 12 + 4;
     final dataStart = gpsIfdOffset + 2 + gpsEntries.length * 12 + 4;
     final dataSize = _gpsDataSize(gpsEntries);
 
@@ -380,8 +434,8 @@ class GeotagWriter {
     required double longitude,
     double? altitude,
     DateTime? capturedAt,
+    int type = 0,
   }) {
-    const type = 0; // little endian
     final entries = _gpsEntries(
       latitude: latitude,
       longitude: longitude,
@@ -400,6 +454,7 @@ class GeotagWriter {
       longitude: longitude,
       altitude: altitude,
       capturedAt: capturedAt,
+      type: type,
     );
     return block;
   }
@@ -411,7 +466,7 @@ class GeotagWriter {
     DateTime? capturedAt,
   }) {
     final entries = <List<int>>[
-      [0x0000, 1, 4, 0x02030000], // GPSVersionID 2.3.0.0 (bytes 02 03 00 00)
+      [0x0000, 1, 4, 0x00000302], // GPSVersionID 2.3.0.0 (bytes 02 03 00 00)
       [0x0001, 2, 2, latitude < 0 ? 0x53 : 0x4E], // 'S\0' / 'N\0' (inline)
       [0x0002, 5, 3, 0], // GPSLatitude → data
       [0x0003, 2, 2, longitude < 0 ? 0x57 : 0x45], // 'W\0' / 'E\0' (inline)
@@ -453,7 +508,13 @@ class GeotagWriter {
       _writeU16(b, e + 2, entry[1], type);
       _writeU32(b, e + 4, entry[2], type);
       if (byteCount <= 4) {
-        _writeU32(b, e + 8, entry[3], type);
+        if (type == 1 && (entry[1] == 1 || entry[1] == 2)) {
+          for (var j = 0; j < 4; j++) {
+            b[e + 8 + j] = (entry[3] >> (8 * j)) & 255;
+          }
+        } else {
+          _writeU32(b, e + 8, entry[3], type);
+        }
       } else {
         _writeU32(b, e + 8, dataOffset, type);
         dataOffset += byteCount;
@@ -471,50 +532,55 @@ class GeotagWriter {
     required double longitude,
     double? altitude,
     DateTime? capturedAt,
+    int type = 0,
   }) {
-    final decimalLat = latitude.abs();
-    final latDeg = decimalLat.floor();
-    final latMinFull = (decimalLat - latDeg) * 60;
-    final latMin = latMinFull.floor();
-    final latSec = (latMinFull - latMin) * 60;
-
-    final decimalLng = longitude.abs();
-    final lngDeg = decimalLng.floor();
-    final lngMinFull = (decimalLng - lngDeg) * 60;
-    final lngMin = lngMinFull.floor();
-    final lngSec = (lngMinFull - lngMin) * 60;
+    // Round total seconds first so rounding cannot create an invalid 60-second
+    // component at a minute/degree boundary.
+    final latUnits = (latitude.abs() * 3600 * 10000).round();
+    final latDeg = latUnits ~/ 36000000;
+    final latMin = (latUnits % 36000000) ~/ 600000;
+    final latSec = (latUnits % 600000) / 10000;
+    final lngUnits = (longitude.abs() * 3600 * 10000).round();
+    final lngDeg = lngUnits ~/ 36000000;
+    final lngMin = (lngUnits % 36000000) ~/ 600000;
+    final lngSec = (lngUnits % 600000) / 10000;
 
     var offset = dataOffset;
     for (final entry in entries) {
       final byteCount = _typeSize(entry[1]) * entry[2];
       if (byteCount <= 4) continue;
-      if (entry[0] == 0x0002) { // GPSLatitude
-        _writeRational(block, offset, latDeg, 1);
+      if (entry[0] == 0x0002) {
+        // GPSLatitude
+        _writeRational(block, offset, latDeg, 1, type);
         offset += 8;
-        _writeRational(block, offset, latMin, 1);
+        _writeRational(block, offset, latMin, 1, type);
         offset += 8;
         final sec = _roundSec(latSec);
-        _writeRational(block, offset, sec.num, sec.den);
+        _writeRational(block, offset, sec.num, sec.den, type);
         offset += 8;
-      } else if (entry[0] == 0x0004) { // GPSLongitude
-        _writeRational(block, offset, lngDeg, 1);
+      } else if (entry[0] == 0x0004) {
+        // GPSLongitude
+        _writeRational(block, offset, lngDeg, 1, type);
         offset += 8;
-        _writeRational(block, offset, lngMin, 1);
+        _writeRational(block, offset, lngMin, 1, type);
         offset += 8;
         final sec = _roundSec(lngSec);
-        _writeRational(block, offset, sec.num, sec.den);
+        _writeRational(block, offset, sec.num, sec.den, type);
         offset += 8;
-      } else if (entry[0] == 0x0006) { // GPSAltitude
-        _writeRational(block, offset, ((altitude ?? 0).abs() * 100).round(), 100);
+      } else if (entry[0] == 0x0006) {
+        // GPSAltitude
+        _writeRational(
+            block, offset, ((altitude ?? 0).abs() * 100).round(), 100, type);
         offset += 8;
-      } else if (entry[0] == 0x0007) { // GPSTimeStamp
+      } else if (entry[0] == 0x0007) {
+        // GPSTimeStamp
         final utc = capturedAt?.toUtc() ?? DateTime.now().toUtc();
-        _writeRational(block, offset, utc.hour, 1);
+        _writeRational(block, offset, utc.hour, 1, type);
         offset += 8;
-        _writeRational(block, offset, utc.minute, 1);
+        _writeRational(block, offset, utc.minute, 1, type);
         offset += 8;
         final sec = _roundSec(utc.second.toDouble());
-        _writeRational(block, offset, sec.num, sec.den);
+        _writeRational(block, offset, sec.num, sec.den, type);
         offset += 8;
       }
     }
@@ -525,9 +591,10 @@ class GeotagWriter {
     return (num: rounded, den: 10000);
   }
 
-  static void _writeRational(Uint8List b, int offset, int numerator, int denominator) {
-    _writeU32(b, offset, numerator, 0);
-    _writeU32(b, offset + 4, denominator, 0);
+  static void _writeRational(
+      Uint8List b, int offset, int numerator, int denominator, int type) {
+    _writeU32(b, offset, numerator, type);
+    _writeU32(b, offset + 4, denominator, type);
   }
 
   static void _writeU16(Uint8List b, int off, int value, int type) {

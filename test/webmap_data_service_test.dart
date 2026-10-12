@@ -32,7 +32,47 @@ void main() {
     return file.path;
   }
 
-  test('builds FeatureCollection with correct count, geometry types and properties', () async {
+  test(
+      'linked visit exports baseline geometry and stable site identity without a geopoint question',
+      () async {
+    final projectId = await db.into(db.projects).insert(
+          ProjectsCompanion.insert(name: 'Visits'),
+        );
+    final geometry = {
+      'type': 'LineString',
+      'coordinates': [
+        [90.0, 23.0],
+        [90.1, 23.1]
+      ]
+    };
+    await db.insertSurveySession(SurveySessionsCompanion(
+      projectId: drift.Value(projectId),
+      title: const drift.Value('Visit'),
+      status: const drift.Value('saved'),
+      responses: drift.Value(jsonEncode({
+        'workflow': 'guided_visit_v1',
+        'answers': {'condition': 'good'},
+        'visit': {
+          'id': 'visit-uuid',
+          'site_id': 'site-uuid',
+          'state': 'committed',
+          'site_sync': 'applied',
+          'site_after': {'geometry': geometry, 'status': 'verified'}
+        },
+      })),
+    ));
+    final data =
+        await WebMapDataService(db).buildFeatureCollectionForProject(projectId);
+    final feature = (data['features'] as List).single as Map;
+    expect(feature['geometry'], geometry);
+    expect(feature['properties']['visit_id'], 'visit-uuid');
+    expect(feature['properties']['site_id'], 'site-uuid');
+    expect(feature['properties']['answers']['condition'], 'good');
+  });
+
+  test(
+      'builds FeatureCollection with correct count, geometry types and properties',
+      () async {
     final projectId = await db.into(db.projects).insert(
           ProjectsCompanion.insert(name: 'WebMapTestProj'),
         );
@@ -136,27 +176,35 @@ void main() {
     expect(features, hasLength(4));
 
     // Check geometry types
-    final geomTypes = features.map((f) => (f as Map)['geometry']['type'] as String).toSet();
+    final geomTypes =
+        features.map((f) => (f as Map)['geometry']['type'] as String).toSet();
     expect(geomTypes, containsAll(['Point', 'LineString', 'Polygon']));
     // Survey geopoint should be Point
-    final pointFeatures = features.where((f) => (f as Map)['geometry']['type'] == 'Point').toList();
-    expect(pointFeatures.length, greaterThanOrEqualTo(2)); // GIS point + survey point
+    final pointFeatures = features
+        .where((f) => (f as Map)['geometry']['type'] == 'Point')
+        .toList();
+    expect(pointFeatures.length,
+        greaterThanOrEqualTo(2)); // GIS point + survey point
 
     // Check properties for GIS point
-    final gisPoint = features.firstWhere((f) => (f as Map)['properties']['geometry_type'] == 'point') as Map;
+    final gisPoint = features.firstWhere(
+        (f) => (f as Map)['properties']['geometry_type'] == 'point') as Map;
     final props = gisPoint['properties'] as Map;
     expect(props['surveyor'], 'Tester');
     expect(props['geometry_type'], 'point');
     expect(props['project_name'], project?.name ?? 'WebMapTestProj');
-    expect(props.containsKey('thumbnail_base64'), isTrue, reason: 'photo thumbnail should be embedded');
+    expect(props.containsKey('thumbnail_base64'), isTrue,
+        reason: 'photo thumbnail should be embedded');
     expect(props['photo_path'], 'point.jpg');
     // thumbnail should be base64 string, not full file
     final thumb = props['thumbnail_base64'] as String;
     expect(thumb.isNotEmpty, isTrue);
-    expect(thumb.length < 100 * 1024 * 1.4, isTrue, reason: 'thumbnail base64 should be capped');
+    expect(thumb.length < 100 * 1024 * 1.4, isTrue,
+        reason: 'thumbnail base64 should be capped');
 
     // Check survey geopoint feature
-    final surveyFeature = features.firstWhere((f) => (f as Map)['properties']['form_name'] == 'TestForm') as Map;
+    final surveyFeature = features.firstWhere(
+        (f) => (f as Map)['properties']['form_name'] == 'TestForm') as Map;
     final sProps = surveyFeature['properties'] as Map;
     expect(sProps['surveyor'], 'SurveyorA');
     expect(sProps['answers'], isA<Map>());
@@ -174,7 +222,8 @@ void main() {
     }
   });
 
-  test('survey photo inside answers is included as thumbnail, not full file', () async {
+  test('survey photo inside answers is included as thumbnail, not full file',
+      () async {
     final projectId = await db.into(db.projects).insert(
           ProjectsCompanion.insert(name: 'PhotoSurveyProj'),
         );
@@ -190,7 +239,8 @@ void main() {
         'user_name': 'Photographer',
         'answers': {
           'site_name': 'Site X',
-          'site_photo': jsonEncode({'path': photoPath, 'thumb': '${photoPath}_thumb'}),
+          'site_photo':
+              jsonEncode({'path': photoPath, 'thumb': '${photoPath}_thumb'}),
           'location_point': '12.0 77.0 0 0',
         },
       })),
@@ -210,13 +260,18 @@ void main() {
     final thumbBytes = base64Decode(thumbB64);
     final originalBytes = await File(photoPath).readAsBytes();
     final originalB64 = base64Encode(originalBytes);
-    expect(thumbB64, isNot(equals(originalB64)), reason: 'should be thumbnail, not full file');
+    expect(thumbB64, isNot(equals(originalB64)),
+        reason: 'should be thumbnail, not full file');
     expect(thumbBytes.isNotEmpty, isTrue);
   });
 
   test('project-wise generation isolates data per project', () async {
-    final projA = await db.into(db.projects).insert(ProjectsCompanion.insert(name: 'ProjA'));
-    final projB = await db.into(db.projects).insert(ProjectsCompanion.insert(name: 'ProjB'));
+    final projA = await db
+        .into(db.projects)
+        .insert(ProjectsCompanion.insert(name: 'ProjA'));
+    final projB = await db
+        .into(db.projects)
+        .insert(ProjectsCompanion.insert(name: 'ProjB'));
 
     await db.insertSurveySession(SurveySessionsCompanion(
       projectId: drift.Value(projA),
@@ -247,7 +302,11 @@ void main() {
     expect((geoA['features'] as List), hasLength(1));
     expect((geoB['features'] as List), hasLength(1));
     expect((geoAll['features'] as List), hasLength(2));
-    expect(((geoA['features'] as List).first as Map)['properties']['project_name'], 'ProjA');
-    expect(((geoB['features'] as List).first as Map)['properties']['project_name'], 'ProjB');
+    expect(
+        ((geoA['features'] as List).first as Map)['properties']['project_name'],
+        'ProjA');
+    expect(
+        ((geoB['features'] as List).first as Map)['properties']['project_name'],
+        'ProjB');
   });
 }

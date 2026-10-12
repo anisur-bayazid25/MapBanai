@@ -15,7 +15,8 @@ class CloudSyncException implements Exception {
 class SyncResult {
   final int responsesSynced;
   final int featuresSynced;
-  const SyncResult({required this.responsesSynced, required this.featuresSynced});
+  const SyncResult(
+      {required this.responsesSynced, required this.featuresSynced});
 }
 
 class CloudSyncService {
@@ -44,7 +45,13 @@ class CloudSyncService {
 
   bool _containsFeatureType(String responses) {
     // Same distinction project already uses: %feature_type%
-    return responses.contains('feature_type');
+    try {
+      final value = jsonDecode(responses);
+      return value is Map &&
+          ['point', 'line', 'polygon'].contains(value['feature_type']);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Syncs unsynced responses + features for [projectId].
@@ -53,7 +60,8 @@ class CloudSyncService {
     final config = await db.getSyncConfig(projectId);
     final rawUrl = config?.syncEndpointUrl?.trim() ?? '';
     if (rawUrl.isEmpty) {
-      throw const CloudSyncException('Sync URL not configured for this project');
+      throw const CloudSyncException(
+          'Sync URL not configured for this project');
     }
     Uri uri;
     try {
@@ -79,8 +87,10 @@ class CloudSyncService {
       return const SyncResult(responsesSynced: 0, featuresSynced: 0);
     }
 
-    final responsesPayload = _buildResponsesPayload(unsyncedResponses, project.name);
-    final featuresPayload = _buildFeaturesPayload(unsyncedFeatures, project.name);
+    final responsesPayload =
+        _buildResponsesPayload(unsyncedResponses, project.name);
+    final featuresPayload =
+        _buildFeaturesPayload(unsyncedFeatures, project.name);
 
     final body = jsonEncode({
       'apiKey': apiKey,
@@ -147,7 +157,9 @@ class CloudSyncService {
       final cfg = config!;
       await db.transaction(() async {
         for (final s in [...unsyncedResponses, ...unsyncedFeatures]) {
-          await (db.update(db.surveySessions)..where((t) => t.id.equals(s.id)))
+          await (db.update(db.surveySessions)
+                ..where(
+                    (t) => t.id.equals(s.id) & t.responses.equals(s.responses)))
               .write(SurveySessionsCompanion(syncedAt: Value(now)));
         }
         // Update lastSyncAt preserving url/key
@@ -214,14 +226,12 @@ class CloudSyncService {
       }
       final host = nextUri.host.toLowerCase();
       // Allow loopback for unit tests; production only follows google hosts.
-      final isLoopback = host == '127.0.0.1' ||
-          host == 'localhost' ||
-          host == '::1';
+      final isLoopback =
+          host == '127.0.0.1' || host == 'localhost' || host == '::1';
       if (!(host.endsWith('.google.com') ||
           host.endsWith('.googleusercontent.com') ||
           isLoopback)) {
-        throw CloudSyncException(
-            'Refusing to follow redirect to $host');
+        throw CloudSyncException('Refusing to follow redirect to $host');
       }
       // The script already ran on the initial POST; the redirect target only
       // serves the cached response via GET.
@@ -244,13 +254,11 @@ class CloudSyncService {
       } catch (_) {
         resp = {};
       }
-      final formName = resp['form_name']?.toString() ??
-          resp['form_id']?.toString() ??
-          '';
+      final formName =
+          resp['form_name']?.toString() ?? resp['form_id']?.toString() ?? '';
       final answers = resp['answers'];
-      final surveyor = resp['user_name']?.toString() ??
-          resp['surveyor']?.toString() ??
-          '';
+      final surveyor =
+          resp['user_name']?.toString() ?? resp['surveyor']?.toString() ?? '';
       // Use stable UUID, fallback to local id only for very old unmigrated rows
       final stableId = (s.externalId != null && s.externalId!.isNotEmpty)
           ? s.externalId!
@@ -262,6 +270,12 @@ class CloudSyncService {
         'submitted_at': s.createdAt.toIso8601String(),
         'form_name': formName,
         'answers': answers is Map ? answers : {},
+        'edited_at': resp['edited_at'],
+        if (resp['workflow'] == 'guided_visit_v1') ...{
+          'workflow': resp['workflow'],
+          'visit': resp['visit'],
+          'photo': resp['photo'],
+        },
       });
     }
     return list;
@@ -357,6 +371,12 @@ class CloudSyncService {
         'longitude': lon,
         'geojson': geojson,
         'photo_path': photoPath,
+        'attributes': resp['fields'] is Map
+            ? resp['fields']
+            : (resp['attributes'] is Map ? resp['attributes'] : {}),
+        'name': resp['name'] ?? '',
+        'notes': resp['notes'] ?? '',
+        'edited_at': resp['edited_at'],
       });
     }
     return list;

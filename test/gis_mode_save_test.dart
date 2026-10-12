@@ -133,8 +133,8 @@ class FakeMaplibrePlatform implements MapLibrePlatform {
   }
 
   @override
-  Future<void> addSymbolLayer(String sourceId, String layerId,
-      Map<String, dynamic> properties,
+  Future<void> addSymbolLayer(
+      String sourceId, String layerId, Map<String, dynamic> properties,
       {String? belowLayerId,
       String? sourceLayer,
       double? minzoom,
@@ -143,8 +143,8 @@ class FakeMaplibrePlatform implements MapLibrePlatform {
       required bool enableInteraction}) async {}
 
   @override
-  Future<void> addCircleLayer(String sourceId, String layerId,
-      Map<String, dynamic> properties,
+  Future<void> addCircleLayer(
+      String sourceId, String layerId, Map<String, dynamic> properties,
       {String? belowLayerId,
       String? sourceLayer,
       double? minzoom,
@@ -153,8 +153,8 @@ class FakeMaplibrePlatform implements MapLibrePlatform {
       required bool enableInteraction}) async {}
 
   @override
-  Future<void> addLineLayer(String sourceId, String layerId,
-      Map<String, dynamic> properties,
+  Future<void> addLineLayer(
+      String sourceId, String layerId, Map<String, dynamic> properties,
       {String? belowLayerId,
       String? sourceLayer,
       double? minzoom,
@@ -163,8 +163,8 @@ class FakeMaplibrePlatform implements MapLibrePlatform {
       required bool enableInteraction}) async {}
 
   @override
-  Future<void> addFillLayer(String sourceId, String layerId,
-      Map<String, dynamic> properties,
+  Future<void> addFillLayer(
+      String sourceId, String layerId, Map<String, dynamic> properties,
       {String? belowLayerId,
       String? sourceLayer,
       double? minzoom,
@@ -281,6 +281,51 @@ void main() {
     } catch (_) {}
   });
 
+  testWidgets(
+      'canceling resumed draft does not overwrite it with a new feature',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase();
+    final project = (await db.getProjectByName('Test Project'))!;
+    final original = jsonEncode({
+      'draft': true,
+      'feature_type': 'point',
+      'latitude': 23.5,
+      'longitude': 90.5,
+      'accuracy_m': 5
+    });
+    final id = await db.insertSurveySession(SurveySessionsCompanion(
+      projectId: drift.Value(project.id),
+      title: const drift.Value('Original draft'),
+      status: const drift.Value('draft'),
+      responses: drift.Value(original),
+    ));
+    await tester.pumpWidget(MaterialApp(
+        home: GisModeScreen(
+      projectName: 'Test Project',
+      projectId: project.id,
+      resumeDraftId: id,
+    )));
+    await pumpFrames(tester, 12);
+    geolocator.emit(testFix());
+    fake.onMapStyleLoadedPlatform.call(null);
+    await pumpFrames(tester, 12);
+    await tester.tap(find.text('Cancel'));
+    await pumpFrames(tester);
+    await savePoint(tester, fake);
+    final sessions = await db.getSurveySessionsByProject(project.id);
+    expect(sessions, hasLength(2));
+    final draft = (await db.getSurveySession(id))!;
+    expect(draft.status, 'draft');
+    expect(draft.responses, original);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpFrames(tester);
+    await db.close();
+  });
+
   testWidgets('saving a point keeps exactly one feature with its row in the DB',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
@@ -327,7 +372,8 @@ void main() {
     await db.close();
   });
 
-  testWidgets('saving a second point keeps both features on the map', (tester) async {
+  testWidgets('saving a second point keeps both features on the map',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -407,12 +453,17 @@ void main() {
       find.text('Measure distance — tap points on the map'),
       findsNothing,
     );
-    expect(tester.widget<IconButton>(
-      find.ancestor(
-        of: find.byIcon(Icons.add_location_alt_outlined),
-        matching: find.byType(IconButton),
-      ),
-    ).onPressed, isNotNull, reason: 'drawing tools must unlock after measure');
+    expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byIcon(Icons.add_location_alt_outlined),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+        reason: 'drawing tools must unlock after measure');
   });
 
   testWidgets('area measure shows area and perimeter', (tester) async {

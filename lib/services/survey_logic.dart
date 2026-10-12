@@ -16,7 +16,8 @@
 class SurveyLogic {
   /// Evaluates a relevance expression. Returns `true` when there is no
   /// expression or when it cannot be parsed (fail-open for visibility).
-  static bool evaluateRelevance(String? expression, Map<String, dynamic> answers) {
+  static bool evaluateRelevance(
+      String? expression, Map<String, dynamic> answers) {
     if (expression == null || expression.trim().isEmpty) return true;
     try {
       final tokens = _Lexer(expression).tokenize();
@@ -55,15 +56,16 @@ class SurveyLogic {
   static String? evaluateConstraint(
     String? constraint,
     dynamic answer,
-    String? message,
-  ) {
+    String? message, {
+    Map<String, dynamic> answers = const {},
+  }) {
     if (constraint == null || constraint.trim().isEmpty) return null;
     if (answer == null || answer.toString().trim().isEmpty) return null;
 
-    final answers = <String, dynamic>{'.': answer};
+    final context = <String, dynamic>{...answers, '.': answer};
     try {
       final tokens = _Lexer(constraint).tokenize();
-      final value = _Parser(tokens, answers).parse();
+      final value = _Parser(tokens, context).parse();
       if (_isTruthy(value)) return null;
     } catch (_) {
       // Parse failure means the constraint cannot be satisfied as written.
@@ -83,8 +85,7 @@ class SurveyLogic {
   /// no HTML renderer, so tags are removed (`<br>`/`</p>` become newlines)
   /// and entities (`&amp;`, `&nbsp;`, …) are decoded.
   static String stripHtml(String input) {
-    var s = input.replaceAll(
-        RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    var s = input.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
     s = s.replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n');
     s = s.replaceAll(RegExp(r'<[^>]*>'), '');
     const entities = {
@@ -231,9 +232,8 @@ class SurveyLogic {
       if (parsed != null) spec = spec.copyWith(color: parsed);
     }
     // <span style="color:red; font-weight:bold; ...">
-    final styleAttr =
-        RegExp('style\\s*=\\s*"([^"]*)"').firstMatch(attrs) ??
-            RegExp("style\\s*=\\s*'([^']*)'").firstMatch(attrs);
+    final styleAttr = RegExp('style\\s*=\\s*"([^"]*)"').firstMatch(attrs) ??
+        RegExp("style\\s*=\\s*'([^']*)'").firstMatch(attrs);
     if (styleAttr != null) {
       for (final decl in styleAttr.group(1)!.split(';')) {
         final parts = decl.split(':');
@@ -360,8 +360,7 @@ class RichRun {
     this.color,
   });
 
-  bool get hasStyle =>
-      bold || italic || underline || color != null;
+  bool get hasStyle => bold || italic || underline || color != null;
 }
 
 /// Mutable style accumulator used while parsing styled label text.
@@ -508,13 +507,17 @@ class _Lexer {
       _pos++;
     }
     if (_pos < _input.length) _pos++; // skip closing quote
-    if (_pos >= _input.length && _input[_pos - 1] == quote && start == _pos - 1) {
+    if (_pos >= _input.length &&
+        _input[_pos - 1] == quote &&
+        start == _pos - 1) {
       _pos++;
     }
-    return _Token(_TokenType.string, buffer.toString().replaceAllMapped(
-      RegExp(r'\\(.)'),
-      (m) => m.group(1)!,
-    ));
+    return _Token(
+        _TokenType.string,
+        buffer.toString().replaceAllMapped(
+              RegExp(r'\\(.)'),
+              (m) => m.group(1)!,
+            ));
   }
 
   _Token _lexField() {
@@ -584,7 +587,8 @@ class _Lexer {
     return _next();
   }
 
-  bool _isDigit(String ch) => ch.codeUnitAt(0) >= 0x30 && ch.codeUnitAt(0) <= 0x39;
+  bool _isDigit(String ch) =>
+      ch.codeUnitAt(0) >= 0x30 && ch.codeUnitAt(0) <= 0x39;
 
   bool _isIdentStart(String ch) =>
       ch.codeUnitAt(0) >= 0x41 && ch.codeUnitAt(0) <= 0x5A ||
@@ -648,7 +652,8 @@ class _Parser {
 
   dynamic parseAdditive() {
     var left = parseMultiplicative();
-    while (_peek().type == _TokenType.operator && ['+', '-'].contains(_peek().lexeme)) {
+    while (_peek().type == _TokenType.operator &&
+        ['+', '-'].contains(_peek().lexeme)) {
       final op = _advance().lexeme;
       final right = parseMultiplicative();
       // ODK coerces numeric strings: '3' + 0 = 3 (critical for
@@ -677,7 +682,8 @@ class _Parser {
 
   dynamic parseMultiplicative() {
     var left = parseUnary();
-    while (_peek().type == _TokenType.operator && ['*', '/', '%'].contains(_peek().lexeme)) {
+    while (_peek().type == _TokenType.operator &&
+        ['*', '/', '%'].contains(_peek().lexeme)) {
       final op = _advance().lexeme;
       final right = parseUnary();
       final leftNum = _tryNum(left);
@@ -764,7 +770,8 @@ class _Parser {
     }
     _advance();
     final fieldToken = _peek();
-    if (fieldToken.type != _TokenType.field && fieldToken.type != _TokenType.ident) {
+    if (fieldToken.type != _TokenType.field &&
+        fieldToken.type != _TokenType.ident) {
       throw const FormatException('selected() expects a field reference');
     }
     _advance();
@@ -773,7 +780,8 @@ class _Parser {
     }
     _advance();
     final valueToken = _peek();
-    if (valueToken.type != _TokenType.string && valueToken.type != _TokenType.number) {
+    if (valueToken.type != _TokenType.string &&
+        valueToken.type != _TokenType.number) {
       throw const FormatException('selected() expects a string/number value');
     }
     _advance();
@@ -1164,19 +1172,50 @@ class _Parser {
   }
 
   static const List<String> _monthNamesFull = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
   static const List<String> _monthNamesShort = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   static const List<String> _weekdayNamesFull = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-    'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
   static const List<String> _weekdayNamesShort = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
   ];
 
   /// Formats a date with ODK `%`-style specifiers (%Y %y %m %d %e %H %M %S

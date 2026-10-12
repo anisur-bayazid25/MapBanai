@@ -32,7 +32,8 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
     super.initState();
     _database = AppDatabase();
     _row = widget.row;
-    _form = SurveyForm.fromJson(jsonDecode(widget.row.json) as Map<String, dynamic>);
+    _form = SurveyForm.fromJson(
+        jsonDecode(widget.row.json) as Map<String, dynamic>);
   }
 
   @override
@@ -43,10 +44,10 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
 
   Future<void> _saveResponse(Map<String, dynamic> answers) async {
     try {
-      final projectId = await _database.getProjectIdByName(widget.projectName);
+      final projectId = (_row.projectId ??
+          await _database.getProjectIdByName(widget.projectName));
       if (projectId == null) {
-        _showSnack('Project not found: ${widget.projectName}');
-        return;
+        throw StateError('Project not found: ${widget.projectName}');
       }
 
       await _database.insertSurveySession(
@@ -66,19 +67,18 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop();
       _showSnack('Saved response for ${widget.projectName}');
     } catch (e) {
-      _showSnack('Failed to save response: $e');
+      rethrow;
     }
   }
 
   Future<void> _saveDraftResponse(Map<String, dynamic> answers) async {
     try {
-      final projectId = await _database.getProjectIdByName(widget.projectName);
+      final projectId = (_row.projectId ??
+          await _database.getProjectIdByName(widget.projectName));
       if (projectId == null) {
-        _showSnack('Project not found: ${widget.projectName}');
-        return;
+        throw StateError('Project not found: ${widget.projectName}');
       }
 
       await _database.insertSurveySession(
@@ -100,7 +100,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
       if (!mounted) return;
       _showSnack('Draft saved — resume it from History later');
     } catch (e) {
-      _showSnack('Failed to save draft: $e');
+      rethrow;
     }
   }
 
@@ -179,8 +179,8 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           Text(
             _form.name,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -194,13 +194,16 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: () {
+            onPressed: () async {
+              final username = await _database.getSetting('user_name');
+              if (!mounted) return;
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => Scaffold(
                     appBar: AppBar(title: const Text('Survey Response')),
                     body: SurveyFormRenderer(
                       form: _form,
+                      initialUsername: username,
                       onSave: _saveResponse,
                       onSaveDraft: _saveDraftResponse,
                       onComplete: () => Navigator.pop(context),
@@ -222,8 +225,8 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           Text(
             'Questions',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const SizedBox(height: 8),
           if (_form.questions.isEmpty)

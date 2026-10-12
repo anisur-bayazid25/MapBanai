@@ -1,13 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mapbanai/services/geotag_writer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mapbanai/services/location_service.dart';
 import 'package:mapbanai/services/photo_store.dart';
 
-/// Camera/gallery capture that geotags the photo when a GPS fix is available
-/// and the image format allows it (JPEG). Pops with the saved [PhotoRecord].
+/// Field capture only returns photos with verified GPS embedded in the image.
 class PhotoCaptureScreen extends StatefulWidget {
   const PhotoCaptureScreen({super.key});
 
@@ -23,71 +24,81 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
   String? _status;
   double? _accuracy;
 
-  Future<Position?> _captureLocation() async {
-    final granted = await _locationService.ensurePermission();
-    if (!granted) return null;
-    try {
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
+  Uint8List? _pendingBytes;
+  ImageSource? _pendingSource;
+  DateTime? _capturedAt;
 
   Future<void> _capture(ImageSource source) async {
     if (_busy) return;
     setState(() {
       _busy = true;
-      _status = 'Getting GPS fix…';
+      _status = 'Opening photo picker…';
       _accuracy = null;
     });
-
-    final position = await _captureLocation();
-    if (position != null) {
-      setState(() {
-        _accuracy = position.accuracy;
-      });
-    }
-    if (position == null) {
-      setState(() {
-        _status = 'No GPS fix — photo will not be geotagged';
-      });
-    }
-
-    XFile? picked;
     try {
-      picked = await ImagePicker().pickImage(
+      // The fresh fix is acquired AFTER returning from the external camera.
+      // A fix acquired before opening it can be minutes old by capture time.
+      final picked = await ImagePicker().pickImage(
         source: source,
         imageQuality: 92,
         requestFullMetadata: true,
       );
-    } catch (_) {
-      picked = null;
-    }
-
-    if (picked == null) {
-      if (mounted) {
+      if (!mounted) return;
+      if (picked == null) {
         setState(() {
           _busy = false;
           _status = null;
         });
+        return;
       }
-      return;
+      _pendingBytes = await picked.readAsBytes();
+      _pendingSource = source;
+      _capturedAt = DateTime.now();
+      if (!mounted) return;
+      await _storePendingPhoto();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _status =
+            'Photo could not be captured. Allow camera/photos permission and retry. $e';
+      });
     }
+  }
 
+  Future<void> _storePendingPhoto() async {
+    final bytes = _pendingBytes;
+    if (bytes == null) return;
+    setState(() {
+      _busy = true;
+      _status = 'Getting fresh GPS coordinates… Accuracy will be recorded.';
+    });
     try {
-      final bytes = await picked.readAsBytes();
-      final record = await PhotoStore.save(
+      Position? position;
+      // Existing valid gallery coordinates describe where the photo was taken.
+      // Fresh camera captures always use the current field GPS fix.
+      if (_pendingSource == ImageSource.camera ||
+          !GeotagWriter.hasEmbeddedGps(bytes)) {
+        position = await _locationService.getPhotoFix();
+      }
+      if (!mounted) return;
+      final record = await PhotoStore.saveGeotagged(
         bytes,
         latitude: position?.latitude,
         longitude: position?.longitude,
-        altitude: position?.altitude,
+        altitude:
+            position?.altitude.isFinite == true ? position!.altitude : null,
+        capturedAt: _capturedAt,
+        accuracy: position?.accuracy,
+        gpsFixedAt: position?.timestamp,
+        preserveExistingGps: _pendingSource == ImageSource.gallery,
       );
       if (!mounted) return;
       setState(() {
         _record = record;
+        _pendingBytes = null;
+        _pendingSource = null;
+        _accuracy = record.accuracy;
         _busy = false;
         _status = null;
       });
@@ -96,20 +107,25 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
       setState(() {
         _busy = false;
         _record = null;
-        _status = 'Failed to store photo: $e';
+        _status =
+            'Photo is waiting for GPS and has not been saved. Stay at the photo location. $e';
       });
     }
   }
 
   Future<void> _retake() async {
+    final previous = _record;
     setState(() {
       _record = null;
+      _accuracy = null;
+      _status = null;
     });
+    if (previous != null) await PhotoStore.delete(previous);
   }
 
   Future<void> _save() async {
     final record = _record;
-    if (record == null) return;
+    if (record == null || !record.isGeotagged) return;
     Navigator.of(context).pop(record);
   }
 
@@ -167,8 +183,10 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  _status ?? 'The photo is saved with GPS coordinates '
-                      'embedded in the image when possible.',
+                  _status ??
+                      'Every photo must contain GPS coordinates. '
+                          'Stay at the photo location until GPS is confirmed. '
+                          'Gallery photos keep their existing GPS when valid.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
@@ -180,6 +198,22 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
           const SizedBox(height: 12),
           const LinearProgressIndicator(),
           const SizedBox(height: 12),
+        ],
+        if (_pendingBytes != null) ...[
+          FilledButton.icon(
+            onPressed: _busy ? null : _storePendingPhoto,
+            icon: const Icon(Icons.gps_fixed),
+            label: const Text('Retry GPS for selected photo'),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _busy ? null : () => Geolocator.openAppSettings(),
+            child: const Text('Open app permission settings'),
+          ),
+          TextButton(
+            onPressed: _busy ? null : () => Geolocator.openLocationSettings(),
+            child: const Text('Open device location settings'),
+          ),
         ],
         Row(
           children: [
@@ -247,7 +281,9 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                       record.isGeotagged ? 'Geotagged' : 'Not geotagged',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: record.isGeotagged ? Colors.green.shade800 : Colors.orange.shade800,
+                        color: record.isGeotagged
+                            ? Colors.green.shade800
+                            : Colors.orange.shade800,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -258,7 +294,9 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                           : 'No coordinates available',
                       style: TextStyle(
                         fontSize: 12,
-                        color: record.isGeotagged ? Colors.green.shade700 : Colors.orange.shade700,
+                        color: record.isGeotagged
+                            ? Colors.green.shade700
+                            : Colors.orange.shade700,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -268,6 +306,12 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                         fontSize: 11,
                         color: Colors.grey.shade600,
                       ),
+                    ),
+                    Text(
+                      record.accuracy == null
+                          ? 'GPS accuracy: unavailable'
+                          : 'GPS accuracy: ±${record.accuracy!.round()} m',
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -288,7 +332,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: _save,
+                onPressed: record.isGeotagged ? _save : null,
                 icon: const Icon(Icons.check_outlined),
                 label: const Text('Use photo'),
               ),

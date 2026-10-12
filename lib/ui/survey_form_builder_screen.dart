@@ -1,11 +1,22 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
 
+Map<String, String>? _updatedTranslations(Map<String, String>? translations,
+    String? previousDefault, String nextDefault) {
+  if (translations == null) return null;
+  return {
+    for (final entry in translations.entries)
+      entry.key: entry.value == previousDefault ? nextDefault : entry.value
+  };
+}
+
 class SurveyFormBuilderScreen extends StatefulWidget {
   final SurveyForm? existingForm;
-  final void Function(SurveyForm form)? onSave;
+  final FutureOr<void> Function(SurveyForm form)? onSave;
 
   const SurveyFormBuilderScreen({
     this.existingForm,
@@ -14,21 +25,26 @@ class SurveyFormBuilderScreen extends StatefulWidget {
   });
 
   @override
-  State<SurveyFormBuilderScreen> createState() => _SurveyFormBuilderScreenState();
+  State<SurveyFormBuilderScreen> createState() =>
+      _SurveyFormBuilderScreenState();
 }
 
 class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
   late List<Question> _questions;
+  SurveyForm? _sourceForm;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.existingForm?.name ?? '');
+    _nameController =
+        TextEditingController(text: widget.existingForm?.name ?? '');
     _descriptionController =
         TextEditingController(text: widget.existingForm?.description ?? '');
     _questions = List.from(widget.existingForm?.questions ?? []);
+    _sourceForm = widget.existingForm;
   }
 
   @override
@@ -73,7 +89,8 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
     });
   }
 
-  void _saveForm() {
+  Future<void> _saveForm() async {
+    if (_saving) return;
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a form name')),
@@ -90,14 +107,34 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
 
     final form = SurveyForm(
       id: widget.existingForm?.id ??
+          _sourceForm?.id ??
           'form_${DateTime.now().millisecondsSinceEpoch}',
       name: _nameController.text.trim(),
       description: _descriptionController.text.trim(),
-      questions: _questions,
+      questions: List<Question>.from(_questions),
+      groups: _sourceForm?.groups,
+      languages: _sourceForm?.languages,
+      defaultLanguage: _sourceForm?.defaultLanguage,
+      version: _sourceForm?.version ?? 1,
+      importWarnings: _sourceForm?.importWarnings ?? const [],
     );
-
-    widget.onSave?.call(form);
-    Navigator.pop(context);
+    final names = <String>{for (final group in form.groups) group.name};
+    for (final question in form.questions) {
+      if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(question.name) ||
+          !names.add(question.name)) {
+        _showSnack('Question names must be valid and unique: ${question.name}');
+        return;
+      }
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.onSave?.call(form);
+      if (mounted) Navigator.pop(context, form);
+    } catch (error) {
+      _showSnack('Could not save form: $error. Your form is still here.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _importXlsForm() async {
@@ -121,7 +158,26 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
         fileName: file.name,
       );
       if (!mounted) return;
+      if (form.importWarnings.isNotEmpty) {
+        final accepted = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+                  title: const Text('XLSForm import limitations'),
+                  content: SingleChildScrollView(
+                      child: Text(form.importWarnings.join('\n\n'))),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Import')),
+                  ],
+                ));
+        if (accepted != true || !mounted) return;
+      }
       setState(() {
+        _sourceForm = form;
         _nameController.text = form.name;
         _descriptionController.text = form.description;
         _questions = List.from(form.questions);
@@ -152,13 +208,13 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
           IconButton(
             tooltip: 'Import from XLSForm (.xlsx)',
             icon: const Icon(Icons.upload_file_outlined),
-            onPressed: _importXlsForm,
+            onPressed: _saving ? null : _importXlsForm,
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Center(
               child: FilledButton.icon(
-                onPressed: _saveForm,
+                onPressed: _saving ? null : _saveForm,
                 icon: const Icon(Icons.save_outlined, size: 18),
                 label: const Text('Save'),
               ),
@@ -166,67 +222,70 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Form Details',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
+      body: AbsorbPointer(
+        absorbing: _saving,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Form Details',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Form name',
-                hintText: 'e.g., Riverbank Survey',
+              const SizedBox(height: 16),
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Form name',
+                  hintText: 'e.g., Riverbank Survey',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Description',
-                hintText: 'Brief description of this form',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Description',
+                  hintText: 'Brief description of this form',
+                ),
+                maxLines: 3,
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Questions (${_questions.length})',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Questions (${_questions.length})',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _addQuestion,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (_questions.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32.0),
-                  child: Text(
-                    'No questions yet. Add one to get started.',
-                    style: TextStyle(color: Colors.grey.shade600),
+                  ElevatedButton.icon(
+                    onPressed: _saving ? null : _addQuestion,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add'),
                   ),
-                ),
-              )
-            else
-              ..._buildQuestionsList(),
-          ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_questions.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32.0),
+                    child: Text(
+                      'No questions yet. Add one to get started.',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ),
+                )
+              else
+                ..._buildQuestionsList(),
+            ],
+          ),
         ),
       ),
     );
@@ -250,9 +309,10 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                         children: [
                           Text(
                             _questions[i].label,
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style:
+                                Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -281,9 +341,11 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                           onTap: () => _deleteQuestion(i),
                           child: const Row(
                             children: [
-                              Icon(Icons.delete_outlined, size: 18, color: Colors.red),
+                              Icon(Icons.delete_outlined,
+                                  size: 18, color: Colors.red),
                               SizedBox(width: 8),
-                              Text('Delete', style: TextStyle(color: Colors.red)),
+                              Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
                             ],
                           ),
                         ),
@@ -294,7 +356,8 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                 if (_questions[i].relevance != null) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(4),
@@ -347,15 +410,18 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
   @override
   void initState() {
     super.initState();
-    _labelController = TextEditingController(text: widget.initialQuestion?.label ?? '');
-    _nameController = TextEditingController(text: widget.initialQuestion?.name ?? '');
-    _hintController = TextEditingController(text: widget.initialQuestion?.hint ?? '');
+    _labelController =
+        TextEditingController(text: widget.initialQuestion?.label ?? '');
+    _nameController =
+        TextEditingController(text: widget.initialQuestion?.name ?? '');
+    _hintController =
+        TextEditingController(text: widget.initialQuestion?.hint ?? '');
     _relevanceController =
         TextEditingController(text: widget.initialQuestion?.relevance ?? '');
     _constraintController =
         TextEditingController(text: widget.initialQuestion?.constraint ?? '');
-    _constraintMessageController =
-        TextEditingController(text: widget.initialQuestion?.constraintMessage ?? '');
+    _constraintMessageController = TextEditingController(
+        text: widget.initialQuestion?.constraintMessage ?? '');
     _calculationController =
         TextEditingController(text: widget.initialQuestion?.calculation ?? '');
     _defaultController =
@@ -379,7 +445,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
   }
 
   void _save() {
-    if (_labelController.text.trim().isEmpty || _nameController.text.trim().isEmpty) {
+    if (_labelController.text.trim().isEmpty ||
+        _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Label and name are required')),
       );
@@ -391,7 +458,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
         _selectedType == QuestionType.dropdown;
     if (needsChoices && _choices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This question type needs at least one option')),
+        const SnackBar(
+            content: Text('This question type needs at least one option')),
       );
       return;
     }
@@ -400,10 +468,13 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
       label: _labelController.text.trim(),
       name: _nameController.text.trim(),
       type: _selectedType,
-      hint: _hintController.text.trim().isEmpty ? null : _hintController.text.trim(),
+      hint: _hintController.text.trim().isEmpty
+          ? null
+          : _hintController.text.trim(),
       required: _isRequired,
-      relevance:
-          _relevanceController.text.trim().isEmpty ? null : _relevanceController.text.trim(),
+      relevance: _relevanceController.text.trim().isEmpty
+          ? null
+          : _relevanceController.text.trim(),
       constraint: _constraintController.text.trim().isEmpty
           ? null
           : _constraintController.text.trim(),
@@ -413,9 +484,25 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
       calculation: _calculationController.text.trim().isEmpty
           ? null
           : _calculationController.text.trim(),
-      defaultValue:
-          _defaultController.text.trim().isEmpty ? null : _defaultController.text.trim(),
+      defaultValue: _defaultController.text.trim().isEmpty
+          ? null
+          : _defaultController.text.trim(),
       choices: needsChoices ? List.from(_choices) : null,
+      readOnly: widget.initialQuestion?.readOnly ?? false,
+      metadataType: widget.initialQuestion?.metadataType,
+      labelTranslations: _updatedTranslations(
+          widget.initialQuestion?.labelTranslations,
+          widget.initialQuestion?.label,
+          _labelController.text.trim()),
+      hintTranslations: _updatedTranslations(
+          widget.initialQuestion?.hintTranslations,
+          widget.initialQuestion?.hint,
+          _hintController.text.trim()),
+      constraintMessageTranslations: _updatedTranslations(
+          widget.initialQuestion?.constraintMessageTranslations,
+          widget.initialQuestion?.constraintMessage,
+          _constraintMessageController.text.trim()),
+      groupPath: widget.initialQuestion?.groupPath,
     );
 
     widget.onSave(question);
@@ -443,7 +530,11 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
         initialLabel: choice.label,
         onSave: (name, label) {
           setState(() {
-            _choices[index] = Choice(name: name, label: label);
+            _choices[index] = Choice(
+                name: name,
+                label: label,
+                labelTranslations: _updatedTranslations(
+                    choice.labelTranslations, choice.label, label));
           });
         },
       ),
@@ -463,8 +554,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
               Text(
                 'Add Question',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -477,9 +568,13 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                readOnly: widget.initialQuestion != null,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   labelText: 'Field name (no spaces)',
+                  helperText: widget.initialQuestion != null
+                      ? 'Field names stay fixed so existing answers and form rules remain linked.'
+                      : null,
                   hintText: 'e.g., site_name',
                 ),
               ),
@@ -512,9 +607,11 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                       value: QuestionType.long_text,
                       child: const Text('Long text')),
                   DropdownMenuItem(
-                      value: QuestionType.integer, child: const Text('Integer')),
+                      value: QuestionType.integer,
+                      child: const Text('Integer')),
                   DropdownMenuItem(
-                      value: QuestionType.decimal, child: const Text('Decimal')),
+                      value: QuestionType.decimal,
+                      child: const Text('Decimal')),
                   DropdownMenuItem(
                       value: QuestionType.yes_no, child: const Text('Yes/No')),
                   DropdownMenuItem(
@@ -526,13 +623,16 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                   DropdownMenuItem(
                       value: QuestionType.dropdown,
                       child: const Text('Dropdown')),
-                  DropdownMenuItem(value: QuestionType.date, child: const Text('Date')),
-                  DropdownMenuItem(value: QuestionType.time, child: const Text('Time')),
+                  DropdownMenuItem(
+                      value: QuestionType.date, child: const Text('Date')),
+                  DropdownMenuItem(
+                      value: QuestionType.time, child: const Text('Time')),
                   DropdownMenuItem(
                       value: QuestionType.datetime,
                       child: const Text('Date & time')),
                   DropdownMenuItem(
-                      value: QuestionType.geopoint, child: const Text('GPS Point')),
+                      value: QuestionType.geopoint,
+                      child: const Text('GPS Point')),
                   DropdownMenuItem(
                       value: QuestionType.gps_accuracy,
                       child: const Text('GPS accuracy')),
@@ -541,7 +641,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                   DropdownMenuItem(
                       value: QuestionType.calculated,
                       child: const Text('Calculated')),
-                  DropdownMenuItem(value: QuestionType.note, child: const Text('Note')),
+                  DropdownMenuItem(
+                      value: QuestionType.note, child: const Text('Note')),
                   DropdownMenuItem(
                       value: QuestionType.hidden, child: const Text('Hidden')),
                 ],
@@ -594,8 +695,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                     Text(
                       'Options (${_choices.length})',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     IconButton(
                       tooltip: 'Add option',
@@ -609,7 +710,8 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       'No options yet. Add at least one.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
                   )
                 else
@@ -734,8 +836,8 @@ class _ChoiceDialogState extends State<_ChoiceDialog> {
             Text(
               widget.initialName == null ? 'Add Option' : 'Edit Option',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
             const SizedBox(height: 16),
             TextField(

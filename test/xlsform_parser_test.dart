@@ -35,33 +35,167 @@ void main() {
     test('parses a full XLSForm with choices and settings', () {
       final bytes = _buildWorkbook(
         settings: [
-          [TextCellValue('form_title'), TextCellValue('form_id'), TextCellValue('form_description'), TextCellValue('version')],
-          [TextCellValue('Road Survey'), TextCellValue('road_v1'), TextCellValue('Road condition check'), IntCellValue(2)],
+          [
+            TextCellValue('form_title'),
+            TextCellValue('form_id'),
+            TextCellValue('form_description'),
+            TextCellValue('version')
+          ],
+          [
+            TextCellValue('Road Survey'),
+            TextCellValue('road_v1'),
+            TextCellValue('Road condition check'),
+            IntCellValue(2)
+          ],
         ],
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('required'), TextCellValue('relevance'), TextCellValue('constraint'), TextCellValue('constraint_message'), TextCellValue('hint'), TextCellValue('default'), TextCellValue('calculation'), TextCellValue('read_only')],
-          [TextCellValue('text'), TextCellValue('surveyor'), TextCellValue('Surveyor name'), TextCellValue('yes')],
-          [TextCellValue('select_one road_type'), TextCellValue('road_type'), TextCellValue('Road type')],
-          [TextCellValue('select_multiple defects @or'), TextCellValue('defects'), TextCellValue('Defects seen'), TextCellValue('no'), TextCellValue("\${road_type} = 'asphalt'")],
-          [TextCellValue('select_one road_type'), TextCellValue('condition'), TextCellValue('Condition'), TextCellValue('yes'), null, null, null, null, TextCellValue('good'), null, null],
-          [TextCellValue('decimal'), TextCellValue('width'), TextCellValue('Width (m)'), TextCellValue(''), null, TextCellValue('. > 0 and . < 20'), TextCellValue('Width out of range')],
-          [TextCellValue('integer'), TextCellValue('length_m'), TextCellValue('Length (m)')],
-          [TextCellValue('calculate'), TextCellValue('area_m2'), TextCellValue('Area'), null, null, null, null, null, null, TextCellValue("\${width} * \${length_m}"), null],
-          [TextCellValue('date'), TextCellValue('insp_date'), TextCellValue('Inspection date')],
-          [TextCellValue('geopoint'), TextCellValue('location'), TextCellValue('Location')],
-          [TextCellValue('image'), TextCellValue('photo'), TextCellValue('Photo')],
-          [TextCellValue('yesno'), TextCellValue('has_guardrail'), TextCellValue('Guardrail?')],
-          [TextCellValue('note'), TextCellValue('end_note'), TextCellValue('Thank you')],
-          [TextCellValue('hidden'), TextCellValue('source'), TextCellValue('Source'), null, null, null, null, null, TextCellValue('xlsform'), null, null],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label'),
+            TextCellValue('required'),
+            TextCellValue('relevance'),
+            TextCellValue('constraint'),
+            TextCellValue('constraint_message'),
+            TextCellValue('hint'),
+            TextCellValue('default'),
+            TextCellValue('calculation'),
+            TextCellValue('read_only')
+          ],
+          [
+            TextCellValue('text'),
+            TextCellValue('surveyor'),
+            TextCellValue('Surveyor name'),
+            TextCellValue('yes')
+          ],
+          [
+            TextCellValue('select_one road_type'),
+            TextCellValue('road_type'),
+            TextCellValue('Road type')
+          ],
+          [
+            TextCellValue('select_multiple defects @or'),
+            TextCellValue('defects'),
+            TextCellValue('Defects seen'),
+            TextCellValue('no'),
+            TextCellValue("\${road_type} = 'asphalt'")
+          ],
+          [
+            TextCellValue('select_one road_condition'),
+            TextCellValue('condition'),
+            TextCellValue('Condition'),
+            TextCellValue('yes'),
+            null,
+            null,
+            null,
+            null,
+            TextCellValue('good'),
+            null,
+            null
+          ],
+          [
+            TextCellValue('decimal'),
+            TextCellValue('width'),
+            TextCellValue('Width (m)'),
+            TextCellValue(''),
+            null,
+            TextCellValue('. > 0 and . < 20'),
+            TextCellValue('Width out of range')
+          ],
+          [
+            TextCellValue('integer'),
+            TextCellValue('length_m'),
+            TextCellValue('Length (m)')
+          ],
+          [
+            TextCellValue('calculate'),
+            TextCellValue('area_m2'),
+            TextCellValue('Area'),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            TextCellValue("\${width} * \${length_m}"),
+            null
+          ],
+          [
+            TextCellValue('date'),
+            TextCellValue('insp_date'),
+            TextCellValue('Inspection date')
+          ],
+          [
+            TextCellValue('geopoint'),
+            TextCellValue('location'),
+            TextCellValue('Location')
+          ],
+          [
+            TextCellValue('image'),
+            TextCellValue('photo'),
+            TextCellValue('Photo')
+          ],
+          [
+            TextCellValue('yesno'),
+            TextCellValue('has_guardrail'),
+            TextCellValue('Guardrail?')
+          ],
+          [
+            TextCellValue('note'),
+            TextCellValue('end_note'),
+            TextCellValue('Thank you')
+          ],
+          [
+            TextCellValue('hidden'),
+            TextCellValue('source'),
+            TextCellValue('Source'),
+            null,
+            null,
+            null,
+            null,
+            null,
+            TextCellValue('xlsform'),
+            null,
+            null
+          ],
           [TextCellValue(''), TextCellValue(''), TextCellValue('')],
         ],
         choices: [
-          [TextCellValue('list_name'), TextCellValue('name'), TextCellValue('label')],
-          [TextCellValue('road_type'), TextCellValue('asphalt'), TextCellValue('Asphalt')],
-          [TextCellValue('road_type'), TextCellValue('gravel'), TextCellValue('Gravel')],
-          [TextCellValue('road_type'), TextCellValue('dirt'), TextCellValue('Dirt')],
-          [TextCellValue('defects'), TextCellValue('pothole'), TextCellValue('Pothole')],
-          [TextCellValue('defects'), TextCellValue('crack'), TextCellValue('Crack')],
+          [
+            TextCellValue('list_name'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
+          [
+            TextCellValue('road_condition'),
+            TextCellValue('good'),
+            TextCellValue('Good')
+          ],
+          [
+            TextCellValue('road_type'),
+            TextCellValue('asphalt'),
+            TextCellValue('Asphalt')
+          ],
+          [
+            TextCellValue('road_type'),
+            TextCellValue('gravel'),
+            TextCellValue('Gravel')
+          ],
+          [
+            TextCellValue('road_type'),
+            TextCellValue('dirt'),
+            TextCellValue('Dirt')
+          ],
+          [
+            TextCellValue('defects'),
+            TextCellValue('pothole'),
+            TextCellValue('Pothole')
+          ],
+          [
+            TextCellValue('defects'),
+            TextCellValue('crack'),
+            TextCellValue('Crack')
+          ],
         ],
       );
 
@@ -110,20 +244,60 @@ void main() {
       expect(hidden.defaultValue, 'xlsform');
     });
 
-    test('maps multiline text appearance to long_text and dropdown to dropdown', () {
+    test('maps multiline text appearance to long_text and dropdown to dropdown',
+        () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('appearance')],
-          [TextCellValue('text'), TextCellValue('notes'), TextCellValue('Notes'), TextCellValue('multiline')],
-          [TextCellValue('select_one status @or'), TextCellValue('status'), TextCellValue('Status')],
-          [TextCellValue('select_one priority'), TextCellValue('priority'), TextCellValue('Priority'), TextCellValue('dropdown')],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label'),
+            TextCellValue('appearance')
+          ],
+          [
+            TextCellValue('text'),
+            TextCellValue('notes'),
+            TextCellValue('Notes'),
+            TextCellValue('multiline')
+          ],
+          [
+            TextCellValue('select_one status @or'),
+            TextCellValue('status'),
+            TextCellValue('Status')
+          ],
+          [
+            TextCellValue('select_one priority'),
+            TextCellValue('priority'),
+            TextCellValue('Priority'),
+            TextCellValue('dropdown')
+          ],
         ],
         choices: [
-          [TextCellValue('list_name'), TextCellValue('name'), TextCellValue('label')],
-          [TextCellValue('status'), TextCellValue('open'), TextCellValue('Open')],
-          [TextCellValue('status'), TextCellValue('closed'), TextCellValue('Closed')],
-          [TextCellValue('priority'), TextCellValue('high'), TextCellValue('High')],
-          [TextCellValue('priority'), TextCellValue('low'), TextCellValue('Low')],
+          [
+            TextCellValue('list_name'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
+          [
+            TextCellValue('status'),
+            TextCellValue('open'),
+            TextCellValue('Open')
+          ],
+          [
+            TextCellValue('status'),
+            TextCellValue('closed'),
+            TextCellValue('Closed')
+          ],
+          [
+            TextCellValue('priority'),
+            TextCellValue('high'),
+            TextCellValue('High')
+          ],
+          [
+            TextCellValue('priority'),
+            TextCellValue('low'),
+            TextCellValue('Low')
+          ],
         ],
       );
 
@@ -138,8 +312,16 @@ void main() {
     test('falls back to file name and localized labels', () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label::English (en)')],
-          [TextCellValue('text'), TextCellValue('q1'), TextCellValue('Question one')],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label::English (en)')
+          ],
+          [
+            TextCellValue('text'),
+            TextCellValue('q1'),
+            TextCellValue('Question one')
+          ],
         ],
       );
 
@@ -164,8 +346,16 @@ void main() {
     test('throws on missing choices list', () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label')],
-          [TextCellValue('select_one missing_list'), TextCellValue('q1'), TextCellValue('Question')],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
+          [
+            TextCellValue('select_one missing_list'),
+            TextCellValue('q1'),
+            TextCellValue('Question')
+          ],
         ],
       );
       expect(
@@ -200,19 +390,114 @@ void main() {
             TextCellValue('constraint_message::English (en)'),
             TextCellValue('appearance'),
           ],
-          [TextCellValue('start'), TextCellValue('start_time'), TextCellValue('Start time'), TextCellValue('শুরুর সময়')],
-          [TextCellValue('end'), TextCellValue('end_time'), TextCellValue('End time'), TextCellValue('শেষ সময়')],
-          [TextCellValue('today'), TextCellValue('survey_date'), TextCellValue('Survey date'), TextCellValue('তথ্য সংগ্রহের তারিখ'), null, null, TextCellValue('yes')],
-          [TextCellValue('deviceid'), TextCellValue('device_id'), TextCellValue('Device ID'), TextCellValue('ডিভাইস আইডি')],
-          [TextCellValue('username'), TextCellValue('enumerator_id'), TextCellValue('Enumerator ID'), TextCellValue('তথ্য সংগ্রহকারী আইডি'), null, null, TextCellValue('yes')],
-          [TextCellValue('select_one study_site'), TextCellValue('study_site'), TextCellValue('Study site'), TextCellValue('গবেষণা এলাকা'), TextCellValue('Select the study site.'), TextCellValue('গবেষণা এলাকা নির্বাচন করুন।'), TextCellValue('yes')],
-          [TextCellValue('begin_group'), TextCellValue('location_group'), TextCellValue('Location'), TextCellValue('অবস্থান'), null, null, null, null, null, null, TextCellValue('field-list')],
-          [TextCellValue('geopoint'), TextCellValue('location_point'), TextCellValue('GPS location'), TextCellValue('GPS অবস্থান'), TextCellValue('Stand at the observation point.'), TextCellValue('পর্যবেক্ষণ স্থানে দাঁড়ান।'), TextCellValue('yes')],
-          [TextCellValue('decimal'), TextCellValue('gps_accuracy_m'), TextCellValue('GPS accuracy (m)'), TextCellValue('GPS নির্ভুলতা (মিটার)'), TextCellValue('Record the accuracy.'), TextCellValue('নির্ভুলতা লিখুন।'), null, null, TextCellValue('. >= 0'), TextCellValue('Accuracy cannot be negative.'), TextCellValue('নির্ভুলতা ঋণাত্মক হতে পারবে না।')],
-          [TextCellValue('text'), TextCellValue('locality_name'), TextCellValue('Locality / landmark name'), TextCellValue('এলাকা / পরিচিত স্থানের নাম')],
-          [TextCellValue('select_one record_type'), TextCellValue('record_type'), TextCellValue('What are you mapping?'), TextCellValue('আপনি কী ম্যাপ করছেন?'), null, null, TextCellValue('yes')],
+          [
+            TextCellValue('start'),
+            TextCellValue('start_time'),
+            TextCellValue('Start time'),
+            TextCellValue('শুরুর সময়')
+          ],
+          [
+            TextCellValue('end'),
+            TextCellValue('end_time'),
+            TextCellValue('End time'),
+            TextCellValue('শেষ সময়')
+          ],
+          [
+            TextCellValue('today'),
+            TextCellValue('survey_date'),
+            TextCellValue('Survey date'),
+            TextCellValue('তথ্য সংগ্রহের তারিখ'),
+            null,
+            null,
+            TextCellValue('yes')
+          ],
+          [
+            TextCellValue('deviceid'),
+            TextCellValue('device_id'),
+            TextCellValue('Device ID'),
+            TextCellValue('ডিভাইস আইডি')
+          ],
+          [
+            TextCellValue('username'),
+            TextCellValue('enumerator_id'),
+            TextCellValue('Enumerator ID'),
+            TextCellValue('তথ্য সংগ্রহকারী আইডি'),
+            null,
+            null,
+            TextCellValue('yes')
+          ],
+          [
+            TextCellValue('select_one study_site'),
+            TextCellValue('study_site'),
+            TextCellValue('Study site'),
+            TextCellValue('গবেষণা এলাকা'),
+            TextCellValue('Select the study site.'),
+            TextCellValue('গবেষণা এলাকা নির্বাচন করুন।'),
+            TextCellValue('yes')
+          ],
+          [
+            TextCellValue('begin_group'),
+            TextCellValue('location_group'),
+            TextCellValue('Location'),
+            TextCellValue('অবস্থান'),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            TextCellValue('field-list')
+          ],
+          [
+            TextCellValue('geopoint'),
+            TextCellValue('location_point'),
+            TextCellValue('GPS location'),
+            TextCellValue('GPS অবস্থান'),
+            TextCellValue('Stand at the observation point.'),
+            TextCellValue('পর্যবেক্ষণ স্থানে দাঁড়ান।'),
+            TextCellValue('yes')
+          ],
+          [
+            TextCellValue('decimal'),
+            TextCellValue('gps_accuracy_m'),
+            TextCellValue('GPS accuracy (m)'),
+            TextCellValue('GPS নির্ভুলতা (মিটার)'),
+            TextCellValue('Record the accuracy.'),
+            TextCellValue('নির্ভুলতা লিখুন।'),
+            null,
+            null,
+            TextCellValue('. >= 0'),
+            TextCellValue('Accuracy cannot be negative.'),
+            TextCellValue('নির্ভুলতা ঋণাত্মক হতে পারবে না।')
+          ],
+          [
+            TextCellValue('text'),
+            TextCellValue('locality_name'),
+            TextCellValue('Locality / landmark name'),
+            TextCellValue('এলাকা / পরিচিত স্থানের নাম')
+          ],
+          [
+            TextCellValue('select_one record_type'),
+            TextCellValue('record_type'),
+            TextCellValue('What are you mapping?'),
+            TextCellValue('আপনি কী ম্যাপ করছেন?'),
+            null,
+            null,
+            TextCellValue('yes')
+          ],
           [TextCellValue('end_group'), TextCellValue('location_group_end')],
-          [TextCellValue('integer'), TextCellValue('duration_days'), TextCellValue('Duration (days)'), TextCellValue('স্থায়িত্ব (দিন)'), null, null, null, TextCellValue("\${record_type} = 'waterlogging'"), TextCellValue('. >= 0'), TextCellValue('Duration cannot be negative.')],
+          [
+            TextCellValue('integer'),
+            TextCellValue('duration_days'),
+            TextCellValue('Duration (days)'),
+            TextCellValue('স্থায়িত্ব (দিন)'),
+            null,
+            null,
+            null,
+            TextCellValue("\${record_type} = 'waterlogging'"),
+            TextCellValue('. >= 0'),
+            TextCellValue('Duration cannot be negative.')
+          ],
         ],
         choices: [
           [
@@ -221,25 +506,55 @@ void main() {
             TextCellValue('label::English (en)'),
             TextCellValue('label::Bangla (bn)'),
           ],
-          [TextCellValue('study_site'), TextCellValue('site_a'), TextCellValue('Site A'), TextCellValue('স্থান ক')],
-          [TextCellValue('study_site'), TextCellValue('site_b'), TextCellValue('Site B'), TextCellValue('স্থান খ')],
-          [TextCellValue('record_type'), TextCellValue('salinity'), TextCellValue('Salinity'), TextCellValue('লবণাক্ততা')],
-          [TextCellValue('record_type'), TextCellValue('waterlogging'), TextCellValue('Waterlogging'), TextCellValue('জলাবদ্ধতা')],
+          [
+            TextCellValue('study_site'),
+            TextCellValue('site_a'),
+            TextCellValue('Site A'),
+            TextCellValue('স্থান ক')
+          ],
+          [
+            TextCellValue('study_site'),
+            TextCellValue('site_b'),
+            TextCellValue('Site B'),
+            TextCellValue('স্থান খ')
+          ],
+          [
+            TextCellValue('record_type'),
+            TextCellValue('salinity'),
+            TextCellValue('Salinity'),
+            TextCellValue('লবণাক্ততা')
+          ],
+          [
+            TextCellValue('record_type'),
+            TextCellValue('waterlogging'),
+            TextCellValue('Waterlogging'),
+            TextCellValue('জলাবদ্ধতা')
+          ],
         ],
       );
 
       final form = XlsFormParser.parse(bytes, fileName: 'riverbank.xlsx');
 
       expect(form.name, 'Riverbank Survey');
-      // Metadata (start/end/today/deviceid/username) and group containers are
-      // not turned into questions.
+      // Unsupported metadata and group containers are not turned into questions.
+      // Today and username remain editable collection fields.
       final names = form.questions.map((q) => q.name).toList();
       expect(names, isNot(contains('start_time')));
       expect(names, isNot(contains('end_time')));
       expect(names, isNot(contains('device_id')));
       expect(names, isNot(contains('location_group')));
       expect(names, isNot(contains('location_group_end')));
-      expect(form.questions, hasLength(6));
+      expect(form.questions, hasLength(8));
+      final surveyDate =
+          form.questions.firstWhere((q) => q.name == 'survey_date');
+      expect(surveyDate.type, QuestionType.date);
+      expect(surveyDate.defaultValue, 'today()');
+      expect(surveyDate.metadataType, 'today');
+      expect(
+          form.questions
+              .firstWhere((q) => q.name == 'enumerator_id')
+              .metadataType,
+          'username');
 
       final studySite = form.questions.firstWhere(
         (q) => q.name == 'study_site',
@@ -276,8 +591,16 @@ void main() {
     test('throws on unsupported question type', () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label')],
-          [TextCellValue('fancy_widget'), TextCellValue('q1'), TextCellValue('Question')],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
+          [
+            TextCellValue('fancy_widget'),
+            TextCellValue('q1'),
+            TextCellValue('Question')
+          ],
         ],
       );
       expect(
@@ -293,8 +616,16 @@ void main() {
           [TextCellValue('Round Trip')],
         ],
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label')],
-          [TextCellValue('integer'), TextCellValue('count'), TextCellValue('Count')],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
+          [
+            TextCellValue('integer'),
+            TextCellValue('count'),
+            TextCellValue('Count')
+          ],
         ],
       );
 
@@ -308,18 +639,49 @@ void main() {
     test('begin_group relevance gates enclosed questions (a12 pattern)', () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('relevant')],
-          [TextCellValue('select_one yn'), TextCellValue('a12'), TextCellValue('Outcome')],
-          [TextCellValue('begin_group'), TextCellValue('module_b'), TextCellValue('Module B'), TextCellValue("\${a12} = '1'")],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label'),
+            TextCellValue('relevant')
+          ],
+          [
+            TextCellValue('select_one yn'),
+            TextCellValue('a12'),
+            TextCellValue('Outcome')
+          ],
+          [
+            TextCellValue('begin_group'),
+            TextCellValue('module_b'),
+            TextCellValue('Module B'),
+            TextCellValue("\${a12} = '1'")
+          ],
           [TextCellValue('text'), TextCellValue('b01'), TextCellValue('Name')],
           [TextCellValue('end_group')],
-          [TextCellValue('note'), TextCellValue('end_note'), TextCellValue('Done'), TextCellValue("\${a12} != '1'")],
-          [TextCellValue('text'), TextCellValue('after'), TextCellValue('After')],
+          [
+            TextCellValue('note'),
+            TextCellValue('end_note'),
+            TextCellValue('Done'),
+            TextCellValue("\${a12} != '1'")
+          ],
+          [
+            TextCellValue('text'),
+            TextCellValue('after'),
+            TextCellValue('After')
+          ],
         ],
         choices: [
-          [TextCellValue('list_name'), TextCellValue('name'), TextCellValue('label')],
+          [
+            TextCellValue('list_name'),
+            TextCellValue('name'),
+            TextCellValue('label')
+          ],
           [TextCellValue('yn'), TextCellValue('1'), TextCellValue('Completed')],
-          [TextCellValue('yn'), TextCellValue('2'), TextCellValue('Not completed')],
+          [
+            TextCellValue('yn'),
+            TextCellValue('2'),
+            TextCellValue('Not completed')
+          ],
         ],
       );
 
@@ -354,12 +716,30 @@ void main() {
     test('nested groups accumulate the full group path', () {
       final bytes = _buildWorkbook(
         survey: [
-          [TextCellValue('type'), TextCellValue('name'), TextCellValue('label'), TextCellValue('relevant')],
-          [TextCellValue('begin_group'), TextCellValue('outer'), TextCellValue('Outer')],
-          [TextCellValue('begin_group'), TextCellValue('inner'), TextCellValue('Inner'), TextCellValue("\${flag} = 'y'")],
+          [
+            TextCellValue('type'),
+            TextCellValue('name'),
+            TextCellValue('label'),
+            TextCellValue('relevant')
+          ],
+          [
+            TextCellValue('begin_group'),
+            TextCellValue('outer'),
+            TextCellValue('Outer')
+          ],
+          [
+            TextCellValue('begin_group'),
+            TextCellValue('inner'),
+            TextCellValue('Inner'),
+            TextCellValue("\${flag} = 'y'")
+          ],
           [TextCellValue('text'), TextCellValue('deep'), TextCellValue('Deep')],
           [TextCellValue('end_group')],
-          [TextCellValue('text'), TextCellValue('shallow'), TextCellValue('Shallow')],
+          [
+            TextCellValue('text'),
+            TextCellValue('shallow'),
+            TextCellValue('Shallow')
+          ],
           [TextCellValue('end_group')],
         ],
       );
@@ -373,6 +753,199 @@ void main() {
         form.questions.firstWhere((q) => q.name == 'shallow').groupPath,
         ['outer'],
       );
+    });
+    test('standard space group syntax and configured default language', () {
+      final form = XlsFormParser.parse(_buildWorkbook(survey: [
+        [
+          TextCellValue('type'),
+          TextCellValue('name'),
+          TextCellValue('label::English (en)'),
+          TextCellValue('label::Bangla (bn)'),
+          TextCellValue('required'),
+          TextCellValue('readonly')
+        ],
+        [
+          TextCellValue('begin group'),
+          TextCellValue('section'),
+          TextCellValue('Section')
+        ],
+        [
+          TextCellValue('date'),
+          TextCellValue('visit'),
+          TextCellValue('Visit'),
+          TextCellValue('তারিখ'),
+          TextCellValue('true()'),
+          TextCellValue('true()')
+        ],
+        [TextCellValue('end group')],
+      ], settings: [
+        [TextCellValue('default_language')],
+        [TextCellValue('Bangla (bn)')],
+      ]));
+      expect(form.questions.single.groupPath, ['section']);
+      expect(form.questions.single.required, isTrue);
+      expect(form.questions.single.readOnly, isTrue);
+      expect(form.defaultLanguage, 'bn');
+    });
+
+    test('rejects duplicate, invalid names and malformed containers', () {
+      for (final rows in <List<List<CellValue?>>>[
+        [
+          [TextCellValue('text'), TextCellValue('same')],
+          [TextCellValue('date'), TextCellValue('same')]
+        ],
+        [
+          [TextCellValue('text'), TextCellValue('bad name')]
+        ],
+        [
+          [TextCellValue('begin group'), TextCellValue('open')],
+          [TextCellValue('text'), TextCellValue('answer')]
+        ],
+        [
+          [TextCellValue('end group')],
+          [TextCellValue('text'), TextCellValue('answer')]
+        ],
+        [
+          [null, TextCellValue('missing_type')]
+        ],
+      ]) {
+        expect(
+            () => XlsFormParser.parse(_buildWorkbook(survey: [
+                  [TextCellValue('type'), TextCellValue('name')],
+                  ...rows,
+                ])),
+            throwsA(isA<XlsFormParseException>()));
+      }
+    });
+
+    test('rejects collecting types and repeats rather than losing answers', () {
+      for (final type in [
+        'audio',
+        'video',
+        'file',
+        'begin repeat',
+        'select_one'
+      ]) {
+        expect(
+            () => XlsFormParser.parse(_buildWorkbook(survey: [
+                  [TextCellValue('type'), TextCellValue('name')],
+                  [TextCellValue(type), TextCellValue('answer')],
+                  [TextCellValue('text'), TextCellValue('other')],
+                ])),
+            throwsA(isA<XlsFormParseException>()));
+      }
+    });
+
+    test('rejects unsupported filtering and dynamic required expressions', () {
+      for (final column in ['choice_filter', 'required', 'parameters']) {
+        expect(
+            () => XlsFormParser.parse(_buildWorkbook(survey: [
+                  [
+                    TextCellValue('type'),
+                    TextCellValue('name'),
+                    TextCellValue(column)
+                  ],
+                  [
+                    TextCellValue('text'),
+                    TextCellValue('answer'),
+                    TextCellValue("\${flag} = 'yes'")
+                  ],
+                ])),
+            throwsA(isA<XlsFormParseException>()));
+      }
+    });
+
+    test('preserves actionable metadata limitations across JSON', () {
+      final form = XlsFormParser.parse(_buildWorkbook(survey: [
+        [TextCellValue('type'), TextCellValue('name')],
+        [TextCellValue('start'), TextCellValue('started')],
+        [TextCellValue('text'), TextCellValue('answer')],
+      ]));
+      expect(form.importWarnings.single, contains('not collected'));
+      expect(SurveyForm.fromJson(form.toJson()).importWarnings,
+          form.importWarnings);
+    });
+
+    test('invalid choice defaults are rejected before the dropdown renders',
+        () {
+      expect(
+          () => XlsFormParser.parse(_buildWorkbook(survey: [
+                [
+                  TextCellValue('type'),
+                  TextCellValue('name'),
+                  TextCellValue('default')
+                ],
+                [
+                  TextCellValue('select_one options'),
+                  TextCellValue('answer'),
+                  TextCellValue('missing')
+                ],
+              ], choices: [
+                [
+                  TextCellValue('list_name'),
+                  TextCellValue('name'),
+                  TextCellValue('label')
+                ],
+                [
+                  TextCellValue('options'),
+                  TextCellValue('valid'),
+                  TextCellValue('Valid')
+                ],
+              ])),
+          throwsA(isA<XlsFormParseException>()));
+    });
+
+    test('CARE-style geometry and editable metadata survive JSON serialization',
+        () {
+      final form = XlsFormParser.parse(_buildWorkbook(survey: [
+        [
+          TextCellValue('type'),
+          TextCellValue('name'),
+          TextCellValue('label::English (en)'),
+          TextCellValue('label::Bangla (bn)'),
+          TextCellValue('required'),
+          TextCellValue('relevant')
+        ],
+        [
+          TextCellValue('today'),
+          TextCellValue('survey_date'),
+          TextCellValue('Date'),
+          TextCellValue('তারিখ'),
+          TextCellValue('yes')
+        ],
+        [
+          TextCellValue('username'),
+          TextCellValue('enumerator_id'),
+          TextCellValue('Enumerator'),
+          null,
+          TextCellValue('yes')
+        ],
+        [
+          TextCellValue('begin_group'),
+          TextCellValue('area'),
+          TextCellValue('Area'),
+          null,
+          null,
+          TextCellValue("\${enumerator_id} != ''")
+        ],
+        [
+          TextCellValue('geoshape'),
+          TextCellValue('boundary'),
+          TextCellValue('Boundary')
+        ],
+        [
+          TextCellValue('geotrace'),
+          TextCellValue('route'),
+          TextCellValue('Route')
+        ],
+        [TextCellValue('end_group')],
+      ]));
+      final restored = SurveyForm.fromJson(form.toJson());
+      expect(restored.questions[0].metadataType, 'today');
+      expect(restored.questions[1].metadataType, 'username');
+      expect(restored.questions[2].type, QuestionType.geoshape);
+      expect(restored.questions[3].type, QuestionType.geotrace);
+      expect(restored.questions[2].groupPath, ['area']);
     });
   });
 }

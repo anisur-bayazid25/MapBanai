@@ -180,9 +180,7 @@ class _PhotoViewScreen extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              record.isGeotagged
-                  ? Icons.location_on
-                  : Icons.location_off,
+              record.isGeotagged ? Icons.location_on : Icons.location_off,
               color: record.isGeotagged ? Colors.green : Colors.orange,
               size: 18,
             ),
@@ -216,6 +214,12 @@ class _PhotoViewScreen extends StatelessWidget {
                         ? 'No coordinates were available at capture time'
                         : 'Captured ${record.capturedAt.toLocal().toIso8601String()}',
                     style: const TextStyle(fontSize: 11, color: Colors.white54),
+                  ),
+                  Text(
+                    record.accuracy == null
+                        ? 'GPS accuracy: unavailable'
+                        : 'GPS accuracy: ±${record.accuracy!.round()} m',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                 ],
               ),

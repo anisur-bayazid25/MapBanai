@@ -6,6 +6,7 @@ import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
+import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:mapbanai/ui/photo_gallery_screen.dart';
 import 'package:mapbanai/ui/survey_form_renderer.dart';
 import 'package:mapbanai/ui/survey_session_detail_screen.dart';
@@ -80,8 +81,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
 
   bool _isGisDraft(SurveySession draft) {
     try {
-      final responses =
-          jsonDecode(draft.responses) as Map<String, dynamic>;
+      final responses = jsonDecode(draft.responses) as Map<String, dynamic>;
       return responses['feature_type'] != null;
     } catch (_) {
       return false;
@@ -89,11 +89,28 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   }
 
   Future<void> _openDraft(SurveySession draft) async {
+    try {
+      final response = jsonDecode(draft.responses);
+      if (response is Map && response['workflow'] == 'guided_visit_v1') {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => GuidedVisitScreen(
+            projectId: draft.projectId,
+            resumeSessionId: draft.id,
+            database: _database,
+          ),
+        ));
+        await _load();
+        return;
+      }
+    } on FormatException {
+      // Older/corrupt drafts follow the existing recovery path below.
+    }
     if (_isGisDraft(draft)) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => GisModeScreen(
             projectName: _projectName(draft.projectId),
+            projectId: draft.projectId,
             resumeDraftId: draft.id,
           ),
         ),
@@ -151,6 +168,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     final form = SurveyForm.fromJson(
       jsonDecode(stored.json) as Map<String, dynamic>,
     );
+    final username = await _database.getSetting('user_name');
+    if (!mounted) return;
 
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -158,6 +177,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           appBar: AppBar(title: const Text('Resume survey draft')),
           body: SurveyFormRenderer(
             form: form,
+            initialUsername: username,
             initialAnswers: answers,
             onSave: (answers) async {
               final messenger = ScaffoldMessenger.of(context);
@@ -199,7 +219,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
                 responses: jsonEncode(updated),
               );
               if (messenger.mounted) {
-                messenger.showSnackBar(const SnackBar(content: Text('Draft updated')));
+                messenger.showSnackBar(
+                    const SnackBar(content: Text('Draft updated')));
               }
               if (navigator.mounted) navigator.pop();
             },
@@ -265,15 +286,15 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           Text(
             'No saved responses or drafts yet',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.grey.shade600,
-            ),
+                  color: Colors.grey.shade600,
+                ),
           ),
           const SizedBox(height: 8),
           Text(
             'Saved responses appear here; unfinished work is kept as drafts',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade500,
-            ),
+                  color: Colors.grey.shade500,
+                ),
           ),
         ],
       ),
@@ -281,9 +302,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   }
 
   Widget _buildGrouped(BuildContext context) {
-    final saved = _sessions
-        .where((session) => session.status != 'draft')
-        .toList();
+    final saved =
+        _sessions.where((session) => session.status != 'draft').toList();
 
     // Group sessions by project name (sorted), then by date (descending).
     final projects = <String, List<SurveySession>>{};
@@ -306,7 +326,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
             collapsed: _draftsCollapsed,
             onTap: () => setState(() => _draftsCollapsed = !_draftsCollapsed),
           ),
-          if (!_draftsCollapsed) for (final draft in _drafts) _draftCard(draft),
+          if (!_draftsCollapsed)
+            for (final draft in _drafts) _draftCard(draft),
           const SizedBox(height: 12),
         ],
         if (projects.isEmpty)
@@ -348,8 +369,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     for (final session in sessions) {
       byDate.putIfAbsent(_dateKey(session.createdAt), () => []).add(session);
     }
-    final sortedDates = byDate.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final sortedDates = byDate.keys.toList()..sort((a, b) => b.compareTo(a));
 
     final widgets = <Widget>[];
     for (final date in sortedDates) {
@@ -396,8 +416,18 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     final m = int.tryParse(parts[1]) ?? 0;
     final d = int.tryParse(parts[2]) ?? 0;
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final month = (m >= 1 && m <= 12) ? months[m - 1] : parts[1];
     return '$d $month $y';
@@ -433,7 +463,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
             AnimatedRotation(
               turns: collapsed ? -0.25 : 0.0,
               duration: const Duration(milliseconds: 150),
-              child: Icon(Icons.expand_more, size: dense ? 18 : 20, color: Colors.grey.shade600),
+              child: Icon(Icons.expand_more,
+                  size: dense ? 18 : 20, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -449,7 +480,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
       color: isDark ? const Color(0xFF4E342E) : Colors.orange.shade50,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: isDark ? Colors.orange.shade800 : Colors.orange.shade200),
+        side: BorderSide(
+            color: isDark ? Colors.orange.shade800 : Colors.orange.shade200),
       ),
       child: ListTile(
         leading: Icon(

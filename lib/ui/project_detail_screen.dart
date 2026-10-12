@@ -19,7 +19,8 @@ import 'package:mapbanai/ui/survey_history_screen.dart';
 import 'package:provider/provider.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
-  const ProjectDetailScreen({required this.projectId, super.key, this.database});
+  const ProjectDetailScreen(
+      {required this.projectId, super.key, this.database});
 
   final int projectId;
   final AppDatabase? database;
@@ -68,9 +69,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final forms = project == null
         ? <StoredForm>[]
         : await _database.getStoredFormsForProject(project.id);
-    final syncConfig = project == null
-        ? null
-        : await _database.getSyncConfig(project.id);
+    final syncConfig =
+        project == null ? null : await _database.getSyncConfig(project.id);
     if (!mounted) return;
     setState(() {
       _project = project;
@@ -108,7 +108,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
     await _database.updateProject(widget.projectId, name: name.trim());
     if (!mounted) return;
-    context.read<ProjectState>().setSelectedProject(name.trim());
+    context
+        .read<ProjectState>()
+        .setSelectedProject(name.trim(), projectId: widget.projectId);
     await _load();
   }
 
@@ -185,7 +187,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     await _database.archiveProject(widget.projectId, archived: !wasArchived);
     if (wasArchived) {
       if (!mounted) return;
-      context.read<ProjectState>().setSelectedProject(_project!.name);
+      context
+          .read<ProjectState>()
+          .setSelectedProject(_project!.name, projectId: widget.projectId);
     }
     await _load();
     _showSnack(wasArchived ? 'Project restored' : 'Project archived');
@@ -273,9 +277,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     setState(() => _testingSync = true);
     try {
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 10));
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         _showSyncSnack(
           'Connection failed: HTTP ${response.statusCode}',
@@ -328,7 +330,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       initial: field.name,
       hint: 'Field label shown in GIS data capture',
     );
-    if (name == null || name.trim().isEmpty || name.trim() == field.name) return;
+    if (name == null || name.trim().isEmpty || name.trim() == field.name)
+      return;
     await _database.renameProjectField(field.id, name.trim());
     await _load();
     _showSnack('Field renamed');
@@ -442,6 +445,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     try {
       final form = XlsFormParser.parse(bytes, fileName: file.name);
+      if (form.importWarnings.isNotEmpty) {
+        if (!mounted) return;
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Review form import'),
+            content: SingleChildScrollView(
+                child: Text(form.importWarnings.join('\n\n'))),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Import form')),
+            ],
+          ),
+        );
+        if (proceed != true) return;
+      }
       final existing = await _database.getStoredFormByName(
         form.name,
         projectId: widget.projectId,
@@ -544,7 +567,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         Icon(Icons.archive_outlined, color: Colors.orange),
                         SizedBox(width: 10),
                         Expanded(
-                          child: Text('Archived project', style: TextStyle(fontWeight: FontWeight.w600)),
+                          child: Text('Archived project',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -575,8 +599,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   'GPS settings',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -593,7 +617,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     ButtonSegment(value: 50, label: Text('50m')),
                   ],
                   selected: {project.gpsThresholdM},
-                  onSelectionChanged: (selection) => _setThreshold(selection.first),
+                  onSelectionChanged: (selection) =>
+                      _setThreshold(selection.first),
                 ),
                 const SizedBox(height: 24),
                 ListTile(
@@ -606,8 +631,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   'Data collection fields',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -669,8 +694,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   'Survey forms',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -758,8 +783,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   'Cloud Sync',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -834,11 +859,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.wifi_tethering_outlined, size: 18),
-                        label:
-                            Text(_testingSync ? 'Testing...' : 'Test Connection'),
+                            : const Icon(Icons.wifi_tethering_outlined,
+                                size: 18),
+                        label: Text(
+                            _testingSync ? 'Testing...' : 'Test Connection'),
                       ),
                     ),
                   ],

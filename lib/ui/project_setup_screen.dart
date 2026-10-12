@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/state/project_state.dart';
@@ -52,7 +55,8 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
     await _loadProjects();
 
     if (!mounted) return;
-    context.read<ProjectState>().setSelectedProject(name);
+    context.read<ProjectState>().setSelectedProject(name,
+        projectId: projects.firstWhere((p) => p.name == name).id);
     _showSnack('Project created: $name');
   }
 
@@ -64,11 +68,41 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
   }
 
   void _openProject(Project project) {
-    context.read<ProjectState>().setSelectedProject(project.name);
+    context
+        .read<ProjectState>()
+        .setSelectedProject(project.name, projectId: project.id);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SurveyScreen(projectName: project.name),
+        builder: (_) =>
+            SurveyScreen(projectName: project.name, projectId: project.id),
       ),
+    );
+  }
+
+  Future<void> _openFormBuilder() async {
+    final state = context.read<ProjectState>();
+    final project = state.selectedProjectId != null
+        ? await database.getProjectById(state.selectedProjectId!)
+        : await database.getProjectByName(state.selectedProject);
+    if (project == null || project.archived) {
+      _showSnack('Create or select a project before building a form');
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+          builder: (_) => SurveyFormBuilderScreen(
+                onSave: (form) async {
+                  await database.insertStoredForm(StoredFormsCompanion(
+                    projectId: drift.Value(project.id),
+                    name: drift.Value(form.name),
+                    description: drift.Value(form.description),
+                    json: drift.Value(jsonEncode(form.toJson())),
+                    version: drift.Value(form.version),
+                  ));
+                  _showSnack('Form "${form.name}" saved in ${project.name}');
+                },
+              )),
     );
   }
 
@@ -104,17 +138,7 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
               padding: const EdgeInsets.all(8.0),
               child: IconButton(
                 icon: const Icon(Icons.assignment_outlined),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SurveyFormBuilderScreen(
-                        onSave: (form) {
-                          _showSnack('Form "${form.name}" saved');
-                        },
-                      ),
-                    ),
-                  );
-                },
+                onPressed: _openFormBuilder,
               ),
             ),
           ),
@@ -192,10 +216,13 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
                           const SizedBox(height: 16),
                           Text(
                             'Archived',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade700,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade700,
+                                ),
                           ),
                           const SizedBox(height: 8),
                           for (final project in archivedProjects)

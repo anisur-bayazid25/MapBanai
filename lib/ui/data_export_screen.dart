@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/data_export_service.dart';
 import 'package:mapbanai/services/gis_export_service.dart';
+import 'package:mapbanai/services/webmap_data_service.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class DataExportScreen extends StatefulWidget {
   final String projectName;
+  final int? projectId;
 
-  const DataExportScreen({required this.projectName, super.key});
+  const DataExportScreen(
+      {required this.projectName, this.projectId, super.key});
 
   @override
   State<DataExportScreen> createState() => _DataExportScreenState();
@@ -44,7 +47,11 @@ class _DataExportScreenState extends State<DataExportScreen> {
       _projects = projects;
       _selectedIds.clear();
       _selectedIds.addAll(
-        projects.where((p) => p.name == widget.projectName).map((p) => p.id),
+        projects
+            .where((p) => widget.projectId != null
+                ? p.id == widget.projectId
+                : p.name == widget.projectName)
+            .map((p) => p.id),
       );
     });
   }
@@ -52,7 +59,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
   Future<List<SurveySession>> _sessionsForSelection() async {
     final sessions = await _database.getSurveySessions();
     return sessions
-        .where((s) => _selectedIds.contains(s.projectId))
+        .where((s) => _selectedIds.contains(s.projectId) && s.status != 'draft')
         .toList();
   }
 
@@ -79,6 +86,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
       final names = await _projectNameMap();
       final rows = <Map<String, dynamic>>[];
       final answerKeys = <String>[];
+      final visitKeys = <String>[];
       for (final session in sessions) {
         Map<String, dynamic> responses;
         try {
@@ -101,6 +109,27 @@ class _DataExportScreenState extends State<DataExportScreen> {
           flat[k] = value;
           if (!answerKeys.contains(k)) answerKeys.add(k);
         });
+        final visit = responses['visit'];
+        if (responses['workflow'] == 'guided_visit_v1' && visit is Map) {
+          final site = visit['site_after'];
+          final photo = responses['photo'];
+          final metadata = {
+            'mapbanai_visit_id': visit['id'],
+            'mapbanai_site_id': visit['site_id'],
+            'mapbanai_site_status': site is Map ? site['status'] : null,
+            'mapbanai_map_update': visit['site_sync'],
+            'mapbanai_photo_accuracy_m':
+                photo is Map ? photo['accuracy'] : null,
+          };
+          metadata.forEach((key, value) {
+            var column = key;
+            while (flat.containsKey(column)) {
+              column = '${column}_meta';
+            }
+            flat[column] = value;
+            if (!visitKeys.contains(column)) visitKeys.add(column);
+          });
+        }
         rows.add(flat);
       }
       if (rows.isEmpty) {
@@ -114,8 +143,10 @@ class _DataExportScreenState extends State<DataExportScreen> {
         'user_name',
         'form_name',
         ...answerKeys,
+        ...visitKeys,
       ];
-      final csv = '\uFEFF${DataExportService.exportSurveyResponsesAsCSV(rows, headers)}';
+      final csv =
+          '\uFEFF${DataExportService.exportSurveyResponsesAsCSV(rows, headers)}';
       final file = await _writeTempFile(
         'survey_responses_${_timestamp()}.csv',
         csv,
@@ -128,6 +159,34 @@ class _DataExportScreenState extends State<DataExportScreen> {
       }
     } catch (e) {
       _showSnack('Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportSpatialAnswers() async {
+    if (_selectedIds.isEmpty) {
+      _showSnack('Select at least one project');
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final features = <dynamic>[];
+      final service = WebMapDataService(_database);
+      for (final id in _selectedIds) {
+        final collection = await service.buildFeatureCollectionForProject(id);
+        features.addAll(collection['features'] as List);
+      }
+      if (features.isEmpty) {
+        _showSnack('No saved map data in the selected projects');
+        return;
+      }
+      final file = await _writeTempFile('field_map_${_timestamp()}.geojson',
+          jsonEncode({'type': 'FeatureCollection', 'features': features}),
+          encoding: utf8);
+      await _shareFile(file, 'application/geo+json');
+    } catch (e) {
+      _showSnack('Map export failed: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -209,14 +268,26 @@ class _DataExportScreenState extends State<DataExportScreen> {
       builder: (context) => const SimpleDialog(
         title: Text('Export GIS data as'),
         children: [
-          _FormatOption(value: 'csv', icon: Icons.table_chart_outlined,
-              title: 'CSV', subtitle: 'Tabular data with WKT geometry'),
-          _FormatOption(value: 'kml', icon: Icons.map_outlined,
-              title: 'KML', subtitle: 'Google Earth / GIS'),
-          _FormatOption(value: 'geojson', icon: Icons.language,
-              title: 'GeoJSON', subtitle: 'Web / QGIS'),
-          _FormatOption(value: 'gpkg', icon: Icons.storage,
-              title: 'GeoPackage', subtitle: 'SQLite + WKB geometry'),
+          _FormatOption(
+              value: 'csv',
+              icon: Icons.table_chart_outlined,
+              title: 'CSV',
+              subtitle: 'Tabular data with WKT geometry'),
+          _FormatOption(
+              value: 'kml',
+              icon: Icons.map_outlined,
+              title: 'KML',
+              subtitle: 'Google Earth / GIS'),
+          _FormatOption(
+              value: 'geojson',
+              icon: Icons.language,
+              title: 'GeoJSON',
+              subtitle: 'Web / QGIS'),
+          _FormatOption(
+              value: 'gpkg',
+              icon: Icons.storage,
+              title: 'GeoPackage',
+              subtitle: 'SQLite + WKB geometry'),
         ],
       ),
     );
@@ -265,8 +336,8 @@ class _DataExportScreenState extends State<DataExportScreen> {
             Text(
               'Select projects to export',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -330,6 +401,12 @@ class _DataExportScreenState extends State<DataExportScreen> {
               onPressed: _isLoading ? null : _exportGisData,
               icon: const Icon(Icons.map_outlined, size: 18),
               label: const Text('GIS data'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _exportSpatialAnswers,
+              icon: const Icon(Icons.layers_outlined, size: 18),
+              label: const Text('Survey and GIS map (GeoJSON)'),
             ),
             const SizedBox(height: 16),
             Expanded(
