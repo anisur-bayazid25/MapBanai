@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
-import 'package:mapbanai/services/field_quality_service.dart';
+import 'package:mapbanai/services/field_accuracy_review_service.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:mapbanai/services/guided_visit_service.dart';
@@ -20,14 +20,14 @@ class FieldQualityScreen extends StatefulWidget {
 class _FieldQualityScreenState extends State<FieldQualityScreen> {
   late final AppDatabase _db = widget.database ?? AppDatabase();
   late final StudyAreaStore _store = widget.studyAreaStore ?? StudyAreaStore();
-  List<FieldQualityIssue> _issues = [];
+  List<AccuracyFinding> _issues = [];
   List<SurveySession> _sessions = [];
   bool _loading = true;
   String? _error;
   String _projectName = '';
   String? _projectExternalId;
-  double _distance = 10;
-  String _progress = 'Preparing project records…';
+  double? _accuracyLimit;
+  final String _progress = 'Checking recorded GPS accuracy…';
   @override
   void initState() {
     super.initState();
@@ -53,17 +53,17 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
       final sites = (await _store.loadSites())
           .where((site) => GuidedVisitService.belongsToProject(site, project))
           .toList();
-      final issues = await FieldQualityService().inspect(
+      final identity = project.externalId ?? 'local:${project.id}';
+      _accuracyLimit ??= double.tryParse(
+              await _db.getSetting('accuracy_review_limit:$identity') ?? '') ??
+          project.gpsThresholdM;
+      final accepted = await FieldAccuracyReviewService(_db).accepted(identity);
+      final issues = FieldAccuracyReviewService.scan(
           sessions: sessions,
           forms: forms,
           sites: sites,
-          accuracyThresholdM: project.gpsThresholdM,
-          onProgress: (done, total, title) {
-            if (mounted)
-              setState(
-                  () => _progress = 'Checking ${done + 1} of $total: $title');
-          },
-          duplicateDistanceM: _distance);
+          limitM: _accuracyLimit!,
+          acceptedKeys: accepted.keys.toSet());
       if (!mounted) return;
       setState(() {
         _issues = issues;
@@ -73,15 +73,16 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
         _loading = false;
       });
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = error.toString();
           _loading = false;
         });
+      }
     }
   }
 
-  Future<void> _review(FieldQualityIssue issue) async {
+  Future<void> _review(AccuracyFinding issue) async {
     final session =
         _sessions.where((row) => row.id == issue.sessionId).firstOrNull;
     if (session != null) {
@@ -105,73 +106,145 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
     if (mounted) await _load();
   }
 
+  String get _identity => _projectExternalId ?? 'local:${widget.projectId}';
+  Future<void> _accept(AccuracyFinding finding) async {
+    try {
+      await FieldAccuracyReviewService(_db).accept(_identity, finding);
+      if (!mounted) return;
+      setState(() => _issues.removeWhere((item) => item.key == finding.key));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              const Text('Accuracy accepted. Your data and photo are kept.'),
+          action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () async {
+                await FieldAccuracyReviewService(_db)
+                    .undo(_identity, finding.key);
+                if (mounted) await _load();
+              })));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save acceptance: $error')));
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(
-          title: Text(
-              'Field quality${_projectName.isEmpty ? '' : ' — $_projectName'}'),
-          actions: [
-            IconButton(
-                tooltip: 'Refresh quality checks',
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh))
-          ]),
-      body: Column(children: [
-        Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text(
-                  'Review missing answers, photo evidence, recorded GPS quality and nearby features. GPS accuracy findings are advisory.'),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<double>(
-                  value: _distance,
-                  decoration: const InputDecoration(
-                      labelText: 'Nearby feature review distance'),
-                  items: [5.0, 10.0, 25.0, 50.0]
-                      .map((value) => DropdownMenuItem(
-                          value: value, child: Text('${value.toInt()} m')))
-                      .toList(),
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() => _distance = value!);
-                          _load();
-                        }),
-              const SizedBox(height: 8),
-              const Text(
-                  'Includes this project and baseline features not yet assigned to a project. A nearby pair may be two valid features. GPS age is checked only where capture timestamps were recorded.')
-            ])),
-        Expanded(
-            child: _loading
-                ? Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(_progress, textAlign: TextAlign.center)),
-                  ]))
-                : _error != null
-                    ? Center(child: Text('Cannot check data: $_error'))
-                    : _issues.isEmpty
-                        ? const Center(
-                            child: Text('No issues found by these checks.'))
-                        : ListView.builder(
-                            itemCount: _issues.length,
-                            itemBuilder: (context, index) {
-                              final issue = _issues[index];
-                              return ListTile(
-                                  leading: Icon(issue.code == 'near_duplicate'
-                                      ? Icons.place_outlined
-                                      : issue.code.startsWith('gps')
-                                          ? Icons.gps_fixed
-                                          : Icons.fact_check_outlined),
-                                  title: Text(issue.message),
-                                  subtitle:
-                                      Text(issue.code.replaceAll('_', ' ')),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _review(issue));
-                            })),
-      ]));
+  Widget build(BuildContext context) {
+    final limits = {
+      5.0,
+      10.0,
+      20.0,
+      25.0,
+      50.0,
+      100.0,
+      200.0,
+      if (_accuracyLimit != null) _accuracyLimit!
+    }.toList()
+      ..sort();
+    return Scaffold(
+        appBar: AppBar(
+            title: Text(
+                'Field quality${_projectName.isEmpty ? '' : ' — $_projectName'}'),
+            actions: [
+              IconButton(
+                  tooltip: 'Refresh accuracy review',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh))
+            ]),
+        body: Column(children: [
+          Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                        'Review GPS accuracy above your limit. Accept a reading if it is suitable for your fieldwork.'),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<double>(
+                        value: _accuracyLimit,
+                        decoration: const InputDecoration(
+                            labelText: 'GPS accuracy review limit',
+                            border: OutlineInputBorder()),
+                        items: limits
+                            .map((value) => DropdownMenuItem(
+                                value: value,
+                                child: Text('${value.toInt()} m')))
+                            .toList(),
+                        onChanged: _loading
+                            ? null
+                            : (value) async {
+                                if (value == null) return;
+                                setState(() => _accuracyLimit = value);
+                                await _db.setSetting(
+                                    'accuracy_review_limit:$_identity',
+                                    value.toString());
+                                if (mounted) await _load();
+                              }),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Only readings above this limit appear. Accepted readings stay hidden; photos and records remain saved.'),
+                  ])),
+          Expanded(
+              child: _loading
+                  ? Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(_progress)
+                    ]))
+                  : _error != null
+                      ? Center(child: Text('Cannot review accuracy: $_error'))
+                      : _issues.isEmpty
+                          ? const Center(
+                              child: Text(
+                                  'No GPS readings above the limit need review.',
+                                  textAlign: TextAlign.center))
+                          : ListView.builder(
+                              itemCount: _issues.length,
+                              itemBuilder: (context, index) {
+                                final issue = _issues[index];
+                                return Card(
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 6),
+                                    child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(issue.title,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleMedium),
+                                              const SizedBox(height: 4),
+                                              Text(issue.source),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                  'GPS accuracy: ±${issue.accuracyM.toStringAsFixed(1)} m · Limit: ${_accuracyLimit!.toInt()} m'),
+                                              const SizedBox(height: 8),
+                                              Wrap(spacing: 12, children: [
+                                                OutlinedButton.icon(
+                                                    onPressed: () =>
+                                                        _review(issue),
+                                                    icon: const Icon(
+                                                        Icons.open_in_new),
+                                                    label: const Text(
+                                                        'View record')),
+                                                FilledButton.icon(
+                                                    onPressed: () =>
+                                                        _accept(issue),
+                                                    icon:
+                                                        const Icon(Icons.check),
+                                                    label: const Text(
+                                                        'Accept accuracy')),
+                                              ]),
+                                            ])));
+                              })),
+        ]));
+  }
 }

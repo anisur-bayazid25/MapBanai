@@ -101,7 +101,7 @@ void main() {
   });
 
   testWidgets(
-      'quality screen lists nearby features and changes review distance',
+      'quality screen uses accuracy limit and excludes nearby feature pairs',
       (tester) async {
     final db = AppDatabase.forTesting();
     final projectId = await db.insertProject(
@@ -114,7 +114,8 @@ void main() {
           responses: drift.Value(jsonEncode({
             'feature_type': 'point',
             'latitude': 23 + index * 0.00003,
-            'longitude': 90
+            'longitude': 90,
+            'accuracy_m': index == 0 ? 6 : 12
           }))));
     }
     await tester.pumpWidget(MaterialApp(
@@ -123,15 +124,16 @@ void main() {
             database: db,
             studyAreaStore: VisitMemoryStore([]))));
     await tester.pumpAndSettle();
-    expect(find.textContaining('are 3.3 m apart'), findsOneWidget);
-    expect(find.textContaining('GPS accuracy findings are advisory'),
-        findsOneWidget);
+    expect(find.textContaining('m apart'), findsNothing);
+    expect(find.text('Accept accuracy'), findsOneWidget);
+    expect(find.textContaining('above your limit'), findsOneWidget);
     await tester.tap(find.text('10 m'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('5 m').last);
     await tester.pumpAndSettle();
     expect(find.text('5 m'), findsOneWidget);
-    expect(find.textContaining('are 3.3 m apart'), findsOneWidget);
+    expect(find.textContaining('m apart'), findsNothing);
+    expect(find.text('Accept accuracy'), findsNWidgets(2));
     await tester.pumpWidget(const SizedBox.shrink());
     await db.close();
   });

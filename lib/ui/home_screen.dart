@@ -549,7 +549,6 @@ class _HomeScreenState extends State<HomeScreen> {
         lower.contains('network is unreachable') ||
         lower.contains('connection refused') ||
         lower.contains('network error') ||
-        lower.contains('timed out') ||
         lower.contains('no internet');
   }
 
@@ -1423,7 +1422,6 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
           msg.toLowerCase().contains('network is unreachable') ||
           msg.toLowerCase().contains('connection refused') ||
           msg.toLowerCase().contains('network error') ||
-          msg.toLowerCase().contains('timed out') ||
           msg.toLowerCase().contains('no internet');
       setState(() {
         _error = isOffline ? 'No internet connection' : msg;

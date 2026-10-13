@@ -680,3 +680,12 @@ v2.6.4 release validation: final suite 380/380 passed; backend contract and brow
 Full Flutter suite: 394 tests passed. New checks cover GeoJSON, WGS84 GeoPackage, zipped SHP+DBF, unsafe ZIP paths, explicit local project binding through merge/reload, uniform default styling, saved category filters/colors, and read-only Study Area previews. The actual Shyampur ZIP imported 460 unique points with all 36 attributes. Native Android document-provider selection and external Open with flows need physical-device verification; no device is connected. Analysis reports no errors and the same three existing unused-variable test warnings. Manager backend contract checks passed.
 
 Final v2.6.5 checks include status-based questionnaire requirements and a widget regression proving Verified unchanged saves without opening a form containing required questions, while retaining prior answers. Signed APK: versionName 2.6.5, versionCode 28; same production certificate.
+
+## v2.6.6 validation
+
+- 402 Flutter tests pass, including strict accuracy thresholds, persistent acceptance/undo, changed-reading review, concurrent acceptance and accuracy-only screen behavior.
+- Sync regression covers 460 records in batches of at most 20, retained progress after failure and resumed uploads; busy-server retry is verified.
+- Browser QA covers app and manager poster exports with 460 sites and 14 categories: landscape 1920×1080 and portrait 1080×1920 reserve 81% of image area for the map. Compact categorical labels are retained; coordinates are omitted.
+- Manager browser QA covers collection/basemap loading, fullscreen dialog fallback and restoration, actual Shyampur shapefile ZIP import/removal, and PNG/JPEG/SVG chart exports.
+- Backend contract covers private photo preview/link generation, refresh/backfill, deduplication, oversized-preview fallback and study status payloads.
+- Signed APK versionName 2.6.6/versionCode 29 uses the existing release certificate. Physical-device and live Apps Script deployment behavior still require field verification.

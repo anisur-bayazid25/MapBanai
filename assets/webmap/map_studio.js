@@ -32,7 +32,6 @@ $('tile-treatment').onchange=()=>{studioTheme.filter=$('tile-treatment').value==
 function updateCaption(){
  $('poster-heading').textContent=$('poster-title').value.trim()||$('project-name').textContent;
  $('poster-description').textContent=$('poster-subtitle').value.trim();
- const center=map.getCenter();$('poster-coordinates').textContent=center.lat.toFixed(4)+'°, '+center.lng.toFixed(4)+'°';
  $('poster-heading').style.fontFamily=$('poster-typeface').value;$('poster-description').style.fontFamily=$('subtitle-typeface').value;$('poster-caption').style.textAlign=$('poster-alignment').value;
  document.body.classList.toggle('map-only',$('poster-layout').value==='map');
 }
@@ -75,11 +74,20 @@ async function exportMapImage(format,destination='share'){
   const outputWidth=Number($('image-width').value),outputHeight=Number($('image-height').value);
   if(!Number.isInteger(outputWidth)||!Number.isInteger(outputHeight)||outputWidth<320||outputHeight<320||outputWidth>4096||outputHeight>4096||outputWidth*outputHeight>8400000)throw Error('Use whole-number dimensions from 320 to 4096 pixels, up to 8.4 megapixels.');
   const scale=Math.max(.6,Math.min(outputWidth,outputHeight)/720)*Number($('image-readability').value);
-  const poster=$('poster-layout').value==='poster',margin=poster?24:0,legendEntries=mappedEntries(),legendColumns=Math.max(1,Math.floor((outputWidth/scale-margin*2)/190)),legendRows=Math.ceil(legendEntries.length/legendColumns),footer=(poster?150:24)+legendRows*28+($('image-basemap').value==='on'&&activeBasemap!=='No background'?48:22);
-  const viewportWidth=outputWidth-margin*2*scale,viewportHeight=outputHeight-(margin*2+footer)*scale;
+  const poster=$('poster-layout').value==='poster',margin=poster?Math.min(6,outputWidth*.005/scale):0,fitData=$('image-extent').value==='data',legendEntries=mappedEntries(fitData),legendColumns=Math.max(1,Math.floor((outputWidth/scale-margin*2)/190)),legendRows=Math.ceil(legendEntries.length/legendColumns);
+  // Reserve at least 82% of image height for geography (over 80% of total area).
+  const viewportWidth=outputWidth-margin*2*scale,viewportHeight=outputHeight*.82;
+  const footer=outputHeight/scale-viewportHeight/scale-margin*2;
+  const hasAttribution=$('image-basemap').value==='on'&&activeBasemap!=='No background',measurement=$('value-legend').textContent;
+  const captionHeight=poster?44:0,legendHeight=legendRows*16,notesHeight=(measurement?14:0)+(hasAttribution?14:0);
+  const footerScale=Math.min(1,footer/(captionHeight+legendHeight+notesHeight+12));
+  if(11*scale*footerScale<9&&legendRows>0)throw Error('Too many legend categories for this image. Hide categories or use a larger image.');
   if(viewportHeight<100||viewportWidth<100)throw Error('Legend/text needs more space. Use fewer visible layers, a smaller text size, or a larger image.');
   container.style.cssText='position:fixed;inset:auto;left:-10000px;top:0;width:'+viewportWidth+'px;height:'+viewportHeight+'px;pointer-events:none';
-  map.invalidateSize({pan:false,animate:false});map.fitBounds(oldBounds,{animate:false,padding:[0,0]});await pause(150);
+  map.invalidateSize({pan:false,animate:false});
+  const exportBounds=L.latLngBounds([]);
+  if(fitData){filtered.forEach(f=>exportBounds.extend(boundsFor(f)));if(!exportBounds.isValid())vectorLayers.filter(l=>l.visible!==false).forEach(l=>exportBounds.extend(l.group.getBounds()));}
+  map.fitBounds(fitData&&exportBounds.isValid()?exportBounds.pad(.04):oldBounds,{animate:false,padding:[0,0]});await pause(150);
 
   const deadline=Date.now()+10000;
   while((rendering||vectorRendering)&&Date.now()<deadline)await pause(40);
@@ -124,19 +132,18 @@ async function exportMapImage(format,destination='share'){
   const y=margin+size.y;
   if(poster){
    const align=$('poster-alignment').value,captionX=align==='left'?margin+12:align==='right'?margin+size.x-12:(size.x+margin*2)/2;
-   exportText(ctx,$('poster-heading').textContent,captionX,y+40,size.x-30,'600 32px '+$('poster-typeface').value,align);
-   exportText(ctx,$('poster-description').textContent,captionX,y+66,size.x-30,'18px '+$('subtitle-typeface').value,align);
-   exportText(ctx,$('poster-coordinates').textContent,captionX,y+88,size.x-30,'14px '+$('legend-typeface').value,align);
+   exportText(ctx,$('poster-heading').textContent,captionX,y+24*footerScale,size.x-30,'600 '+(24*footerScale)+'px '+$('poster-typeface').value,align);
+   exportText(ctx,$('poster-description').textContent,captionX,y+40*footerScale,size.x-30,(12*footerScale)+'px '+$('subtitle-typeface').value,align);
   }
   legendEntries.forEach((e,i)=>{
-   const x=margin+14+(i%legendColumns)*(size.x/legendColumns),ly=y+(poster?128:18)+Math.floor(i/legendColumns)*28;
-   if(e.kind==='point')canvasPoint(ctx,x+10,ly-6,e);
+   const x=margin+14+(i%legendColumns)*(size.x/legendColumns),ly=y+(captionHeight+12+Math.floor(i/legendColumns)*16)*footerScale;
+   if(e.kind==='point'){ctx.save();ctx.translate(x+8,ly-5*footerScale);ctx.scale(.6*footerScale,.6*footerScale);canvasPoint(ctx,0,0,e);ctx.restore();}
    else{ctx.strokeStyle=e.color;ctx.lineWidth=3;ctx.setLineDash(e.style.shape==='dashed'?[7,4]:e.style.shape==='dotted'?[2,4]:[]);if(e.kind==='line'){ctx.beginPath();ctx.moveTo(x,ly-6);ctx.lineTo(x+22,ly-6);ctx.stroke()}else{if(e.style.shape!=='outline'){ctx.save();ctx.globalAlpha=.3;ctx.fillStyle=e.color;ctx.fillRect(x,ly-16,20,16);ctx.restore()}ctx.strokeRect(x,ly-16,20,16)}ctx.setLineDash([])}
-   ctx.fillStyle=studioTheme.ink;exportText(ctx,e.style.label||e.defaultName,x+30,ly,Math.max(100,size.x/legendColumns-42),'16px '+$('legend-typeface').value);
+   ctx.fillStyle=studioTheme.ink;exportText(ctx,e.style.label||e.defaultName,x+30,ly,Math.max(100,size.x/legendColumns-42),(11*footerScale)+'px '+$('legend-typeface').value);
   });
-  const measurement=$('value-legend').textContent;if(measurement)exportText(ctx,measurement,margin+14,y+footer-42,size.x-28,'14px '+$('legend-typeface').value);
+  if(measurement)exportText(ctx,measurement,margin+14,y+footer-(hasAttribution?22:8)*footerScale,size.x-28,(10*footerScale)+'px '+$('legend-typeface').value);
 
-  if(tileCount){const attribution=container.querySelector('.leaflet-control-attribution').innerText;exportText(ctx,attribution,margin+12,y+footer-16,size.x-24,'12px '+$('legend-typeface').value);}
+  if(tileCount){const attribution=container.querySelector('.leaflet-control-attribution').innerText;exportText(ctx,attribution,margin+12,y+footer-6*footerScale,size.x-24,(9*footerScale)+'px '+$('legend-typeface').value);}
   const mime=format==='png'?'image/png':'image/jpeg',data=canvas.toDataURL(mime,.94),name='mapbanai-map.'+(format==='png'?'png':'jpg');
   if(window.MapBanaiExport)window.MapBanaiExport.postMessage(JSON.stringify({content:data,name,type:mime,destination}));
   else{const a=document.createElement('a');a.href=data;a.download=name;a.click();}

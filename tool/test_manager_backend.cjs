@@ -3,7 +3,14 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 class Sheet {
-  constructor(rows=[],name='') { this.rows=rows; this.capacity=Math.max(2,rows.length); this.columns=26; this.name=name; }
+  constructor(rows=[],name='') { this.rows=rows; this.capacity=Math.max(2,rows.length); this.columns=26; this.name=name; this.images=[]; }
+  getImages(){return this.images;}
+  setColumnWidth(){}
+  setRowHeight(){}
+  insertImage(blob,c,r){
+    const image={width:640,height:480,title:'',getWidth(){return this.width;},getHeight(){return this.height;},setWidth(v){this.width=v;},setHeight(v){this.height=v;},setAltTextTitle(v){this.title=v;},getAltTextTitle(){return this.title;},setAltTextDescription(){},setAnchorCell(){},remove:()=>{this.images=this.images.filter(i=>i!==image);}};
+    this.images.push(image);return image;
+  }
   getName(){return this.name;}
   getMaxColumns(){return this.columns;}
   insertColumnsAfter(start,n){this.columns+=n;}
@@ -13,6 +20,8 @@ class Sheet {
   insertRowsAfter(start,n) { this.capacity+=n; }
   getDataRange() { return {getValues:()=>this.rows}; }
   getRange(r,c,h,w) { return {
+    setValue:v=>{this.rows[r-1]??=[];this.rows[r-1][c-1]=v;},
+    setRichTextValue:v=>{this.rows[r-1]??=[];this.rows[r-1][c-1]=v;},
     getValues:()=>Array.from({length:h},(_,i)=>Array.from({length:w},(_,j)=>this.rows[r-1+i]?.[c-1+j]??'')),
     setValues: values=>{ assert(r+h-1<=this.capacity); values.forEach((row,i)=>{this.rows[r-1+i]??=[]; row.forEach((v,j)=>{this.rows[r-1+i][c-1+j]=String(v).replace(/^'(?=[=+@\-])/,'');});}); }
   }; }
@@ -26,9 +35,9 @@ const context=vm.createContext({
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties.get(k),setProperty:(k,v)=>properties.set(k,v)})},
   Session:{getActiveUser:()=>({getEmail:()=>activeUser}),getEffectiveUser:()=>({getEmail:()=> 'manager@example.com'})},
   ContentService:{MimeType:{JSON:'json'},createTextOutput:s=>({setMimeType:()=>JSON.parse(s)})},
-  SpreadsheetApp:{getActiveSpreadsheet:()=>book,openById:id=>{assert(['questions','data'].includes(id));return book;},flush:()=>{}},
+  SpreadsheetApp:{newRichTextValue:()=>({setText(v){this.text=v;return this;},setLinkUrl(v){this.url=v;return this;},build(){return {text:this.text,url:this.url};}}),getUi:()=>({alert:()=>{}}),getActiveSpreadsheet:()=>book,openById:id=>{assert(['questions','data'].includes(id));return book;},flush:()=>{}},
   LockService:{getScriptLock:()=>({tryLock:()=>{locked=true;return true;},hasLock:()=>locked,releaseLock:()=>{locked=false;}})},
-  DriveApp:{getFolderById:id=>({getName:()=> 'Photos',getFilesByName:n=>({hasNext:()=>files.has(n),next:()=>files.get(n)}),createFile:blob=>{writes++;const file={getId:()=> 'file-'+writes,getUrl:()=> 'private-url'};files.set(blob.name,file);return file;}})},
+  DriveApp:{getFileById:id=>[...files.values()].find(f=>f.getId()===id),getFolderById:id=>({getName:()=> 'Photos',getFilesByName:n=>({hasNext:()=>files.has(n),next:()=>files.get(n)}),createFile:blob=>{writes++;const file={getId:()=> 'file-'+writes,getUrl:()=> 'private-url',getThumbnail:()=>({getBytes:()=>Buffer.from('preview')}),getBlob:()=>({getBytes:()=>Buffer.from('full')})};files.set(blob.name,file);return file;}})},
   Utilities:{base64Decode:s=>Buffer.from(s,'base64'),newBlob:(bytes,type,name)=>({bytes,type,name})}
 });
 vm.runInContext(fs.readFileSync('assets/help/manager_apps_script.gs','utf8'),context);
@@ -55,6 +64,36 @@ assert.equal(call({action:'sync_data',responses:[{response_id:'=IMPORTXML("url")
 const photo={action:'upload_photo',photoId:'a'.repeat(64),responseId:'r1',filename:'a.jpg',mimeType:'image/jpeg',base64:'YWJj'};
 assert.equal(call(photo).ok,true);assert.equal(call(photo).ok,true);assert.equal(writes,1);assert.equal(tabs.photos.getLastRow(),2);
 assert.equal(call({...photo,mimeType:'application/javascript'}).ok,false);assert.equal(writes,1);
+
+const photoCell = name => tabs.photos.rows[1][tabs.photos.rows[0].indexOf(name)];
+assert.equal(photoCell('filename'), 'a.jpg');
+assert.equal(photoCell('response_id'), 'r1');
+assert.equal(photoCell('photo_link').url, 'https://drive.google.com/file/d/file-1/view');
+assert.equal(tabs.photos.images.length, 1, 'retries must not duplicate previews');
+assert.equal(tabs.photos.images[0].width, 133);
+assert.equal(tabs.photos.images[0].height, 100);
+// A previously synced JSON-only photo gets readable metadata, link and image.
+tabs.photos.images = [];
+context.refreshPhotoPreviews();
+assert.equal(tabs.photos.images.length, 1);
+context.refreshPhotoPreviews();
+assert.equal(tabs.photos.images.length, 1);
+assert.equal(photoCell('photo_link').text, 'Open photo in Drive');
+const savedFile = [...files.values()][0];
+tabs.photos.images = [];
+savedFile.getThumbnail = () => null;
+savedFile.getBlob = () => ({getBytes:()=>({length:3*1024*1024})});
+assert.equal(call(photo).ok, true, 'preview failure must not fail uploaded photo');
+assert.equal(tabs.photos.images.length, 0);
+assert.match(photoCell('photo_preview'), /Preview unavailable/);
+assert.equal(photoCell('photo_link').url, 'https://drive.google.com/file/d/file-1/view');
+savedFile.getThumbnail = () => ({getBytes:()=>Buffer.from('preview')});
+context.refreshPhotoPreviews();
+assert.equal(tabs.photos.images.length, 1, 'refresh retries unavailable thumbnails');
+activeUser = 'enumerator@example.com';
+assert.throws(()=>context.refreshPhotoPreviews(), /manager account/);
+activeUser = 'manager@example.com';
+
 assert.equal(call({action:'sync_data',responses:[{response_id:'huge',text:'x'.repeat(160000)}],features:[]}).ok,false);
 assert.equal(locked,false);
 assert.equal(call(batch).ok,true);
@@ -72,6 +111,13 @@ assert.equal(call({action:'sync_data',responses:[{response_id:'legacy',response_
 assert.equal(tabs.Responses.getLastRow(),2);assert.equal(recordAt(tabs.Responses).answers.salinity,3);
 assert.equal(context.getMapDataPayload('Responses').featureCollection.features[0].geometry.coordinates[0],90.4);
 delete tabs.Responses;tabs.responses=original;
+assert.equal(call({action:'sync_data',responses:[],features:[{feature_id:'study-1',geometry_type:'point',geojson:{type:'Point',coordinates:[90.4,23.8]},study_site:{status:'verified',revision:3},attributes:{layer:'Water points'}}]}).ok,true);
+const studyPayload=context.getMapDataPayload('features');
+const studyFeature=studyPayload.featureCollection.features.find(f=>f.properties.id==='study-1');
+assert.equal(studyFeature.properties.source,'study_area');
+assert.equal(studyFeature.properties.site_status,'verified');
+assert.equal(studyFeature.properties.answers.layer,'Water points');
+assert.equal(JSON.stringify(studyPayload),JSON.stringify(JSON.parse(JSON.stringify(studyPayload))));
 tabs.responses.rows[0][0]='incompatible';assert.equal(call(batch).ok,false);
 console.log('Manager backend contract checks passed: auth, project isolation, questionnaire, updates, chunking, expansion, validation, retries and photo deduplication.');
 

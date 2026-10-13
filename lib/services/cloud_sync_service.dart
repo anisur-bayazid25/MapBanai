@@ -148,7 +148,22 @@ class CloudSyncService {
 
   /// Syncs unsynced responses + features for [projectId].
   /// Throws [CloudSyncException] on failure; marks rows only on {ok:true}.
+  static final Set<(AppDatabase, int)> _activeSyncs = {};
+
   Future<SyncResult> syncProject(int projectId) async {
+    final key = (db, projectId);
+    if (!_activeSyncs.add(key)) {
+      throw const CloudSyncException(
+          'This project is already syncing. Wait for it to finish.');
+    }
+    try {
+      return await _syncProject(projectId);
+    } finally {
+      _activeSyncs.remove(key);
+    }
+  }
+
+  Future<SyncResult> _syncProject(int projectId) async {
     final config = await db.getSyncConfig(projectId);
     final rawUrl = config?.syncEndpointUrl?.trim() ?? '';
     if (rawUrl.isEmpty) {
@@ -190,15 +205,44 @@ class CloudSyncService {
       return const SyncResult(responsesSynced: 0, featuresSynced: 0);
     }
 
+    var responsesSynced = 0, featuresSynced = 0;
+    // Small sequential requests keep Apps Script execution and lock time bounded.
+    final pending = [...unsyncedResponses, ...unsyncedFeatures];
+    final responseIds = unsyncedResponses.map((s) => s.id).toSet();
+    for (var offset = 0; offset < pending.length; offset += 20) {
+      final chunk = pending.skip(offset).take(20).toList();
+      final result = await _syncBatch(
+          projectId,
+          uri,
+          apiKey,
+          project.externalId!,
+          project.name,
+          chunk.where((s) => responseIds.contains(s.id)).toList(),
+          chunk.where((s) => !responseIds.contains(s.id)).toList());
+      responsesSynced += result.responsesSynced;
+      featuresSynced += result.featuresSynced;
+    }
+    return SyncResult(
+        responsesSynced: responsesSynced, featuresSynced: featuresSynced);
+  }
+
+  Future<SyncResult> _syncBatch(
+      int projectId,
+      Uri uri,
+      String apiKey,
+      String externalId,
+      String projectName,
+      List<SurveySession> unsyncedResponses,
+      List<SurveySession> unsyncedFeatures) async {
     final responsesPayload =
-        _buildResponsesPayload(unsyncedResponses, project.name);
+        _buildResponsesPayload(unsyncedResponses, projectName);
     final featuresPayload =
-        _buildFeaturesPayload(unsyncedFeatures, project.name);
+        _buildFeaturesPayload(unsyncedFeatures, projectName);
 
     final body = jsonEncode({
       'apiKey': apiKey,
       'action': 'sync_data',
-      'projectId': project.externalId,
+      'projectId': externalId,
       'responses': responsesPayload,
       'features': featuresPayload,
     });
@@ -208,17 +252,33 @@ class CloudSyncService {
       final client = _client ?? http.Client();
       final shouldClose = _client == null;
       try {
-        httpResponse = await _postJsonWithRedirect(
-          client: client,
-          uri: uri,
-          headers: {'Content-Type': 'application/json'},
-          body: body,
-        ).timeout(const Duration(seconds: 30));
+        for (var attempt = 0;; attempt++) {
+          httpResponse = await _postJsonWithRedirect(
+            client: client,
+            uri: uri,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          ).timeout(const Duration(seconds: 90));
+          dynamic reply;
+          try {
+            reply = jsonDecode(httpResponse.body);
+          } catch (_) {}
+          final busy = reply is Map &&
+              reply['ok'] != true &&
+              (reply['error']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('server busy') ??
+                  false);
+          if (!busy || attempt >= 2) break;
+          await Future<void>.delayed(Duration(seconds: 2 * (attempt + 1)));
+        }
       } finally {
         if (shouldClose) client.close();
       }
     } on TimeoutException {
-      throw const CloudSyncException('Sync timed out after 30s');
+      throw const CloudSyncException(
+          'The sync server took too long to respond. Saved batches stay synced; retry to send the remaining records.');
     } on CloudSyncException {
       rethrow;
     } catch (e) {
@@ -238,7 +298,7 @@ class CloudSyncService {
       }
       // Provide a more actionable message for 405
       if (httpResponse.statusCode == 405) {
-        throw CloudSyncException(
+        throw const CloudSyncException(
           'Sync failed: HTTP 405 Method Not Allowed — the endpoint rejected the request. '
           'Verify the Apps Script is deployed as a Web App (Execute as: Me, Who has access: Anyone), '
           'implements function doPost(e), and that you saved the /exec URL (not /dev).',

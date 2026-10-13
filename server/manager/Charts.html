@@ -67,7 +67,7 @@
 <div id="app-container"><div id="workspace-header"><div><h1>MapBanai · Field insights</h1><p>Turn collected answers into clear, shareable charts.</p></div><button onclick="loadSheetData(document.getElementById('sheetSelect').value)">Refresh</button></div><div id="chart-status" role="status">Loading collections…</div>
   <div id="toolbar">
     <div class="tool-group">
-      <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+      <button id="workspace-fullscreen" aria-pressed="false">⛶ Fullscreen</button>
     </div>
 
     <div class="tool-group">
@@ -353,12 +353,6 @@ const plainPlotText=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
     Plotly.react('chartCanvas', [trace], layout, { responsive: true, displayModeBar: false });
   }
 
-  function toggleFullscreen() {
-    const elem = document.getElementById('app-container');
-    if (!document.fullscreenElement) elem.requestFullscreen();
-    else document.exitFullscreen();
-  }
-
   function exportChart(format) {
     const chartDiv = document.getElementById('chartCanvas');
     if(!window.Plotly||!chartDiv.data){chartStatus('Create a chart first.');return;}
@@ -377,6 +371,26 @@ const plainPlotText=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
       Plotly.downloadImage(chartDiv, { format: 'svg', width,height,filename: title + '_vector' });
     }
   }
+</script>
+
+<script>
+(function(){
+ const button=document.getElementById('workspace-fullscreen');let expanded=false;
+ const normal={width:window.innerWidth,height:window.innerHeight};
+ function resize(){setTimeout(()=>{if(window.workspaceMap)window.workspaceMap.invalidateSize({pan:false});const chart=document.getElementById('chartCanvas');if(window.Plotly&&chart&&chart.data)Plotly.Plots.resize(chart)},150)}
+ function label(){button.textContent=document.fullscreenElement||expanded?'Exit fullscreen':'Fullscreen';button.setAttribute('aria-pressed',String(!!document.fullscreenElement||expanded));resize()}
+ async function toggle(){
+  if(document.fullscreenElement){await document.exitFullscreen();return;}
+  const host=window.google&&google.script&&google.script.host;
+  if(expanded){if(host){host.setWidth(normal.width);host.setHeight(normal.height)}expanded=false;label();return;}
+  if(document.fullscreenEnabled&&document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();label();return}catch(_){}}
+  if(host&&host.setWidth&&host.setHeight){host.setWidth(Math.max(normal.width,screen.availWidth-48));host.setHeight(Math.max(normal.height,screen.availHeight-130));expanded=true;button.title='Expanded Google Sheets dialog; browser fullscreen is restricted by Google.';label();return;}
+  button.title='Use your browser fullscreen command to expand this window.';button.textContent='Use browser fullscreen';
+ }
+ button.onclick=()=>toggle().catch(error=>{button.title=error.message;button.textContent='Use browser fullscreen'});
+ document.addEventListener('fullscreenchange',label);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&expanded)toggle()});
+})();
 </script>
 </body>
 </html>

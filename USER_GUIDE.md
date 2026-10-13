@@ -223,3 +223,13 @@ All features start with the same color. Tap Categories & colors, choose a column
 Imports refresh the map immediately after saving. A sync-queue warning means the features are saved; retry Cloud Sync from Home instead of re-importing.
 
 Study Area → Edit feature: questionnaires are mandatory for newly created features and Updated/New feature statuses. For Pending verification, Completed (legacy), Verified unchanged, Not found and Needs review, saving skips the questionnaire unless Fill questionnaire (optional) is checked. Existing answers are preserved when skipped. Categories & colors offers explicit Verification status coloring as well as attribute columns; the default remains a single color.
+
+### GPS accuracy review
+
+Open Home → Field quality checks. Select **GPS accuracy review limit**; only saved photo/location readings strictly above this limit appear. Nearby-feature pairs, missing answers and other findings are no longer listed here. Missing or unknown accuracy is not treated as exceeding the limit.
+
+Choose **View record** to inspect the original, or **Accept accuracy** to keep it and remove this reading from the review list. Acceptance and the chosen review limit persist per project on this device. The photo/data and sync state are unchanged. Use **Undo** in the confirmation message to restore an accepted finding. A changed GPS reading can appear again. These review decisions are local and are not uploaded to the manager sheet. GPS accuracy remains advisory and does not block photo capture.
+
+Poster exports reserve over 80% of the image for the map, with compact titles and categorical legends. In Download Map, use Fit visible data to fit filtered features, or Current map view to keep the current framing. Coordinates are omitted below the title. Use Explore → Colours & categories for text/numeric columns, per-value colours/visibility, or graduated numeric colours. In Google Sheets, map and charts support Fullscreen (expanded-dialog fallback), and manager maps can add temporary GeoJSON/shapefile ZIP overlays.
+
+Cloud sync sends at most 20 records per batch and preserves acknowledged progress. Retry resumes remaining records. New photo uploads populate previews and Drive links in photos; refresh older previews through the spreadsheet MapBanai menu. Update all matching manager files and redeploy Code.gs when updating the backend.

@@ -33,6 +33,83 @@ void main() {
     return id;
   }
 
+  test('460 sites sync in bounded batches and resume after a failed batch',
+      () async {
+    var requests = 0;
+    var fail = true;
+    final sizes = <int>[];
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      final payload = jsonDecode(await utf8.decoder.bind(req).join()) as Map;
+      sizes.add((payload['responses'] as List).length +
+          (payload['features'] as List).length);
+      requests++;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode(requests == 3 && fail
+          ? {'ok': false, 'error': 'Temporary service failure'}
+          : {'ok': true, 'revisionSupport': true}));
+      await req.response.close();
+    });
+    try {
+      final projectId =
+          await createProjectWithSync('http://127.0.0.1:${server.port}/exec');
+      await db.batch((b) => b.insertAll(
+          db.surveySessions,
+          List.generate(
+              460,
+              (i) => SurveySessionsCompanion.insert(
+                  projectId: projectId,
+                  title: 'Site $i',
+                  status: const drift.Value('saved'),
+                  externalId: drift.Value('site-$i'),
+                  responses: drift.Value(jsonEncode({
+                    'feature_type': 'point',
+                    'latitude': 23.8,
+                    'longitude': 90.4
+                  }))))));
+      final service = CloudSyncService(db);
+      await expectLater(
+          service.syncProject(projectId), throwsA(isA<CloudSyncException>()));
+      expect(await service.queryUnsyncedFeatures(projectId), hasLength(420));
+      fail = false;
+      final result = await service.syncProject(projectId);
+      expect(result.featuresSynced, 420);
+      expect(await service.queryUnsyncedFeatures(projectId), isEmpty);
+      expect(sizes.every((size) => size <= 20), isTrue);
+      expect(requests, 24);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('busy server retries the same batch before acknowledging rows',
+      () async {
+    var requests = 0;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((req) async {
+      await utf8.decoder.bind(req).join();
+      requests++;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode(requests == 1
+          ? {'ok': false, 'error': 'Server busy. Retry sync.'}
+          : {'ok': true, 'revisionSupport': true}));
+      await req.response.close();
+    });
+    try {
+      final id =
+          await createProjectWithSync('http://127.0.0.1:${server.port}/exec');
+      await db.into(db.surveySessions).insert(SurveySessionsCompanion.insert(
+          projectId: id,
+          title: 'Site',
+          status: const drift.Value('saved'),
+          responses: const drift.Value('{"feature_type":"point"}')));
+      expect((await CloudSyncService(db).syncProject(id)).featuresSynced, 1);
+      expect(requests, 2);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
   test('queryUnsynced splits responses and features', () async {
     final projectId = await db.into(db.projects).insert(
           ProjectsCompanion.insert(name: 'ProjA'),
@@ -140,7 +217,8 @@ void main() {
       expect(captured, hasLength(1));
       final payload = captured.first;
       expect(payload['apiKey'], 'test-key-123');
-      expect(payload['projectId'], (await db.getProjectById(projectId))!.externalId);
+      expect(payload['projectId'],
+          (await db.getProjectById(projectId))!.externalId);
       expect(payload['projectId'], isNotEmpty);
       expect(payload['action'], 'sync_data');
       expect(payload['responses'], isA<List>());
@@ -391,7 +469,9 @@ void main() {
     }
   });
 
-  test('stable UUID: same record re-synced produces same response_id and is deduped', () async {
+  test(
+      'stable UUID: same record re-synced produces same response_id and is deduped',
+      () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final seenIds = <String>{};
     var firstId = '';
@@ -401,7 +481,9 @@ void main() {
       final body = await utf8.decoder.bind(req).join();
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final responses = decoded['responses'] as List;
-      final id = responses.isNotEmpty ? (responses.first as Map)['response_id'] as String : '';
+      final id = responses.isNotEmpty
+          ? (responses.first as Map)['response_id'] as String
+          : '';
       if (callCount == 0) {
         firstId = id;
         seenIds.add(id);
@@ -414,7 +496,8 @@ void main() {
         final isDuplicate = seenIds.contains(id);
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
-        req.response.write(jsonEncode({'ok': true, 'responses': isDuplicate ? 0 : 1}));
+        req.response
+            .write(jsonEncode({'ok': true, 'responses': isDuplicate ? 0 : 1}));
         await req.response.close();
       }
       callCount++;
@@ -437,7 +520,9 @@ void main() {
         ),
       );
       // Ensure externalId was generated
-      final inserted = await (db.select(db.surveySessions)..where((t) => t.id.equals(sessionId))).getSingle();
+      final inserted = await (db.select(db.surveySessions)
+            ..where((t) => t.id.equals(sessionId)))
+          .getSingle();
       expect(inserted.externalId, isNotNull);
       expect(inserted.externalId!.isNotEmpty, isTrue);
 

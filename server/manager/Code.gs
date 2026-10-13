@@ -405,6 +405,8 @@ function upsert_(sheet, rows) {
     'answers_json',
     'geojson',
   ];
+  if (sheet.getName().toLowerCase() === 'photos')
+    readable.push('photo_id', 'filename', 'response_id', 'file_id', 'url', 'mime_type', 'photo_preview', 'photo_link');
   readable.forEach((h) => {
     if (!headers.includes(h)) headers.push(h);
   });
@@ -501,6 +503,7 @@ function onOpen() {
     .createMenu('MapBanai')
     .addItem('Open map workspace', 'launchMapModal')
     .addItem('Open charts workspace', 'launchChartModal')
+    .addItem('Refresh photo previews', 'refreshPhotoPreviews')
     .addItem('Connection and setup guide', 'showConnectionInfo')
     .addToUi();
 }
@@ -609,7 +612,8 @@ function getMapDataPayload(sheetName) {
   rows.forEach((row) => {
     const answers = parseJSON_(row.answers_json, {}),
       g = parseJSON_(row.geojson, null),
-      point = point_(row);
+      point = point_(row),
+      site = parseJSON_(row.study_site, null);
     const geometry =
       g && g.type === 'Feature'
         ? g.geometry
@@ -622,7 +626,10 @@ function getMapDataPayload(sheetName) {
       form_name: row.form_name || row.geometry_type || row._record_kind,
       surveyor: row.surveyor,
       submitted_at: row.submitted_at || row.received_at || row.synced_at,
-      source: row._record_kind === 'feature' ? 'gis' : 'collection',
+      source: site ? 'study_area' : row._record_kind === 'feature' ? 'gis' : 'collection',
+      site_status: site ? site.status : row.site_status,
+      status: site ? site.status : row.status,
+      revision: site ? site.revision : row.response_revision,
       layer_id: row.layer_id || 'default',
       layer_name: row.layer_id || 'Main layer',
       response_revision: row.response_revision,
@@ -647,7 +654,7 @@ function getMapDataPayload(sheetName) {
         });
     });
   });
-  return {
+  return JSON.parse(JSON.stringify({
     data: rows,
     headers: [...new Set(rows.flatMap((row) => Object.keys(row)))],
     sheetName: sheetName || 'All collections',
@@ -658,7 +665,7 @@ function getMapDataPayload(sheetName) {
       features,
       vector_layers: [],
     },
-  };
+  }));
 }
 
 function uploadPhoto_(book, payload) {
@@ -693,6 +700,86 @@ function uploadPhoto_(book, payload) {
       mime_type: payload.mimeType,
     }),
   ]);
+  const sheet = dataTab_(book, 'photos');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rows = sheet.getDataRange().getValues();
+  const row = rows.findIndex((cells, i) => i > 0 && String(cells[headers.indexOf('record_id')]) === payload.photoId) + 1;
+  photoPreview_(sheet, row, headers, file, payload.photoId);
   SpreadsheetApp.flush();
   return reply_({ ok: true, fileId: file.getId() });
+}
+
+// Embed a private Drive thumbnail rather than an IMAGE formula requiring public URLs.
+function photoPreview_(sheet, row, headers, file, photoId) {
+  const previewColumn = headers.indexOf('photo_preview') + 1;
+  const linkColumn = headers.indexOf('photo_link') + 1;
+  const url = 'https://drive.google.com/file/d/' + encodeURIComponent(file.getId()) + '/view';
+  sheet.getRange(row, linkColumn).setRichTextValue(
+    SpreadsheetApp.newRichTextValue().setText('Open photo in Drive').setLinkUrl(url).build(),
+  );
+  const marker = 'MapBanai photo:' + photoId;
+  const prior = sheet.getImages().find((image) => image.getAltTextTitle() === marker);
+  if (prior) {
+    prior.setAnchorCell(sheet.getRange(row, previewColumn));
+    sheet.setRowHeight(row, 112);
+    return true;
+  }
+  let image;
+  try {
+    const blob = file.getThumbnail() || file.getBlob();
+    if (blob.getBytes().length > 2 * 1024 * 1024)
+      throw Error('Image exceeds Sheets preview limit');
+    image = sheet.insertImage(blob, previewColumn, row);
+    const scale = Math.min(144 / image.getWidth(), 100 / image.getHeight(), 1);
+    image.setWidth(Math.max(1, Math.round(image.getWidth() * scale)));
+    image.setHeight(Math.max(1, Math.round(image.getHeight() * scale)));
+    image.setAltTextTitle(marker);
+    image.setAltTextDescription('Field photo; open the adjacent Drive link for the original.');
+    sheet.setColumnWidth(previewColumn, 156);
+    sheet.setRowHeight(row, 112);
+    sheet.getRange(row, previewColumn).setValue('');
+    return true;
+  } catch (_) {
+    if (image) image.remove();
+    sheet.getRange(row, previewColumn).setValue('Preview unavailable; use Drive link. Retry Refresh photo previews.');
+    return false;
+  }
+}
+function refreshPhotoPreviews() {
+  requireManager_();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw Error('Sync is running. Try again shortly.');
+  let completed = 0, failed = 0, remaining = 0;
+  try {
+    const book = SpreadsheetApp.openById(config_().dataSheetId);
+    const sheet = dataTab_(book, 'photos');
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const items = values.slice(1).map((cells) => {
+      const encoded = ['json_1', 'json_2', 'json_3', 'json_4'].map((h) => cells[headers.indexOf(h)] || '').join('');
+      return parseJSON_(encoded, null);
+    });
+    upsert_(sheet, items.filter((item) => item && item.photo_id && item.file_id).map((item) => record_(item.photo_id, item)));
+    const current = sheet.getDataRange().getValues(), columns = current[0];
+    const existing = new Set(sheet.getImages().map((image) => image.getAltTextTitle()));
+    const started = Date.now();
+    let attempted = 0;
+    current.slice(1).forEach((cells, index) => {
+      const photoId = cells[columns.indexOf('photo_id')], fileId = cells[columns.indexOf('file_id')];
+      if (!photoId || !fileId) return;
+      if (existing.has('MapBanai photo:' + photoId)) {
+        photoPreview_(sheet, index + 2, columns, { getId: () => String(fileId) }, photoId);
+        return;
+      }
+      if (attempted >= 50 || Date.now() - started > 240000) { remaining++; return; }
+      attempted++;
+      try {
+        const file = DriveApp.getFileById(String(fileId));
+        if (photoPreview_(sheet, index + 2, columns, file, photoId)) completed++;
+        else failed++;
+      } catch (_) { failed++; }
+    });
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  SpreadsheetApp.getUi().alert('Photo previews: ' + completed + ' added, ' + failed + ' unavailable, ' + remaining + ' remaining. Run again for remaining photos. Drive links require permission to the photo folder.');
 }
