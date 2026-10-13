@@ -4,6 +4,15 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.6.5] - 2026-10-13
+
+- Fixed Android spatial-file selection by choosing any file and validating formats after selection. Added zipped shapefile imports with companion attributes, safe extraction and size limits.
+- Spatial files opened from Android file managers now offer an existing project, new project or view-only Study Area preview. Project packages retain their own import flow.
+- Fixed study import project binding: features are refreshed immediately after saving, local project IDs are retained explicitly during imports, and sync-queue failures no longer report the saved map as a failed import.
+- Removed duplicate Study Area import buttons; the top toolbar provides import/export. Project names align left; Add new Layer is inside the layer selector. The plus button opens the selected questionnaire at a fresh GPS location; long-press placement remains available.
+- Added Categories & colors: all features have one default color. Choose any attribute column for category colors, select visible categories and adjust point size. Style choices are saved per project/study layer.
+- Centered Home Field quality checks and Offline maps buttons as a group.
+
 ## [2.6.4] - 2026-10-13
 
 - Replaced the public health-only sync test with authenticated, read-only project/key/data-sheet verification, with deployment/sign-in diagnostics and updated manager setup guidance.
@@ -457,3 +466,5 @@ Guided visits remain separate observations, linked through stable feature UUIDs.
 Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
 
 This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).
+
+Study Area → Edit feature: questionnaires are mandatory for newly created features and Updated/New feature statuses. For Pending verification, Completed (legacy), Verified unchanged, Not found and Needs review, saving skips the questionnaire unless Fill questionnaire (optional) is checked. Existing answers are preserved when skipped. Categories & colors offers explicit Verification status coloring as well as attribute columns; the default remains a single color.

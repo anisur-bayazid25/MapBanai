@@ -1,3 +1,6 @@
+import 'package:mapbanai/services/study_feature_policy.dart';
+import 'package:mapbanai/services/study_category_style.dart';
+import 'package:mapbanai/services/spatial_file_import.dart';
 import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
 import 'package:mapbanai/services/study_area_outbox_service.dart';
@@ -33,8 +36,12 @@ class StudyAreaModeScreen extends StatefulWidget {
       this.initialSelectedSiteId,
       this.projectId,
       this.database,
-      this.projectExternalId});
+      this.projectExternalId,
+      this.initialImportPath,
+      this.viewOnly = false});
 
+  final String? initialImportPath;
+  final bool viewOnly;
   final StudyAreaStore? store;
   final String? initialSelectedSiteId;
   final int? projectId;
@@ -67,6 +74,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
   bool _isLoading = true;
   StudyAreaStatus? _filter;
+  StudyCategoryStyle _categoryStyle = StudyCategoryStyle();
+  String? _categoryWorkspaceKey;
   String? _drawType;
   StudyAreaSite? _drawingSite;
   final List<LatLng> _draft = [];
@@ -89,9 +98,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           id = context.read<ProjectState>().selectedProjectId;
         } catch (_) {}
       }
-      if (id != null)
+      if (id != null && !widget.viewOnly)
         _workspace = await ProjectWorkspaceService(_database).load(id);
       await _loadSites();
+      if (widget.initialImportPath != null && !widget.viewOnly)
+        await _importSites(pathOverride: widget.initialImportPath);
     } catch (error) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -161,16 +172,32 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       }
       return;
     }
+    final styleKey =
+        'study_category:${_workspace?.project.externalId}:${_workspace?.layerId}';
+    if (_categoryWorkspaceKey != styleKey) {
+      _categoryWorkspaceKey = styleKey;
+      final saved =
+          widget.viewOnly ? null : await _database.getSetting(styleKey);
+      try {
+        _categoryStyle = saved == null
+            ? StudyCategoryStyle()
+            : StudyCategoryStyle.fromJson(jsonDecode(saved));
+      } catch (_) {
+        _categoryStyle = StudyCategoryStyle();
+      }
+    }
     if (!mounted) return;
     setState(() {
-      _sites = _workspace == null
-          ? []
-          : sites
-              .where((site) =>
-                  GuidedVisitService.belongsToProject(
-                      site, _workspace!.project) &&
-                  site.layerId == _workspace!.layerId)
-              .toList();
+      _sites = widget.viewOnly
+          ? sites
+          : _workspace == null
+              ? []
+              : sites
+                  .where((site) =>
+                      GuidedVisitService.belongsToProject(
+                          site, _workspace!.project) &&
+                      site.layerId == _workspace!.layerId)
+                  .toList();
       if (_selectedSite == null && widget.initialSelectedSiteId != null) {
         _selectedSite = _sites
             .where((s) => s.id == widget.initialSelectedSiteId)
@@ -338,10 +365,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     }
     _lines.clear();
     _fills.clear();
-    for (final site
-        in _sites.where((s) => _filter == null || s.status == _filter)) {
+    _categoryStyle.categories(_sites);
+    for (final site in _sites.where((s) =>
+        (_filter == null || s.status == _filter) &&
+        _categoryStyle.visible(s))) {
       try {
-        final color = site.status.mapColor;
+        final color = _categoryStyle.color(site);
         List<LatLng> points(dynamic values) => (values as List)
             .map((v) =>
                 LatLng((v[1] as num).toDouble(), (v[0] as num).toDouble()))
@@ -361,7 +390,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   CircleOptions(
                       geometry: LatLng((vertex[1] as num).toDouble(),
                           (vertex[0] as num).toDouble()),
-                      circleRadius: 8,
+                      circleRadius: _categoryStyle.radius,
                       circleColor: color,
                       circleStrokeColor: '#FFFFFF',
                       circleStrokeWidth: 2),
@@ -400,7 +429,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           final circle = await controller.addCircle(
             CircleOptions(
               geometry: LatLng(site.latitude, site.longitude),
-              circleRadius: 8,
+              circleRadius: _categoryStyle.radius,
               circleColor: color,
               circleStrokeWidth: 2,
               circleStrokeColor: '#FFFFFF',
@@ -472,38 +501,24 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     }
   }
 
-  Future<void> _importSites() async {
-    if (_workspace == null) {
-      _showSnack("Select a project first");
+  Future<void> _importSites({String? pathOverride}) async {
+    if (_workspace == null || widget.viewOnly) {
+      _showSnack('Select a project first');
       return;
     }
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        'csv',
-        'geojson',
-        'json',
-        'kml',
-        'kmz',
-        'gpkg',
-        'xlsx',
-        'shp',
-      ],
-      withData: false,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final path = file.path;
-    if (path == null) {
-      _showSnack('Could not read file path');
-      return;
-    }
+    final result = pathOverride == null
+        ? await FilePicker.platform.pickFiles(
+            type: FileType.any,
+            withData: false,
+          )
+        : null;
+    final path = pathOverride ?? result?.files.firstOrNull?.path;
+    if (path == null) return;
     final ioFile = File(path);
-    if (!ioFile.existsSync()) {
-      _showSnack('File not found');
+    if (!SpatialFileImport.supports(path)) {
+      _showSnack('Select GeoJSON, GeoPackage, SHP/ZIP, CSV, Excel or KML/KMZ.');
       return;
     }
-    final ext = path.split('.').last.toLowerCase();
     // Show loading
     if (!mounted) return;
     showDialog(
@@ -513,40 +528,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     );
     var loadingDialogOpen = true;
     try {
-      List<StudyAreaSite> imported = [];
-      if (ext == 'csv') {
-        final text = await ioFile.readAsString();
-        imported = StudyAreaService.parseCsv(text);
-      } else if (ext == 'geojson' || ext == 'json') {
-        final text = await ioFile.readAsString();
-        final trimmed = text.trimLeft();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          imported = StudyAreaService.parseGeoJson(text);
-        } else {
-          imported = StudyAreaService.parseCsv(text);
-        }
-      } else if (ext == 'kml') {
-        final text = await ioFile.readAsString();
-        imported = StudyAreaService.parseKml(text);
-      } else if (ext == 'kmz') {
-        final bytes = await ioFile.readAsBytes();
-        imported = StudyAreaService.parseKmzBytes(bytes);
-      } else if (ext == 'shp') {
-        imported = StudyAreaService.parseShapefile(ioFile);
-      } else if (ext == 'gpkg') {
-        imported = await StudyAreaService.parseGeoPackage(ioFile);
-      } else if (ext == 'xlsx') {
-        final bytes = await ioFile.readAsBytes();
-        imported = StudyAreaService.parseXlsxBytes(bytes);
-      } else {
-        // Fallback try all
-        try {
-          final text = await ioFile.readAsString();
-          imported = StudyAreaService.parseCsv(text);
-        } catch (_) {
-          imported = await StudyAreaService.parseGeoPackage(ioFile);
-        }
-      }
+      final imported = await SpatialFileImport.read(ioFile);
       if (!mounted) return;
       Navigator.of(context).pop();
       loadingDialogOpen = false;
@@ -593,13 +575,27 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           builder: (_) => StudyAreaMergeReviewDialog(preview: preview));
       if (choices == null) return;
       final merged = await _store.applyMerge(preview,
-          resolutions: choices, author: _fieldworker);
+          resolutions: choices,
+          author: _fieldworker,
+          localProjectId: workspace.project.id);
+      await _loadSites();
+      var queued = true;
       for (final site in (await _store.loadSites()).where((site) =>
           GuidedVisitService.belongsToProject(site, workspace.project) &&
           site.layerId == workspace.layerId)) {
-        await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
+        // External identity is authoritative across package imports/devices.
+        site.projectId = workspace.project.id;
+        try {
+          await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
+        } catch (_) {
+          queued = false;
+        }
       }
-      await _loadSites();
+      if (!queued) {
+        _showSnack(
+            'Map imported and saved. Some features could not enter the sync queue; retry Cloud Sync from Home.');
+        return;
+      }
       _showSnack(
           'Imported ${merged.added} new features, updated ${merged.updated}, kept ${merged.kept} local versions.');
     } catch (e) {
@@ -611,11 +607,24 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<bool> _editSite(StudyAreaSite site) async {
     var draft = site;
     while (mounted) {
+      var fillSurvey = false;
+      final isNew = !_sites.any((existing) => existing.id == site.id);
       final updated = await showDialog<StudyAreaSite>(
-          context: context, builder: (context) => _EditSiteDialog(site: draft));
+          context: context,
+          builder: (context) => _EditSiteDialog(
+              site: draft,
+              isNew: isNew,
+              onSurveyChoice: (value) => fillSurvey = value));
       if (updated == null) return false;
       final schema = _workspace?.schema;
-      if (schema != null) {
+      final requiredSurvey =
+          StudyFeaturePolicy.requiresSurvey(updated.status, isNew: isNew);
+      if (requiredSurvey && schema == null) {
+        _showSnack(
+            'New and updated features require a questionnaire. Select a survey form first.');
+        return false;
+      }
+      if (schema != null && (requiredSurvey || fillSurvey)) {
         final answers = await editFormAttributes(context,
             form: schema,
             username: _fieldworker,
@@ -675,6 +684,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   void _startDrawing(String type, {StudyAreaSite? site}) {
+    if (widget.viewOnly) return;
     if (_workspace == null) {
       _showSnack("Select a project first");
       return;
@@ -774,6 +784,55 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       _draft.clear();
     });
     _refreshMapMarkers();
+  }
+
+  Future<void> _addSurveyAtGps() async {
+    final workspace = _workspace;
+    final schema = workspace?.schema;
+    if (workspace == null || schema == null) {
+      _showSnack('Select a project and survey form first.');
+      return;
+    }
+    final gps = _currentPos;
+    if (gps == null ||
+        DateTime.now().difference(gps.timestamp).inSeconds > 30) {
+      _showSnack('Wait for a fresh GPS location before recording a site.');
+      return;
+    }
+    final geometry = <String, dynamic>{
+      'type': 'Point',
+      'coordinates': [gps.longitude, gps.latitude]
+    };
+    final answers = await editFormAttributes(context,
+        form: schema,
+        username: _fieldworker,
+        answers: FormAttributeService.prefill(schema, {}, geometry: geometry));
+    if (answers == null || !mounted) return;
+    final site = StudyAreaSite(
+        id: 'new_${DateTime.now().microsecondsSinceEpoch}',
+        latitude: gps.latitude,
+        longitude: gps.longitude,
+        geometry: geometry,
+        status: StudyAreaStatus.newFeature,
+        projectId: workspace.project.id,
+        projectExternalId: workspace.project.externalId,
+        layerId: workspace.layerId,
+        formAnswers: answers,
+        formSnapshot: schema.toJson(),
+        attributes: {
+          'name': 'New feature',
+          'gps_accuracy_m': gps.accuracy.toString(),
+          'gps_captured_at': gps.timestamp.toUtc().toIso8601String()
+        });
+    try {
+      await _store.updateSite(site, author: _fieldworker);
+      await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
+      await _loadSites();
+      if (mounted) setState(() => _selectedSite = site);
+      _showSnack('Survey feature saved');
+    } catch (e) {
+      _showSnack('Could not save feature: $e');
+    }
   }
 
   Future<void> _addSite(LatLng coordinates, {Position? gps}) async {
@@ -975,20 +1034,24 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Study Area Mode'),
-        bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(112),
-            child: ProjectWorkspaceBar(
-                database: _database,
-                workspace: _workspace,
-                onChanged: _changeWorkspace,
-                enabled: _drawType == null)),
+        title: Text(
+            widget.viewOnly ? 'Study Area — View only' : 'Study Area Mode'),
+        bottom: widget.viewOnly
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(112),
+                child: ProjectWorkspaceBar(
+                    database: _database,
+                    workspace: _workspace,
+                    onChanged: _changeWorkspace,
+                    enabled: _drawType == null && !widget.viewOnly,
+                    onAddPoint: widget.viewOnly ? null : _addSurveyAtGps)),
         actions: [
           IconButton(
             tooltip: 'Import sites',
             icon: const Icon(Icons.file_download_outlined,
                 color: Color(0xFF1565C0)),
-            onPressed: _importSites,
+            onPressed: widget.viewOnly ? null : () => _importSites(),
           ),
           IconButton(
             tooltip: 'Export sites',
@@ -1003,6 +1066,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) {
+              if (widget.viewOnly && v != 'fit') return;
               if (v == 'claim') _claimLegacy();
               if (v == 'operator') _editOperator();
               if (v == 'line') _startDrawing('LineString');
@@ -1044,7 +1108,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               }
             },
             onMapLongClick: (_, coordinates) {
-              if (_drawType == null) _addSite(coordinates);
+              if (_drawType == null && !widget.viewOnly) _addSite(coordinates);
             },
             onStyleLoadedCallback: _onStyleLoaded,
             styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
@@ -1082,16 +1146,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Import sites from CSV, GeoJSON, KML/KMZ, SHP, GeoPackage or Excel. Lat/Lon, X/Y and WKT columns are recognized.',
+                        'Use the top Import button for GeoJSON, GeoPackage, zipped shapefiles, CSV, Excel or KML/KMZ.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _importSites,
-                        icon: const Icon(Icons.file_download_outlined),
-                        label: const Text('Import sites'),
-                      ),
                     ],
                   ),
                 ),
@@ -1151,23 +1210,6 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             child: Column(
               children: [
                 FloatingActionButton.small(
-                  heroTag: 'add_sa',
-                  tooltip: 'Add feature at GPS',
-                  onPressed: () {
-                    final pos = _currentPos;
-                    if (pos == null ||
-                        DateTime.now().difference(pos.timestamp).inSeconds >
-                            60) {
-                      _showSnack(
-                          'Wait for a current GPS fix, or long-press the map to add a point.');
-                      return;
-                    }
-                    _addSite(LatLng(pos.latitude, pos.longitude), gps: pos);
-                  },
-                  child: const Icon(Icons.add_location_alt_outlined),
-                ),
-                const SizedBox(height: 8),
-                FloatingActionButton.small(
                   heroTag: 'locate_sa',
                   tooltip: 'Center on GPS',
                   onPressed: () {
@@ -1195,14 +1237,120 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           ),
         ],
       ),
-      floatingActionButton: _sites.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _importSites,
-              icon: const Icon(Icons.add_location_alt_outlined),
-              label: const Text('Import'),
-            ),
     );
+  }
+
+  Future<void> _chooseCategories() async {
+    final style = StudyCategoryStyle.fromJson(_categoryStyle.toJson());
+    final columns = _sites.expand((s) => s.attributes.keys).toSet().toList()
+      ..sort();
+    final applied = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(builder: (context, update) {
+              final categories = style.categories(_sites);
+              return AlertDialog(
+                  title: const Text('Categories & colors'),
+                  content: SizedBox(
+                      width: 360,
+                      child: SingleChildScrollView(
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                        DropdownButtonFormField<String>(
+                            value: style.column,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                                labelText: 'Color by column'),
+                            hint: const Text('Single color'),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: null, child: Text('Single color')),
+                              const DropdownMenuItem(
+                                  value: '__verification_status__',
+                                  child: Text('Verification status')),
+                              for (final column in columns)
+                                DropdownMenuItem(
+                                    value: column, child: Text(column))
+                            ],
+                            onChanged: (value) => update(() {
+                                  style.column = value;
+                                  style.colors.clear();
+                                  style.hidden.clear();
+                                })),
+                        Text('Point size: ${style.radius.round()}'),
+                        Slider(
+                            value: style.radius,
+                            min: 4,
+                            max: 12,
+                            divisions: 8,
+                            onChanged: (value) =>
+                                update(() => style.radius = value)),
+                        if (style.column != null) ...[
+                          Row(children: [
+                            TextButton(
+                                onPressed: () =>
+                                    update(() => style.hidden.clear()),
+                                child: const Text('Show all')),
+                            TextButton(
+                                onPressed: () => update(
+                                    () => style.hidden.addAll(categories)),
+                                child: const Text('Hide all'))
+                          ]),
+                          for (final category in categories)
+                            Row(children: [
+                              Checkbox(
+                                  value: !style.hidden.contains(category),
+                                  onChanged: (value) => update(() {
+                                        if (value == true) {
+                                          style.hidden.remove(category);
+                                        } else {
+                                          style.hidden.add(category);
+                                        }
+                                      })),
+                              Expanded(
+                                  child: Text(
+                                      '$category (${_sites.where((s) => style.category(s) == category).length})')),
+                              PopupMenuButton<String>(
+                                  tooltip: 'Category color',
+                                  onSelected: (color) => update(
+                                      () => style.colors[category] = color),
+                                  icon: Icon(Icons.circle,
+                                      color: Color(int.parse(
+                                          style.colors[category]!
+                                              .replaceFirst('#', 'FF'),
+                                          radix: 16))),
+                                  itemBuilder: (_) => [
+                                        for (final color
+                                            in StudyCategoryStyle.palette)
+                                          PopupMenuItem(
+                                              value: color,
+                                              child: Row(children: [
+                                                Icon(Icons.circle,
+                                                    color: Color(int.parse(
+                                                        color.replaceFirst(
+                                                            '#', 'FF'),
+                                                        radix: 16))),
+                                                const SizedBox(width: 8),
+                                                Text(color)
+                                              ]))
+                                      ])
+                            ])
+                        ]
+                      ]))),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Apply'))
+                  ]);
+            }));
+    if (applied != true || !mounted) return;
+    setState(() => _categoryStyle = style);
+    if (!widget.viewOnly && _categoryWorkspaceKey != null)
+      await _database.setSetting(
+          _categoryWorkspaceKey!, jsonEncode(style.toJson()));
+    await _refreshMapMarkers();
   }
 
   Widget _buildHeaderCard() => Card(
@@ -1212,8 +1360,17 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${_sites.length} features • Long-press map to add',
+                Text(
+                    '${_sites.where((s) => (_filter == null || s.status == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
                     style: const TextStyle(fontWeight: FontWeight.w700)),
+                TextButton.icon(
+                    onPressed: _chooseCategories,
+                    icon: const Icon(Icons.palette_outlined),
+                    label: Text(_categoryStyle.column == null
+                        ? 'Categories & colors'
+                        : _categoryStyle.column == '__verification_status__'
+                            ? 'Colors: Verification status'
+                            : 'Categories: ${_categoryStyle.column}')),
                 DropdownButton<StudyAreaStatus>(
                     value: _filter,
                     isExpanded: true,
@@ -1238,6 +1395,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
   Widget _buildSelectedPanel() {
     final site = _selectedSite!;
+    if (widget.viewOnly)
+      return Card(
+          child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                  '${site.displayName}\n${site.attributes.entries.map((e) => "${e.key}: ${e.value}").join("\n")}')));
     final pos = _currentPos;
     final dist = _distanceM;
     final bear = _bearingDeg;
@@ -1468,13 +1631,17 @@ extension _FirstWhereOrNull<E> on Iterable<E> {
 class _EditSiteDialog extends StatefulWidget {
   final StudyAreaSite site;
 
-  const _EditSiteDialog({required this.site});
+  final bool isNew;
+  final ValueChanged<bool>? onSurveyChoice;
+  const _EditSiteDialog(
+      {required this.site, this.isNew = false, this.onSurveyChoice});
 
   @override
   State<_EditSiteDialog> createState() => _EditSiteDialogState();
 }
 
 class _EditSiteDialogState extends State<_EditSiteDialog> {
+  bool _fillSurvey = false;
   late TextEditingController _latCtrl;
   late TextEditingController _lonCtrl;
   late StudyAreaStatus _status;
@@ -1581,6 +1748,21 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                 },
               ),
               const SizedBox(height: 12),
+              if (StudyFeaturePolicy.requiresSurvey(_status,
+                  isNew: widget.isNew))
+                const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                        'Questionnaire required for new or updated features.'))
+              else
+                CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Fill questionnaire (optional)'),
+                    value: _fillSurvey,
+                    onChanged: (value) {
+                      setState(() => _fillSurvey = value ?? false);
+                      widget.onSurveyChoice?.call(_fillSurvey);
+                    }),
               if (widget.site.currentGeometry['type'] != 'Point')
                 const Text(
                     'Full line/polygon geometry is retained. Coordinates show its reference vertex.',

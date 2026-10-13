@@ -7,12 +7,14 @@ class ProjectWorkspaceBar extends StatelessWidget {
   final ProjectWorkspace? workspace;
   final Future<void> Function(ProjectWorkspace) onChanged;
   final bool enabled;
+  final VoidCallback? onAddPoint;
   const ProjectWorkspaceBar(
       {super.key,
       required this.database,
       required this.workspace,
       required this.onChanged,
-      this.enabled = true});
+      this.enabled = true,
+      this.onAddPoint});
   Future<void> _choose(BuildContext context) async {
     final projects = await database.getProjects();
     if (!context.mounted) return;
@@ -66,15 +68,17 @@ class ProjectWorkspaceBar extends StatelessWidget {
           child: Column(children: [
             Row(children: [
               Expanded(
-                  child: TextButton.icon(
-                      onPressed: enabled ? () => _choose(context) : null,
-                      icon: const Icon(Icons.folder_outlined),
-                      label:
-                          Text(workspace?.project.name ?? 'Select project'))),
-              if (workspace != null)
+                  child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                          onPressed: enabled ? () => _choose(context) : null,
+                          icon: const Icon(Icons.folder_outlined),
+                          label: Text(
+                              workspace?.project.name ?? 'Select project')))),
+              if (workspace != null && onAddPoint != null)
                 IconButton(
-                    tooltip: 'Add study layer',
-                    onPressed: enabled ? () => _addLayer(context) : null,
+                    tooltip: 'Record survey at GPS',
+                    onPressed: enabled ? onAddPoint : null,
                     icon: const Icon(Icons.add))
             ]),
             if (workspace != null)
@@ -85,15 +89,24 @@ class ProjectWorkspaceBar extends StatelessWidget {
                         isExpanded: true,
                         decoration: const InputDecoration(
                             labelText: 'Study layer', isDense: true),
-                        items: workspace!.layers
-                            .map((layer) => DropdownMenuItem(
-                                value: layer.id,
-                                child: Text(layer.name,
-                                    overflow: TextOverflow.ellipsis)))
-                            .toList(),
+                        items: [
+                          ...workspace!.layers
+                              .map((layer) => DropdownMenuItem(
+                                  value: layer.id,
+                                  child: Text(layer.name,
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          const DropdownMenuItem(
+                              value: '__add_layer__',
+                              child: Text('Add new Layer')),
+                        ],
                         onChanged: !enabled
                             ? null
                             : (id) async {
+                                if (id == '__add_layer__') {
+                                  await _addLayer(context);
+                                  return;
+                                }
                                 if (id != null)
                                   await onChanged(
                                       await ProjectWorkspaceService(database)

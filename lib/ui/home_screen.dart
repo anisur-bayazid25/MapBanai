@@ -1,3 +1,5 @@
+import 'package:mapbanai/services/spatial_file_import.dart';
+import 'package:mapbanai/ui/open_spatial_file.dart';
 import 'package:mapbanai/ui/help_screen.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'dart:async';
@@ -57,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _database = AppDatabase();
+    IntentHandler.setOpenListener((path) => _handleIncomingProject(path));
     _backup = BackupService(_database);
     BackgroundGps.instance.addListener(_onBackgroundGpsChanged);
     _loadProjects();
@@ -163,8 +166,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Handles a project file or link that opened MapBanai (Android "Open
   /// with MapBanai" / mapbanai:// deep link).
-  Future<void> _handleIncomingProject() async {
-    final raw = await IntentHandler.getInitialOpen();
+  Future<void> _handleIncomingProject([String? payload]) async {
+    final raw = payload ?? await IntentHandler.getInitialOpen();
     if (raw == null || !mounted) return;
 
     if (raw.startsWith('http') || raw.startsWith('mapbanai:')) {
@@ -205,6 +208,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // cache and handed back a plain file path.
     final path = raw;
     if (!mounted) return;
+    if (SpatialFileImport.supports(path)) {
+      await openSpatialFile(context, _database, path);
+      await _loadProjects();
+      return;
+    }
     await _runProjectImport(filePath: path);
   }
 
@@ -937,6 +945,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
                   Wrap(
+                    alignment: WrapAlignment.center,
                     spacing: 12,
                     runSpacing: 8,
                     children: [

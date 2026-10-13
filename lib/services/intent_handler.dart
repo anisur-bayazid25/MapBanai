@@ -12,6 +12,15 @@ class IntentHandler {
 
   static const MethodChannel _channel = MethodChannel('mapbanai/intents');
 
+  static void setOpenListener(Future<void> Function(String) listener) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'openFile' && call.arguments is Map) {
+        final uri = (call.arguments as Map)['uri'];
+        if (uri is String && uri.isNotEmpty) await listener(uri);
+      }
+    });
+  }
+
   static Future<String?> getInitialOpen() async {
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>(

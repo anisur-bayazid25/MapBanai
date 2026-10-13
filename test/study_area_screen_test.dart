@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:drift/drift.dart' as drift;
 import 'dart:io';
@@ -55,6 +57,84 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  testWidgets('view-only map shows sites without importing or editing controls',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.forTesting();
+    addTearDown(db.close);
+    final store = MemoryStudyAreaStore();
+    store.sites.add(StudyAreaSite(
+        id: 'preview',
+        latitude: 23.68,
+        longitude: 90.44,
+        attributes: {'name': 'Facility', 'layer': 'Toilet'}));
+    await tester.pumpWidget(MaterialApp(
+        home: StudyAreaModeScreen(store: store, database: db, viewOnly: true)));
+    await fakes.pumpFrames(tester, 20);
+    expect(find.text('1 / 1 features'), findsOneWidget);
+    expect(find.text('Categories & colors'), findsOneWidget);
+    expect(find.byTooltip('Record survey at GPS'), findsNothing);
+    final import = tester.widget<IconButton>(find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Import sites'));
+    expect(import.onPressed, isNull);
+    expect(find.text('Import'), findsNothing);
+    expect(await db.getProjects(), isEmpty);
+  });
+
+  testWidgets(
+      'verified feature saves without opening its required-question survey',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.forTesting();
+    addTearDown(db.close);
+    final projectId =
+        await db.insertProject(ProjectsCompanion.insert(name: 'Field project'));
+    final form = SurveyForm(
+        id: 'required',
+        name: 'Required questionnaire',
+        description: '',
+        questions: [
+          Question(
+              name: 'detail',
+              label: 'Required detail',
+              type: QuestionType.text,
+              required: true)
+        ]);
+    await db.insertStoredForm(StoredFormsCompanion(
+        projectId: drift.Value(projectId),
+        name: drift.Value(form.name),
+        json: drift.Value(jsonEncode(form.toJson()))));
+    final store = MemoryStudyAreaStore();
+    store.sites.add(StudyAreaSite(
+        id: 'existing',
+        latitude: 23.68,
+        longitude: 90.44,
+        projectId: projectId,
+        status: StudyAreaStatus.verified,
+        formAnswers: {'previous': 'retain'}));
+    await tester.pumpWidget(MaterialApp(
+        home: StudyAreaModeScreen(
+            store: store,
+            database: db,
+            projectId: projectId,
+            initialSelectedSiteId: 'existing')));
+    await fakes.pumpFrames(tester, 20);
+    await tester.tap(find.text('Edit'));
+    await fakes.pumpFrames(tester);
+    expect(find.text('Fill questionnaire (optional)'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await fakes.pumpFrames(tester, 20);
+    expect(find.text('Required detail'), findsNothing);
+    expect(store.sites.single.status, StudyAreaStatus.verified);
+    expect(store.sites.single.formAnswers, {'previous': 'retain'});
+  });
+
   testWidgets('draw polygon, undo, save and expose map export choices',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
@@ -65,6 +145,15 @@ void main() {
     addTearDown(db.close);
     final projectId = await db.insertProject(
         const ProjectsCompanion(name: drift.Value("Test project")));
+    final survey = SurveyForm(
+        id: 'field',
+        name: 'Field questionnaire',
+        description: '',
+        questions: []);
+    await db.insertStoredForm(StoredFormsCompanion(
+        projectId: drift.Value(projectId),
+        name: drift.Value(survey.name),
+        json: drift.Value(jsonEncode(survey.toJson()))));
     final store = MemoryStudyAreaStore();
     await tester.pumpWidget(MaterialApp(
         home: StudyAreaModeScreen(
@@ -96,6 +185,8 @@ void main() {
         find.byType(DropdownButtonFormField<StudyAreaStatus>), findsOneWidget);
     expect(find.text('New feature'), findsWidgets);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await fakes.pumpFrames(tester, 20);
+    await tester.tap(find.text('Save responses'));
     await fakes.pumpFrames(tester, 20);
     final sites = await store.loadSites();
     expect(sites, hasLength(1));

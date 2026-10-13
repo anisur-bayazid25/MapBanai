@@ -123,7 +123,7 @@ const _sections = <(String, String)>[
   ),
   (
     'Study Area Mode: visits and repeated campaigns',
-    'Select the project and one of its study-area maps. Use separate named maps for salinity rounds, household verification or the full study area. Start/resume a field visit for that selected area. Verify existing sites, record new information or update attributes using the selected questionnaire. Visit history preserves the review trail. Assign old unassigned sites to a project explicitly. Export the updated area after fieldwork.'
+    'Select the project and one of its study-area maps. Import from the top toolbar; GeoJSON and GeoPackage can be selected regardless of Android MIME filtering. ZIP shapefile companions together for attributes. Files opened externally offer an existing project, new project or view-only preview. Add new Layer is inside the study-layer selector; the plus button opens the questionnaire at a fresh GPS position. Edit feature requires a questionnaire for new/Updated features; other statuses have an optional Fill questionnaire checkbox. Skipping keeps previous answers. Categories & colors includes Verification status coloring and starts with a single color and lets you explicitly choose a column, category colors/visibility and point size.  Use separate named maps for salinity rounds, household verification or the full study area. Start/resume a field visit for that selected area. Verify existing sites, record new information or update attributes using the selected questionnaire. Visit history preserves the review trail. Assign old unassigned sites to a project explicitly. Export the updated area after fieldwork.'
   ),
   (
     'GPS Mode and geotagged photos',

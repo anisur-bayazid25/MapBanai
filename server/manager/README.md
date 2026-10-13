@@ -1,4 +1,4 @@
-# MapBanai manager workspace — v2.6.4
+# MapBanai manager workspace — v2.6.5
 
 Use one Google workbook, one Apps Script deployment and one private API key for each project. Questions and answers live in separate tabs. This folder contains the complete Code.gs, Map.html and Charts.html; the same files are copyable offline in app Help.
 
@@ -55,3 +55,7 @@ Workspaces show up to 25,000 current records per request and report truncation. 
 - Empty map: some responses contain no valid spatial answers. Charts can still show those answers.
 
 Validated with mocked Google services and browser fixtures; no live Google account/deployment or Android device was available. Test one complete import/collect/edit/sync cycle before field rollout.
+
+## Study-area field workflow in v2.6.5
+
+Enumerators import a study map from the top toolbar or open a spatial file from Android. GeoJSON and WGS84 GeoPackage are supported; ZIP shapefile companions together for attributes. The plus button opens the questionnaire at a fresh GPS location. Edit feature requires a questionnaire for new/Updated features, while other statuses allow direct saving or an optional questionnaire. Categories & colors lets users explicitly choose a data column or Verification status for styling; the default is one color.

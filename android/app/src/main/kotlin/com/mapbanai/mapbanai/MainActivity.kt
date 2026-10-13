@@ -126,7 +126,7 @@ class MainActivity : FlutterActivity() {
             }
             val dir = File(cacheDir, "shared")
             if (!dir.exists()) dir.mkdirs()
-            val outFile = File(dir, queryDisplayName(uri) ?: "project.mbproj")
+            val outFile = File(dir, File(queryDisplayName(uri) ?: "shared-file").name)
             val out = FileOutputStream(outFile)
             val buffer = ByteArray(64 * 1024)
             var read = input.read(buffer)
@@ -170,6 +170,9 @@ class MainActivity : FlutterActivity() {
                 pendingOpen = null
             } else {
                 pendingOpenValue = payload
+                flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                    MethodChannel(messenger, intentsChannel).invokeMethod("openFile", mapOf("uri" to payload))
+                }
             }
         }
     }

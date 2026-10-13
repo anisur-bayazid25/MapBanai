@@ -1,4 +1,4 @@
-# Google Sheets questionnaire sync — v2.6.4
+# Google Sheets questionnaire sync — v2.6.5
 
 For each new project, use one fresh Google spreadsheet, one Apps Script deployment and one private API key. Follow [the complete new-project setup](server/manager/README.md). The same Code.gs, Map.html and Charts.html are copyable offline in Home → three-bar menu → Help & manager setup.
 

@@ -209,3 +209,17 @@ Download Map now shows only mapped categories in its legend. Rename them (for ex
 The GPS compass uses orientation sensors relative to magnetic north where available. Keep the phone reasonably flat, calibrate away from metal when prompted, and distinguish its direction from the GPS travel-bearing fallback. Android GNSS altitude references the WGS84 ellipsoid; it is not sea-level elevation or floor height. Indoor readings can be unreliable, including negative values. Use an outdoor reference for relative change; no guessed correction or floor-height offset is applied.
 
 For each new project, create a fresh Google spreadsheet and open Extensions → Apps Script. Paste Code.gs, Map.html and Charts.html from Help. Replace only the project ID, leaving the other four placeholders unchanged. Run setupMapBanai to create the private key, photo folder and data tabs. Reload the sheet → MapBanai → Connection and setup guide to get your key. Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone. Save the complete /exec URL and key in Project Details → Cloud Sync, then Test Connection. See the [full manager setup](server/manager/README.md).
+
+## v2.6.5: importing and reviewing study maps
+
+Use the top Import button in Study Area Mode. The Android picker permits all files; MapBanai validates GeoJSON, WGS84 GeoPackage, SHP/ZIP, CSV, XLSX and KML/KMZ. For shapefiles, ZIP the SHP, DBF, PRJ and CPG together to retain attributes. A ZIP may contain multiple shapefiles. Use WGS84 (EPSG:4326); projected coordinates need reprojection before import. ZIP limits: 100 MB compressed, 200 MB unpacked. GeoPackage imports currently use the first feature table yielding sites.
+
+Opening a spatial file from a file manager offers a selected project, a new project, or View only. View-only maps use temporary storage and do not add projects/sites or permit editing. Availability in Android’s Open with list depends on the file manager’s MIME type; the in-app Import picker is the fallback. A standalone SHP without its DBF prompts you to use a ZIP.
+
+The project selector is left-aligned. Open Study layer and choose Add new Layer to create another map. Tap the plus button to open the selected survey form at your current GPS position. It requires a location captured within 30 seconds; GPS accuracy is recorded. Long-press map placement remains available.
+
+All features start with the same color. Tap Categories & colors, choose a column (e.g. layer), change category colors, show/hide categories and adjust point size. Tap Apply. These choices persist for this project/study layer. Verification status remains a separate filter; styling does not change collected attributes or verification status. The map counter shows visible / total features. Categories affect the on-screen study map; data exports retain the full records.
+
+Imports refresh the map immediately after saving. A sync-queue warning means the features are saved; retry Cloud Sync from Home instead of re-importing.
+
+Study Area → Edit feature: questionnaires are mandatory for newly created features and Updated/New feature statuses. For Pending verification, Completed (legacy), Verified unchanged, Not found and Needs review, saving skips the questionnaire unless Fill questionnaire (optional) is checked. Existing answers are preserved when skipped. Categories & colors offers explicit Verification status coloring as well as attribute columns; the default remains a single color.

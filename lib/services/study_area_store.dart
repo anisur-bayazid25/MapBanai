@@ -310,7 +310,8 @@ class StudyAreaStore {
 
   Future<StudyAreaMergeResult> applyMerge(StudyAreaMergePreview preview,
       {Map<String, StudyAreaMergeChoice> resolutions = const {},
-      String author = 'Local fieldworker'}) async {
+      String author = 'Local fieldworker',
+      int? localProjectId}) async {
     late StudyAreaMergeResult result;
     await _serialize(() async {
       final sites = await loadSites();
@@ -330,7 +331,7 @@ class StudyAreaStore {
         final previous = local[incoming.id];
         if (incoming.projectExternalId != null) {
           // An exchanged local integer cannot select a project on this phone.
-          incoming.projectId = previous?.projectId;
+          incoming.projectId = localProjectId ?? previous?.projectId;
         }
         final choice = conflictingIds.contains(incoming.id)
             ? resolutions[incoming.id]
@@ -338,6 +339,11 @@ class StudyAreaStore {
         if (conflictingIds.contains(incoming.id) && choice == null)
           throw StateError(
               'Choose a resolution for feature ${incoming.id}. No changes were imported.');
+        if (localProjectId != null &&
+            previous != null &&
+            previous.projectExternalId == incoming.projectExternalId) {
+          previous.projectId = localProjectId;
+        }
         if (choice == StudyAreaMergeChoice.keepLocal ||
             (choice == null &&
                 previous != null &&

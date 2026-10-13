@@ -870,3 +870,7 @@ This release also includes online XLSForm updates, optional connection sharing, 
 ## [2.6.4] — 2026-10-13
 
 Unified basemaps and identity controls; removed the duplicate field editor; aligned Home tiles; added mapped-only semantic legends, selectable/uploaded symbols, resolution-aware typography and bundled fonts; smoothed the Android sensor compass and clarified altitude reference. Added authenticated read-only cloud connection testing. Manager Help and documents now start with a fresh project and automatic key/folder setup. Release version 2.6.4+27.
+
+## [2.6.5] — 2026-10-13
+
+Fixed spatial picker MIME filtering, ZIP shapefile imports, external file routing and read-only study previews. Repaired local project identity loss during study merges and refreshed saved imports before sync preparation. Simplified Study Area controls and added GPS questionnaire capture plus per-column categorical styling with a uniform default. Included pending centered Home actions.

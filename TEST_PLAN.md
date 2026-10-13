@@ -12,7 +12,7 @@ Run flutter test --concurrency=1, flutter analyze, and node tool/test_manager_ba
 
 Browser fixtures check manager map/chart initialization, refresh, mobile layouts, aggregation/numeric scatter, designs and exact image exports. Verify the release APK package version/build and production signer. With a physical phone and live workbook, complete import/questionnaire sync → collect → sync → edit → sync; confirm one latest row and revision history, photo geotag/accuracy, native save picker and offline restart. Those native/live checks were unavailable locally and remain rollout checks.
 
-**Version:** 2.6.4
+**Version:** 2.6.5
 **Last Updated:** 2026-10-13
 **Strategy:** Test-Driven Development (TDD) with focus on data integrity and offline resilience
 
@@ -674,3 +674,9 @@ Connection diagnostics: seven client tests cover authenticated POST, Google POST
 After the connection-check update, the complete Flutter suite passed: 380 tests. Targeted analysis reports no errors (three style infos). Manager backend contract checks also passed.
 
 v2.6.4 release validation: final suite 380/380 passed; backend contract and browser map/chart checks passed. Signed release APK verified versionName 2.6.4, versionCode 27 and production certificate SHA-256 913b1052c94f0dda17c965d5964592c1daf8b01002b2e1b7458b6ba67f5fd599. Bundled scripts and map/font assets match source bytes. Live Android sensors and Google deployment remain field checks.
+
+## v2.6.5 verification
+
+Full Flutter suite: 394 tests passed. New checks cover GeoJSON, WGS84 GeoPackage, zipped SHP+DBF, unsafe ZIP paths, explicit local project binding through merge/reload, uniform default styling, saved category filters/colors, and read-only Study Area previews. The actual Shyampur ZIP imported 460 unique points with all 36 attributes. Native Android document-provider selection and external Open with flows need physical-device verification; no device is connected. Analysis reports no errors and the same three existing unused-variable test warnings. Manager backend contract checks passed.
+
+Final v2.6.5 checks include status-based questionnaire requirements and a widget regression proving Verified unchanged saves without opening a form containing required questions, while retaining prior answers. Signed APK: versionName 2.6.5, versionCode 28; same production certificate.
