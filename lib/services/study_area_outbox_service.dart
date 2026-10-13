@@ -43,7 +43,10 @@ class StudyAreaOutboxService {
                 row.projectId.equals(site.projectId!)))
           .getSingleOrNull();
       if (existing != null) {
-        if (existing.responses == response) return;
+        // Comparing the site snapshot avoids requeuing an unchanged site when
+        // centralized revision/collector audit fields differ from this envelope.
+        final previous = jsonDecode(existing.responses) as Map;
+        if (jsonEncode(previous['site']) == jsonEncode(site.toJson())) return;
         await db.updateSurveySession(existing.id,
             title: site.displayName, responses: response, status: 'saved');
       } else {

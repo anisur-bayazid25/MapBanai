@@ -68,6 +68,9 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Package manager workspace
+        run: zip -j build/MapBanai-manager-workspace.zip server/manager/Code.gs server/manager/Map.html server/manager/Charts.html server/manager/README.md
+
       - name: Attach APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -75,5 +78,9 @@ jobs:
           body_path: RELEASE_NOTES.md
           files: |
             build/app/outputs/flutter-apk/app-release.apk
-            assets/help/manager_apps_script.gs
+            server/manager/Code.gs
+            server/manager/Map.html
+            server/manager/Charts.html
+            build/MapBanai-manager-workspace.zip
+            server/manager/README.md
             ONLINE_QUESTIONNAIRES.md

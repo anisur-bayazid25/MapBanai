@@ -136,8 +136,10 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
       _session =
           _session.copyWith(title: title, responses: jsonEncode(responses));
     });
+    await _load();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Answers updated')),
+      const SnackBar(content: Text('Answers updated — ready to sync')),
     );
   }
 
@@ -209,12 +211,10 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
       responses: jsonEncode(updated),
     );
     if (!mounted) return;
-    setState(() {
-      _responses = updated;
-      _session = _session.copyWith(responses: jsonEncode(updated));
-    });
+    await _load();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Feature updated')),
+      const SnackBar(content: Text('Feature updated — ready to sync')),
     );
   }
 
@@ -287,6 +287,16 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 12),
+                Card(
+                    child: ListTile(
+                        leading: Icon(_session.syncedAt == null
+                            ? Icons.cloud_upload_outlined
+                            : Icons.cloud_done_outlined),
+                        title: Text(
+                            'Response revision ${_responses?['response_revision'] ?? 1}'),
+                        subtitle: Text(_session.syncedAt == null
+                            ? 'Saved on this phone · waiting to sync'
+                            : 'Synced · edit to send a new revision'))),
                 if (_responses?['workflow'] == 'guided_visit_v1' &&
                     _responses?['visit'] is Map) ...[
                   _kvTile(

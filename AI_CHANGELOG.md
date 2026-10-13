@@ -1,5 +1,9 @@
 # AI_CHANGELOG
 
+## 2026-10-13 — v2.6.3+26
+
+Implemented saved response revisions and collector/editor audit centrally, guarded legacy backend acknowledgements, redesigned manager Apps Script/Map/Charts and copyable offline Help, simplified enumerator navigation, and finished project vector/map design export controls. Updated current workflow/setup/data/architecture/testing/release documentation. Release retains existing production signer. No subagents were used for this work.
+
 In-depth, developer-oriented changelog written so future AI models (and
 maintainers) can reconstruct the project's evolution, architecture and
 operating quirks from file history alone. Read `UPDATE_FEATURE_LOG.md` for

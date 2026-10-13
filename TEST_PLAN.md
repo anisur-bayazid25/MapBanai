@@ -1,7 +1,15 @@
 # MapBanai - Test Plan
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-08-17  
+## v2.6.3 verification and rollout
+
+Local v2.6.3 verification: **370 Flutter tests passed**, backend contract checks passed, and browser map/chart fixtures passed. Static analysis has no errors; three existing unused-variable test warnings remain. The signed release APK was built and verified as versionName 2.6.3 / versionCode 26 with the existing production certificate; all three manager files are bundled.
+
+Run flutter test --concurrency=1, flutter analyze, and node tool/test_manager_backend.cjs. Revision tests cover stable identity, collector/editor audit, draft revision behavior, outbox invalidation, old-server acknowledgement rejection and successful upgraded retry. Backend contracts cover auth/project isolation, legacy migration, chunking/capacity, history idempotence, stale/conflicting uploads, validation and private photo deduplication. Project vector tests cover supported imports, malformed/oversized data and portability.
+
+Browser fixtures check manager map/chart initialization, refresh, mobile layouts, aggregation/numeric scatter, designs and exact image exports. Verify the release APK package version/build and production signer. With a physical phone and live workbook, complete import/questionnaire sync → collect → sync → edit → sync; confirm one latest row and revision history, photo geotag/accuracy, native save picker and offline restart. Those native/live checks were unavailable locally and remain rollout checks.
+
+**Version:** 2.6.3
+**Last Updated:** 2026-10-13
 **Strategy:** Test-Driven Development (TDD) with focus on data integrity and offline resilience
 
 ---

@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -597,6 +598,13 @@ class ProjectImporter {
             'layer_id': data.settings['active_layer_id'],
             'form_id': selectedForm
           }));
+    }
+    if (data.layers['vector_overlays'] is List) {
+      await ProjectVectorLayerService(_database).save(
+          projectId,
+          (data.layers['vector_overlays'] as List)
+              .map((l) => Map<String, dynamic>.from(l as Map))
+              .toList());
     }
     return ImportCommitResult(
         projectId: projectId, name: data.meta.projectName);

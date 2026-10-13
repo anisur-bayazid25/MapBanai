@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -248,10 +249,23 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertProject(ProjectsCompanion entry) =>
       into(projects).insert(entry);
 
-  Future<int> insertSurveySession(SurveySessionsCompanion entry) {
-    final withExternalId = entry.externalId.present
-        ? entry
-        : entry.copyWith(externalId: Value(const Uuid().v4()));
+  Future<int> insertSurveySession(SurveySessionsCompanion entry) async {
+    var value = entry;
+    final name = (await getSetting('user_name'))?.trim() ?? '';
+    if (name.isNotEmpty) {
+      try {
+        final body = Map<String, dynamic>.from(
+            jsonDecode(entry.responses.present ? entry.responses.value : '{}')
+                as Map);
+        if ((body['user_name'] ?? '').toString().trim().isEmpty) {
+          body['user_name'] = name;
+          value = value.copyWith(responses: Value(jsonEncode(body)));
+        }
+      } catch (_) {}
+    }
+    final withExternalId = value.externalId.present
+        ? value
+        : value.copyWith(externalId: Value(const Uuid().v4()));
     return into(surveySessions).insert(withExternalId);
   }
 
@@ -282,23 +296,51 @@ class AppDatabase extends _$AppDatabase {
         .getSingleOrNull();
   }
 
-  Future<void> updateSurveySession(
-    int id, {
-    String? title,
-    String? status,
-    String? responses,
-  }) async {
-    await (update(surveySessions)..where((row) => row.id.equals(id))).write(
-      SurveySessionsCompanion(
-        title: title == null ? const Value.absent() : Value(title),
-        status: status == null ? const Value.absent() : Value(status),
-        responses: responses == null ? const Value.absent() : Value(responses),
-        syncedAt: responses == null ? const Value.absent() : const Value(null),
-        photoSyncedAt:
-            responses == null ? const Value.absent() : const Value(null),
-      ),
-    );
-  }
+  /// Every saved edit keeps its stable ID, advances its response revision,
+  /// and returns to the data/photo outboxes. Draft autosaves remain revision 1.
+  Future<void> updateSurveySession(int id,
+          {String? title, String? status, String? responses}) =>
+      transaction(() async {
+        final current = await getSurveySession(id);
+        if (current == null) return;
+        final changed = (responses != null && responses != current.responses) ||
+            (title != null && title != current.title) ||
+            (status != null && status != current.status);
+        if (!changed) return;
+        var updated = responses ?? current.responses;
+        try {
+          final old =
+              Map<String, dynamic>.from(jsonDecode(current.responses) as Map);
+          final next = Map<String, dynamic>.from(jsonDecode(updated) as Map);
+          final revision =
+              old['response_revision'] is int && old['response_revision'] >= 1
+                  ? old['response_revision'] as int
+                  : 1;
+          final name = (await getSetting('user_name'))?.trim() ?? '';
+          final original = (old['user_name'] ?? '').toString().trim();
+          if (original.isNotEmpty) {
+            next['user_name'] = original;
+          } else if (name.isNotEmpty) {
+            next['user_name'] = name;
+          }
+          next['response_revision'] =
+              current.status == 'draft' ? revision : revision + 1;
+          if (current.status != 'draft') {
+            next['edited_at'] = DateTime.now().toUtc().toIso8601String();
+            next['edited_by'] = name.isEmpty ? original : name;
+          }
+          updated = jsonEncode(next);
+        } catch (_) {
+          throw const FormatException('Cannot save invalid response JSON.');
+        }
+        await (update(surveySessions)..where((row) => row.id.equals(id))).write(
+            SurveySessionsCompanion(
+                title: title == null ? const Value.absent() : Value(title),
+                status: status == null ? const Value.absent() : Value(status),
+                responses: Value(updated),
+                syncedAt: const Value(null),
+                photoSyncedAt: const Value(null)));
+      });
 
   Future<void> deleteSurveySession(int id) =>
       (delete(surveySessions)..where((row) => row.id.equals(id))).go();

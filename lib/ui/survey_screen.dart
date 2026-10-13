@@ -197,17 +197,6 @@ class _SurveyScreenState extends State<SurveyScreen> {
         title: const Text('Survey Mode'),
         actions: [
           IconButton(
-              tooltip: 'Sync questionnaire',
-              icon: const Icon(Icons.cloud_download_outlined),
-              onPressed: _projectId == null
-                  ? null
-                  : () async {
-                      await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => QuestionnaireSyncScreen(
-                              database: _database, projectId: _projectId!)));
-                      await _loadStoredForms();
-                    }),
-          IconButton(
             tooltip: 'Build or import a survey form',
             icon: const Icon(Icons.library_add_outlined),
             onPressed: _openFormBuilder,
@@ -285,7 +274,19 @@ class _SurveyScreenState extends State<SurveyScreen> {
               'Project: $_projectName',
               style: TextStyle(color: Colors.grey.shade600),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+                label: const Text('Sync questionnaire'),
+                icon: const Icon(Icons.cloud_download_outlined),
+                onPressed: _projectId == null
+                    ? null
+                    : () async {
+                        await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => QuestionnaireSyncScreen(
+                                database: _database, projectId: _projectId!)));
+                        await _loadStoredForms();
+                      }),
+            const SizedBox(height: 16),
             Expanded(
               child: _loading
                   ? const AppLoadingIndicator()

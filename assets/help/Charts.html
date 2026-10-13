@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <!-- Plotly.js for high-resolution vector and 300DPI JPEG rendering -->
+  <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+  
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0f172a; }
+    
+    #app-container { display: flex; flex-direction: column; height: 100vh; }
+    
+    #toolbar {
+      padding: 8px 12px; background: #1e293b; color: white;
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; z-index: 1000;
+      border-bottom: 1px solid #334155;
+    }
+    .tool-group { display: flex; align-items: center; gap: 6px; border-right: 1px solid #334155; padding-right: 10px; }
+    label { font-weight: 600; color: #cbd5e1; white-space: nowrap; }
+    select, input, button {
+      padding: 5px 8px; border-radius: 4px; border: 1px solid #334155;
+      background: #0f172a; color: white; font-size: 12px;
+    }
+    button { background: #0284c7; cursor: pointer; border: none; font-weight: bold; }
+    button:hover { background: #0369a1; }
+    button.btn-success { background: #10b981; color: #022c22; }
+    
+    #workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
+    
+    /* Category Customizer Panel */
+    #category-panel {
+      width: 320px; background: #1e293b; border-right: 1px solid #334155;
+      display: flex; flex-direction: column; color: white; font-size: 11px;
+    }
+    #panel-header { padding: 10px; background: #0f172a; font-weight: bold; border-bottom: 1px solid #334155; }
+    #panel-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    
+    .category-item {
+      display: flex; align-items: center; gap: 6px; background: #0f172a;
+      padding: 6px; border-radius: 4px; border: 1px solid #334155;
+    }
+    .category-item input[type="color"] { padding: 0; width: 24px; height: 24px; border: none; cursor: pointer; }
+    .category-item input[type="text"] { flex: 1; font-size: 11px; padding: 3px 6px; }
+    .category-item .val-badge { font-weight: bold; color: #38bdf8; min-width: 30px; text-align: right; }
+
+    /* Resizable Chart Box */
+    #chart-wrapper {
+      flex: 1; display: flex; justify-content: center; align-items: center;
+      padding: 20px; overflow: auto; background: #0f172a;
+    }
+    #chart-box {
+      width: 850px; height: 500px; background: #ffffff; border-radius: 8px;
+      padding: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      resize: both; overflow: auto; min-width: 400px; min-height: 280px;
+      position: relative; display: flex; flex-direction: column;
+    }
+    #chartCanvas { width: 100%; height: 100%; flex: 1; }
+    .resize-hint { position: absolute; bottom: 4px; right: 8px; font-size: 10px; color: #94a3b8; pointer-events: none; }
+  
+:root{--paper:#f6f8f3;--ink:#273f40;--muted:#6b8180;--accent:#287d76;--line:#dce5de}body,html{background:var(--paper);color:var(--ink);font-family:system-ui,sans-serif;overflow:auto}#app-container{min-height:100vh;height:100vh}#toolbar{background:#fff;color:var(--ink);padding:16px;gap:12px;border-color:var(--line)}label{color:var(--muted);font-weight:500}select,input,button{border-radius:9px;min-height:38px;font-size:13px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 10px}button{background:var(--accent);color:#fff}button.btn-success{background:#e3eee5;color:var(--ink);border:1px solid var(--line)}.tool-group{border-color:var(--line);flex-wrap:wrap;gap:7px}#workspace{background:var(--paper)}#category-panel{background:#fff;border-color:var(--line);color:var(--ink);width:280px}#panel-header{background:#fff;border-color:var(--line);padding:18px}#panel-list{padding:14px}.category-item{background:var(--paper);border-color:var(--line);border-radius:10px;padding:9px}.category-item .val-badge{color:var(--accent)}#chart-wrapper{background:var(--paper);padding:28px}#chart-box{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px #153b3812;overflow:hidden}#chart-status{font-size:12px;color:var(--muted);padding:8px 16px}#workspace-header{padding:18px 20px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}#workspace-header h1{margin:0;font-size:20px;color:var(--ink)}#workspace-header p{margin:4px 0 0;color:var(--muted);font-size:12px}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #88bdb4}#panel-list input[type=color]{min-height:26px}.category-item input[type=text]{min-width:0}
+@media(max-width:700px){#app-container{height:auto}#toolbar{padding:10px;gap:8px}#workspace{flex-direction:column;overflow:visible}#category-panel{width:auto;order:2;max-height:260px}#chart-wrapper{padding:10px;min-height:420px}#chart-box{width:100%!important;min-width:0!important;height:420px!important;resize:none!important}#toolbar .tool-group{border:0;flex:1 1 160px}#toolbar select,#toolbar input{max-width:100%}#workspace-header{padding:12px}#workspace-header h1{font-size:18px}#workspace-header p{max-width:240px}}
+</style>
+</head>
+<body>
+
+<div id="app-container"><div id="workspace-header"><div><h1>MapBanai · Field insights</h1><p>Turn collected answers into clear, shareable charts.</p></div><button onclick="loadSheetData(document.getElementById('sheetSelect').value)">Refresh</button></div><div id="chart-status" role="status">Loading collections…</div>
+  <div id="toolbar">
+    <div class="tool-group">
+      <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+    </div>
+
+    <div class="tool-group">
+      <label>Sheet:</label>
+      <select id="sheetSelect" onchange="onSheetChange()"><option value="">Loading...</option></select>
+    </div>
+
+    <div class="tool-group">
+      <label>X-Axis:</label>
+      <select id="xAxisSelect" onchange="onFieldOrChartChange()"></select>
+      <label>Y-Axis:</label>
+      <select id="yAxisSelect" onchange="onFieldOrChartChange()"><option value="COUNT">Count (Frequency)</option></select>
+      <label>Agg:</label>
+      <select id="aggSelect" onchange="onFieldOrChartChange()">
+        <option value="COUNT">Count</option>
+        <option value="SUM">Sum</option>
+        <option value="AVG">Average</option>
+        <option value="MIN">Min</option>
+        <option value="MAX">Max</option>
+      </select>
+    </div>
+
+    <div class="tool-group">
+      <label>Chart Type:</label>
+      <select id="chartTypeSelect" onchange="onFieldOrChartChange()">
+        <option value="bar_v">Bar (Vertical)</option>
+        <option value="bar_h">Bar (Horizontal)</option>
+        <option value="line">Line Chart</option>
+        <option value="area">Area Chart</option>
+        <option value="pie">Pie Chart</option>
+        <option value="donut">Donut Chart</option>
+        <option value="scatter">Scatter Plot</option>
+        <option value="radar">Radar Chart</option>
+      </select>
+    </div>
+
+    <div class="tool-group">
+      <label>Title:</label>
+      <input type="text" id="chartTitle" placeholder="Chart Title" style="width: 110px;" oninput="renderPlotly()">
+      <label>X-Label:</label>
+      <input type="text" id="xLabelInput" placeholder="X-Label" style="width: 80px;" oninput="renderPlotly()">
+      <label>Y-Label:</label>
+      <input type="text" id="yLabelInput" placeholder="Y-Label" style="width: 80px;" oninput="renderPlotly()">
+    </div>
+
+    <div class="tool-group">
+      <label><input type="checkbox" id="toggleDataLabels" checked onchange="renderPlotly()"> Show Values</label>
+      <div class="tool-group"><label for="chartTheme">Design</label><select id="chartTheme" onchange="applyChartTheme()"><option value="field">Field atlas</option><option value="sage">Sage &amp; cream</option><option value="ink">Ink on paper</option><option value="night">Midnight</option><option value="clay">Terracotta</option></select></div><div class="tool-group"><label for="exportSize">Image size</label><select id="exportSize"><option value="1350x900">1350 × 900</option><option value="1920x1080">1920 × 1080 · Full HD</option><option value="3840x2160">3840 × 2160 · 4K</option><option value="1080x1920">1080 × 1920 · Portrait</option><option value="1600x1600">1600 × 1600 · Square</option></select></div><button class="btn-success" onclick="exportChart('png')">Download PNG</button><button class="btn-success" onclick="exportChart('jpeg')">Download JPEG</button>
+      <button class="btn-success" onclick="exportChart('svg')">Download SVG</button>
+    </div>
+  </div>
+
+  <div id="workspace">
+    <!-- Category & Item Color Customizer Side Panel -->
+    <div id="category-panel">
+      <div id="panel-header">✏️ Edit Value Names & Individual Colors</div>
+      <div id="panel-list"></div>
+    </div>
+
+    <!-- Chart Canvas -->
+    <div id="chart-wrapper">
+      <div id="chart-box">
+        <div id="chartCanvas"></div>
+        <span class="resize-hint">↘ Drag corner to resize graph</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let rawData = [], allHeaders = [];
+  let categoryState = []; // Holds { original, displayName, value, color }
+  let defaultColors = ['#287d76','#d48463','#648caa','#9c8bb1','#b29a62','#758b73'];
+let chartTheme={paper:'#ffffff',ink:'#273f40',grid:'#e5ebe5'};
+const chartDesigns={field:['#ffffff','#273f40','#e5ebe5',['#287d76','#d48463','#648caa','#9c8bb1']],sage:['#f3f1e6','#324a40','#d4dbcd',['#527a66','#b17457','#648c82','#b29a62']],ink:['#f6f3eb','#222b2e','#d8d5cd',['#39464b','#a65442','#717d73','#aaa69b']],night:['#172b34','#e5eee7','#36505b',['#7db8ad','#e3aa80','#8cc4cb','#b7a2ce']],clay:['#f6eadc','#603c35','#e4ccbd',['#ab6550','#758d94','#aa896a','#d6aa74']]};
+function applyChartTheme(){const t=chartDesigns[document.getElementById('chartTheme').value];chartTheme={paper:t[0],ink:t[1],grid:t[2]};defaultColors=t[3];categoryState.forEach((c,i)=>c.color=defaultColors[i%defaultColors.length]);renderCategoryPanel();renderPlotly();}
+function chartStatus(text){document.getElementById('chart-status').textContent=text;}
+let chartRequest=0;
+const plainPlotText=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const chartBox = document.getElementById('chart-box');
+  const resizeObserver = new ResizeObserver(() => {const chart=document.getElementById('chartCanvas');if(window.Plotly&&chart.data)Plotly.Plots.resize(chart);});
+  resizeObserver.observe(chartBox);
+
+  google.script.run.withFailureHandler(err=>chartStatus(err.message)).withSuccessHandler(populateSheets).getSheetNames();
+
+  function populateSheets(sheets) {
+    const sSelect = document.getElementById('sheetSelect');
+    sSelect.innerHTML = '';
+    sheets.forEach(s => sSelect.add(new Option(s, s)));
+    loadSheetData(sheets[0]);
+  }
+
+  function onSheetChange() {
+    loadSheetData(document.getElementById('sheetSelect').value);
+  }
+
+  function loadSheetData(sheetName) {
+    const request=++chartRequest;chartStatus('Loading collections…');
+    google.script.run
+      .withSuccessHandler(res=>{if(request===chartRequest)onDataLoaded(res)})
+      .withFailureHandler(err => {if(request===chartRequest)chartStatus("Could not load: " + err.message)})
+      .getMapDataPayload(sheetName);
+  }
+
+  function onDataLoaded(res) {
+    rawData = res.data || [];
+    allHeaders = (res.headers || []).filter(h=>!/^(_|json_|answers_json$|geojson$|visit$|photo$)/.test(h));
+    chartStatus(rawData.length+' records · latest response revisions'+(res.truncated?' · Showing first 25,000 of '+res.total:''));
+    setupFieldDropdowns();
+    onFieldOrChartChange();
+  }
+
+  function setupFieldDropdowns() {
+    const xSel = document.getElementById('xAxisSelect');
+    const ySel = document.getElementById('yAxisSelect');
+    xSel.innerHTML = '';
+    ySel.innerHTML = '<option value="COUNT">Count (Frequency)</option>';
+    allHeaders.forEach(h => {xSel.add(new Option(h,h));if(rawData.some(r=>r[h]!==''&&r[h]!=null&&Number.isFinite(Number(r[h]))))ySel.add(new Option(h,h));});
+    xSel.value=allHeaders.includes('form_name')?'form_name':allHeaders.includes('surveyor')?'surveyor':allHeaders[0]||'';
+  }
+
+  function onFieldOrChartChange() {
+    if (!rawData.length || !allHeaders.length) {categoryState=[];renderCategoryPanel();if(window.Plotly)Plotly.purge('chartCanvas');chartStatus('No collected records in this sheet yet.');return;}
+
+    const xField = document.getElementById('xAxisSelect').value || allHeaders[0];
+    const yField = document.getElementById('yAxisSelect').value;
+    const aggMode = document.getElementById('aggSelect').value;
+
+    categoryState = [];
+
+    if (yField === 'COUNT' || aggMode === 'COUNT') {
+      const counts = Object.create(null);
+      rawData.forEach(r => {
+        const key = String(r[xField] == null || r[xField] === '' ? 'Unspecified' : r[xField]).trim();
+        if (key) counts[key] = (counts[key] || 0) + 1;
+      });
+      let idx = 0;
+      for (let k in counts) {
+        categoryState.push({
+          original: k,
+          displayName: k,
+          value: counts[k],
+          color: defaultColors[idx % defaultColors.length]
+        });
+        idx++;
+      }
+    } else {
+      const groups = Object.create(null);
+      rawData.forEach(r => {
+        const key = String(r[xField] == null || r[xField] === '' ? 'Unspecified' : r[xField]).trim();
+        const val = r[yField]===''||r[yField]==null?NaN:Number(r[yField]);
+        if (key && !isNaN(val)) {
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(val);
+        }
+      });
+      let idx = 0;
+      for (let k in groups) {
+        const arr = groups[k];
+        let computedVal = arr.length;
+        if (aggMode === 'SUM') computedVal = arr.reduce((a, b) => a + b, 0);
+        if (aggMode === 'AVG') computedVal = arr.reduce((a, b) => a + b, 0) / arr.length;
+        if (aggMode === 'MIN') computedVal = Math.min(...arr);
+        if (aggMode === 'MAX') computedVal = Math.max(...arr);
+
+        categoryState.push({
+          original: k,
+          displayName: k,
+          value: Number(computedVal.toFixed(2)),
+          color: defaultColors[idx % defaultColors.length]
+        });
+        idx++;
+      }
+    }
+
+    if(categoryState.length>300){chartStatus('Showing first 300 of '+categoryState.length+' categories. Choose a field with fewer groups.');categoryState=categoryState.slice(0,300);}
+    renderCategoryPanel();
+    renderPlotly();
+  }
+
+  function renderCategoryPanel() {
+    const container = document.getElementById('panel-list');
+    container.innerHTML = '';
+
+    categoryState.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'category-item';
+      const color=document.createElement('input');color.type='color';color.value=item.color;color.setAttribute('aria-label','Category colour');color.onchange=()=>updateItemColor(index,color.value);
+      const label=document.createElement('input');label.type='text';label.value=item.displayName;label.setAttribute('aria-label','Category label');label.oninput=()=>updateItemName(index,label.value);
+      const value=document.createElement('span');value.className='val-badge';value.textContent=item.value;
+      div.append(color,label,value);
+      container.appendChild(div);
+    });
+  }
+
+  function updateItemColor(index, color) {
+    categoryState[index].color = color;
+    renderPlotly();
+  }
+
+  function updateItemName(index, name) {
+    categoryState[index].displayName = name;
+    renderPlotly();
+  }
+
+  function renderPlotly() {
+    if (!categoryState.length) {if(window.Plotly)Plotly.purge('chartCanvas');return;}
+    if(!window.Plotly){chartStatus('Chart library could not load. Connect to the internet and refresh.');return;}
+
+    const chartType = document.getElementById('chartTypeSelect').value;
+    const customTitle = document.getElementById('chartTitle').value;
+    const customX = document.getElementById('xLabelInput').value;
+    const customY = document.getElementById('yLabelInput').value;
+    const showValues = document.getElementById('toggleDataLabels').checked;
+
+    const labels = categoryState.map(c => plainPlotText(c.displayName));
+    const values = categoryState.map(c => c.value);
+    const colors = categoryState.map(c => c.color);
+
+    let trace = {
+      x: labels,
+      y: values,
+      marker: { color: colors },
+      text: showValues ? values : null,
+      textposition: showValues ? 'auto' : 'none'
+    };
+
+    if (chartType === 'bar_v') {
+      trace.type = 'bar';
+    } else if (chartType === 'bar_h') {
+      trace.type = 'bar';
+      trace.orientation = 'h';
+      trace.x = values;
+      trace.y = labels;
+    } else if (chartType === 'line') {
+      trace.type = 'scatter';
+      trace.mode = showValues ? 'lines+markers+text' : 'lines+markers';
+      trace.line = { color: colors[0] || '#3b82f6', width: 3 };
+      trace.marker = { color: colors, size: 8 };
+    } else if (chartType === 'area') {
+      trace.type = 'scatter';
+      trace.mode = 'lines';
+      trace.fill = 'tozeroy';
+      trace.line = { color: colors[0] || '#3b82f6' };
+    } else if (chartType === 'pie' || chartType === 'donut') {
+      trace = {
+        labels: labels,
+        values: values,
+        type: 'pie',
+        hole: chartType === 'donut' ? 0.45 : 0,
+        marker: { colors: colors },
+        textinfo: showValues ? 'label+value' : 'none'
+      };
+    } else if (chartType === 'scatter') {
+      trace.type = 'scatter';
+      trace.mode = 'markers';
+      const xField=document.getElementById('xAxisSelect').value,yField=document.getElementById('yAxisSelect').value;
+      const observations=rawData.filter(r=>r[xField]!==''&&r[xField]!=null&&r[yField]!==''&&r[yField]!=null&&Number.isFinite(Number(r[xField]))&&Number.isFinite(Number(r[yField])));
+      if(!observations.length){chartStatus('Scatter plots need numeric X and Y questions.');Plotly.purge('chartCanvas');return;}
+      trace.x=observations.map(r=>Number(r[xField]));trace.y=observations.map(r=>Number(r[yField]));trace.text=null;trace.marker={color:defaultColors[0],size:9,opacity:.75};
+    } else if (chartType === 'radar') {
+      trace = {
+        type: 'scatterpolar',
+        r: values,
+        theta: labels,
+        fill: 'toself',
+        fillcolor: colors[0] + '66',
+        line: { color: colors[0] }
+      };
+    }
+
+    const layout = {
+      title: { text: plainPlotText(customTitle || 'Field insights'), font: { size: 24 },x:.06,xanchor:'left' },
+      paper_bgcolor:chartTheme.paper,plot_bgcolor:chartTheme.paper,font:{family:'Arial, sans-serif',color:chartTheme.ink,size:13},colorway:defaultColors,hoverlabel:{bgcolor:chartTheme.paper,font:{color:chartTheme.ink}},bargap:.3,showlegend:chartType==='pie'||chartType==='donut',legend:{orientation:'h',y:-.15},
+      polar:{bgcolor:chartTheme.paper,radialaxis:{gridcolor:chartTheme.grid},angularaxis:{gridcolor:chartTheme.grid}},
+      xaxis: { title: plainPlotText(customX || (chartType === 'bar_h' ? 'Value' : document.getElementById('xAxisSelect').value)),gridcolor:chartTheme.grid,zeroline:false,automargin:true },
+      yaxis: { title: plainPlotText(customY || (chartType === 'bar_h' ? 'Category' : document.getElementById('yAxisSelect').value)),gridcolor:chartTheme.grid,zeroline:false,automargin:true },
+      margin: { t: 84, r: 32, l: 72, b: 72 },
+      autosize: true
+    };
+
+    Plotly.react('chartCanvas', [trace], layout, { responsive: true, displayModeBar: false });
+  }
+
+  function toggleFullscreen() {
+    const elem = document.getElementById('app-container');
+    if (!document.fullscreenElement) elem.requestFullscreen();
+    else document.exitFullscreen();
+  }
+
+  function exportChart(format) {
+    const chartDiv = document.getElementById('chartCanvas');
+    if(!window.Plotly||!chartDiv.data){chartStatus('Create a chart first.');return;}
+    const title = (document.getElementById('chartTitle').value || 'field_insights').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80);
+    const [width,height]=document.getElementById('exportSize').value.split('x').map(Number);
+    
+    if (format === 'jpeg'||format==='png') {
+      Plotly.downloadImage(chartDiv, {
+        format,
+        width,
+        height,
+        scale: 1,
+        filename: title + '_'+width+'x'+height
+      });
+    } else if (format === 'svg') {
+      Plotly.downloadImage(chartDiv, { format: 'svg', width,height,filename: title + '_vector' });
+    }
+  }
+</script>
+</body>
+</html>

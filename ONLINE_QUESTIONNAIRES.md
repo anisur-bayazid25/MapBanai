@@ -2,15 +2,15 @@
 
 A project can distribute its questions and sync connection to enumerators, then pull updated XLSForm questions from a Google Sheet. This client implementation needs the accompanying Apps Script handler deployed on your existing endpoint. It does not automatically modify an existing Google deployment.
 
-## Recommended complete setup (also bundled in app Help)
+## Recommended complete setup (v2.6.3)
 
-Open **Help & manager setup** from Home, Settings or Project Details. It works offline and includes all field-mode instructions plus a copyable complete backend: `assets/help/manager_apps_script.gs`. From Project Details, copied code already includes that project UUID. Fill the remaining spreadsheet IDs, Drive folder ID and private key; run `setupMapBanai`, then deploy as a web app and save its `/exec` URL/key in Project Details.
+Use [the manager workspace guide](server/manager/README.md) and its **Code.gs, Map.html, Charts.html**. All three are also copyable in offline Help, reached through the Home **three-bar menu → Help & manager setup**. One bound workbook and one deployment/key per project handle questionnaire updates, data and photos. Run setupMapBanai; it retains an existing key/photo folder and compatible legacy Responses/Features, or creates missing settings/tabs. No manual key generation or second deployment is required.
 
-One workbook with questionnaire and output tabs is simplest. Two workbooks can use the same deployment/key by assigning different `questionnaireSheetId` and `dataSheetId` values. Separate deployments/keys are not configurable in the current client. Use one setup per project. The output tabs `responses`, `features`, `photos` contain stable IDs and complete JSON split into four columns to respect Sheets cell limits; concatenate `json_1`–`json_4` for the full record. Photo rows reference private Drive files and response IDs. Stable record and photo IDs make retries idempotent. Data sync uploads records; it does not download other enumerators’ records.
+Home **Cloud Sync** uploads data. **Survey Mode → Sync questionnaire** checks and applies questions. Home three-bar menu **My name / My responses** identifies the enumerator and opens saved records for correction. Corrections retain stable IDs and original collector, increment response_revision and clear upload acknowledgements. The new backend updates latest rows and preserves uploaded versions in revisions. Deploy the updated Code.gs before syncing edits; the client keeps edits queued if an old backend claims success without revision support.
 
-The complete backend needs the updated client, which includes top-level project IDs in data/photo requests and content-based photo IDs. It does not silently replace an existing deployment. Pilot it on a new backend first.
+Google Sheets shows readable metadata and answer columns plus authoritative json_1–json_4 chunks. MapBanai's spreadsheet menu opens the redesigned map/chart manager workspaces. See the guide for /exec URL, API key retrieval, deployment upgrades, limits and migration checks.
 
-## Existing backend: questionnaire adapter alternative
+## Existing backend: questionnaire-only adapter alternative
 
 1. Keep your XLSForm in a Google Spreadsheet with `survey`, `choices` and `settings` tabs. Use the normal XLSForm headers. In `settings`, give it a stable `form_id` matching the form already imported in MapBanai. Avoid changing that ID when editing questions. The current implementation links one live XLSForm workbook per project; other local forms are kept.
 2. Configure the project's HTTPS Google Apps Script `/exec` URL and enumerator API key in MapBanai's project settings.
@@ -23,7 +23,7 @@ if (payload.action === 'get_questionnaire') {
 }
 ```
 
-Use the variable name your script uses for its parsed request instead of `payload`. Keep your existing collection/photo upload branches.
+Use the variable name your script uses for its parsed request instead of `payload`. Keep your existing collection/photo upload branches. This adapter alone does not add response revision support.
 
 5. In Apps Script Project Settings, add script property `MAPBANAI_QUESTIONNAIRES` containing:
 

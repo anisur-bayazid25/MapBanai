@@ -1,6 +1,12 @@
 # MapBanai - Data Model Specification
 
-**Version:** 1.0.0  
+## v2.6.3 implementation update
+
+The initial entity diagrams below describe design intent. Current Drift SurveySessions use stable externalId; responses JSON contains user_name, response_revision (default 1), edited_by and UTC edited_at. Draft autosaves do not advance response revision; saved edits advance it transactionally and clear syncedAt/photoSyncedAt. Form version is independent. Cloud acknowledgement compares the uploaded snapshot so a concurrent edit stays queued.
+
+The manager's latest responses/features rows use stable record IDs; revisions uses deterministic kind:id:version keys and stores each uploaded version. Several offline edits can skip server version numbers. Legacy Responses/Features headers are extended in place. Full JSON is split into four 40,000-character chunks with readable answer:<name> columns. Photos use content IDs. Reference vectors reside under webmap_vectors_<projectId> in AppSettings and are included in project packages, but not collection counts or data-sync payloads. No Drift schema migration is required for these JSON/settings additions.
+
+**Version:** 2.6.3
 **Database:** SQLite with Drift ORM
 
 ---

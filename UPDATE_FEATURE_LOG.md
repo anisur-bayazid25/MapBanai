@@ -1,5 +1,9 @@
 # UPDATE_FEATURE_LOG
 
+## 2026-10-13 — v2.6.3
+
+Enumerator-first menu and sync placement; revision-aware saved response updates and history; one-workbook manager bundle with refreshed map/chart workspaces; project reference vectors, more basemaps and twelve-design exact-resolution image downloads. Full setup and known limits: server/manager/README.md.
+
 ## 2026-10-12 — local map studio / Google Sheet XLSForm sync (unreleased)
 
 - Full serial Flutter suite: 358 passed. Final questionnaire content-reversion regression: 3 passed.
@@ -8,7 +12,7 @@
 - Apps Script handler: mock-service authentication, project isolation and worksheet serialization passed. No live Google deployment tested.
 - Signed release preview built successfully (117.6 MB); existing Kotlin metadata diagnostics remain non-fatal. APK signature matches previous production releases.
 - Local preview APK SHA-256: `597D33A66A3EB62C0CB0A1B96EC6A523B5D37EB716E6FCB00487EB1D8A81C938`.
-- Source remains local; no new tag/push/release requested for these additions. Version currently remains 2.6.1+24.
+- Historical checkpoint: these additions were local at 2.6.1+24; subsequent releases published them. Current release is 2.6.3+26.
 
 
 ## 2026-10-12 — project workspace, 2.6.1+24

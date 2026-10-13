@@ -1,5 +1,9 @@
 # PROJECT_SHARING_ANALYSIS
 
+## v2.6.3 behavior
+
+Project packages now include project-owned reference vector overlays. Optional sync connection sharing preserves the URL/key flow described in ONLINE_QUESTIONNAIRES.md. Collected records/photos are still not project-definition backups. Enumerator names remain device settings rather than manager identity copied in a package. Use stable shared project identity and revision-aware Code.gs for edits; see server/manager/README.md.
+
 Existing implementation, documented BEFORE implementing the project
 export / import / sharing subsystem.
 

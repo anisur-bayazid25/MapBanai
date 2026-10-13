@@ -1,7 +1,11 @@
 # MapBanai - Product Specification
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-08-17  
+## Delivered in v2.6.3
+
+Enumerator navigation prioritizes Home data sync and Survey Mode questionnaire sync. The existing Home three-bar menu exposes identity, responses, help and settings without another help card. Corrections have response versions and audited editors. Manager setup uses one workbook/deployment/key per project, with upgraded map/chart scripts, private credentials and uploaded revision history. WebMap supports reference overlays, six backgrounds and twelve image designs with exact export dimensions. See USER_GUIDE.md and server/manager/README.md for workflows and limits.
+
+**Version:** 2.6.3
+**Last Updated:** 2026-10-13
 **Status:** Foundation Phase
 
 ---

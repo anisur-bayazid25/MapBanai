@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -81,6 +82,8 @@ class ProjectExporter {
 
     final layersJson = <String, dynamic>{
       'basemap_id': 'osm',
+      'vector_overlays':
+          await ProjectVectorLayerService(_database).load(project.id),
       'basemaps': Basemap.defaults
           .map(
             (b) => {

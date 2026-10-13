@@ -507,16 +507,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final featureCollection =
           await dataService.buildFeatureCollectionForProject(project.id);
       final count = (featureCollection['features'] as List).length;
-      if (count == 0) {
-        if (!mounted) return;
-        Navigator.of(context).pop(); // close loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'No data to map yet for "$selected" — collect some survey responses or GIS features first.')),
-        );
-        return;
-      }
       if (count > 1000 && mounted) {
         // Still generate but inform user
         ScaffoldMessenger.of(context).showSnackBar(
@@ -632,6 +622,52 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _editMyName() async {
+    final saved = await _database.getSetting('user_name') ?? '';
+    if (!mounted) return;
+    final input = TextEditingController(text: saved);
+    final name = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('My enumerator name'),
+                content: TextField(
+                    controller: input,
+                    autofocus: true,
+                    maxLength: 100,
+                    decoration: const InputDecoration(
+                        labelText: 'Your name',
+                        helperText: 'Attached to each new submission.')),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(context, input.text.trim()),
+                      child: const Text('Save'))
+                ]));
+    input.dispose();
+    if (name == null || !mounted) return;
+    if (name.isEmpty) {
+      _showSnack('Enter your name so submissions identify you.');
+      return;
+    }
+    await _database.setSetting('user_name', name);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _myResponses() async {
+    final project = await _resolveSelectedProject(context.read<ProjectState>());
+    if (!mounted) return;
+    if (project == null) {
+      _showSnack('Import or select a project first');
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SurveyHistoryScreen(projectId: project.id)));
+    if (mounted) await _loadProjects();
+  }
+
   Future<void> _promptUserNameOnce() async {
     final stored = await _database.getSetting('user_name');
     debugPrint(
@@ -652,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               'Enter your name — it will be attached to every survey '
               'response, GPS log entry and export. You can change it later '
-              'in Settings.',
+              'in the three-bar menu → My name.',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
@@ -714,22 +750,49 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         actions: [
-          IconButton(
-              tooltip: 'Help & manager setup',
-              icon: const Icon(Icons.help_outline),
-              onPressed: () => Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const HelpScreen()))),
-          IconButton(
-            tooltip: l10n?.settings ?? 'Settings',
+          PopupMenuButton<String>(
+            tooltip: 'Menu',
             icon: const Icon(Icons.menu),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SettingsScreen(database: _database),
-                ),
-              );
-              _loadProjects();
+            onSelected: (value) async {
+              if (value == 'name') {
+                await _editMyName();
+              } else if (value == 'responses') {
+                await _myResponses();
+              } else if (value == 'help') {
+                final project =
+                    await _resolveSelectedProject(context.read<ProjectState>());
+                if (!mounted) return;
+                await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) =>
+                        HelpScreen(projectId: project?.externalId)));
+              } else if (value == 'settings') {
+                await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SettingsScreen(database: _database)));
+                _loadProjects();
+              }
             },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                  value: 'name',
+                  child: ListTile(
+                      leading: Icon(Icons.person_outline),
+                      title: Text('My name'))),
+              const PopupMenuItem(
+                  value: 'responses',
+                  child: ListTile(
+                      leading: Icon(Icons.history_outlined),
+                      title: Text('My responses'))),
+              const PopupMenuItem(
+                  value: 'help',
+                  child: ListTile(
+                      leading: Icon(Icons.help_outline),
+                      title: Text('Help & manager setup'))),
+              PopupMenuItem(
+                  value: 'settings',
+                  child: ListTile(
+                      leading: const Icon(Icons.settings_outlined),
+                      title: Text(l10n?.settings ?? 'Settings'))),
+            ],
           ),
         ],
       ),
@@ -766,7 +829,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.fact_check_outlined),
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
-                      child: Text('Start or resume field visit'),
+                      child: Text('Visit a study site'),
                     ),
                   ),
                   const SizedBox(height: 12),

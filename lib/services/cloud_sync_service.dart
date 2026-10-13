@@ -171,6 +171,12 @@ class CloudSyncService {
     }
 
     if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
+      final sendsEdits = [...responsesPayload, ...featuresPayload]
+          .any((r) => (r['response_revision'] as num) > 1);
+      if (sendsEdits && decoded['revisionSupport'] != true) {
+        throw const CloudSyncException(
+            'Your manager must deploy the updated revision-aware Code.gs. Edited responses remain saved and waiting to sync.');
+      }
       final now = DateTime.now();
       await db.transaction(() async {
         for (final s in [...unsyncedResponses, ...unsyncedFeatures]) {
@@ -287,6 +293,12 @@ class CloudSyncService {
         'form_name': formName,
         'answers': answers is Map ? answers : {},
         'edited_at': resp['edited_at'],
+        'edited_by': resp['edited_by'],
+        'response_revision': resp['response_revision'] ?? 1,
+        'form_version': resp['form_snapshot'] is Map
+            ? resp['form_snapshot']['version'] ?? 1
+            : resp['form_version'] ?? 1,
+        'form_id': resp['form_id'],
         if (resp['visit'] is Map) 'feature_uuid': resp['visit']['feature_uuid'],
         if (resp['workflow'] == 'guided_visit_v1') ...{
           'workflow': resp['workflow'],
@@ -388,7 +400,6 @@ class CloudSyncService {
         'longitude': lon,
         'geojson': resp['geometry'] is Map ? resp['geometry'] : geojson,
         'layer_id': resp['layer_id'] ?? 'default',
-        'form_id': resp['form_id'],
         'form_name': resp['form_name'],
         if (resp['site'] is Map) 'study_site': resp['site'],
         'photo_path': photoPath,
@@ -403,6 +414,12 @@ class CloudSyncService {
         'name': resp['name'] ?? '',
         'notes': resp['notes'] ?? '',
         'edited_at': resp['edited_at'],
+        'edited_by': resp['edited_by'],
+        'response_revision': resp['response_revision'] ?? 1,
+        'form_version': resp['form_snapshot'] is Map
+            ? resp['form_snapshot']['version'] ?? 1
+            : resp['form_version'] ?? 1,
+        'form_id': resp['form_id'],
       });
     }
     return list;

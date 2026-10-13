@@ -1,5 +1,7 @@
 # MapBanai - Foundation Phase: COMPLETE ✅
 
+> Historical engineering record. Current v2.6.3 workflows, manager setup and release details are in [README](README.md), [User guide](USER_GUIDE.md), [Manager guide](server/manager/README.md) and [Changelog](CHANGELOG.md).
+
 **Date:** 2026-08-17  
 **Status:** Foundation Phase Successfully Initialized  
 **Flutter Version:** 3.24.3 (Stable)  

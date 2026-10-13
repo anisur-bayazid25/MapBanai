@@ -4,8 +4,22 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
-## [Unreleased]
+## [2.6.3] - 2026-10-13
 
+- Simplified enumerator access: My name/My responses/Help in the existing three-bar menu, questionnaire sync in Survey Mode and data sync on Home.
+- Added response revisions, preserved collector/editor audit and requeued saved edits for data/photo sync; old backends cannot acknowledge corrections.
+- Updated Code.gs to preserve compatible old tables/keys, reject version conflicts, maintain uploaded revision history and serve questionnaires from the same workbook.
+- Rebuilt manager Map.html/Charts.html with filters, designs and exact-resolution downloads; bundled all three copyable files and updated setup guidance.
+
+- Made Download Map a separate button and customization dialog, outside Explore, with 12 designs, custom colours, typography, caption alignment, portrait/landscape, aspect ratios and exact HD/Full HD/QHD/4K/custom pixel sizes.
+- Added direct PNG/JPEG file saving and sharing, rendering tiles at the requested viewport resolution and restoring the map afterward.
+- Added project-owned reference shapefile/ZIP/GeoJSON layers, individual visibility/colour/opacity, package portability, vector-only maps and reference geometry in image exports.
+- Added topographic, humanitarian and cycling basemaps, plus No background.
+- Kept Help in the existing three-bar menu, without an extra homepage shortcut.
+
+## [2.6.2] - 2026-10-12
+
+- Added stable-site timelines for repeated observations and reusable project/layer templates.
 - Added five map-studio themes, captions, labels and PNG/JPEG poster/current-view exports with Android sharing.
 - Added optional sync URL/API key inclusion in project file and inline QR sharing.
 - Added Google Sheets XLSForm questionnaire sync through a project-authenticated Apps Script handler.

@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -116,6 +117,12 @@ class WebMapDataService {
     return {
       'type': 'FeatureCollection',
       'features': features,
+      'vector_layers': projectId == null
+          ? []
+          : await ProjectVectorLayerService(db).load(projectId),
+      'project_name': projectId == null
+          ? ''
+          : (await db.getProjectById(projectId))?.name ?? '',
       'generated_at': DateTime.now().toUtc().toIso8601String(),
     };
   }

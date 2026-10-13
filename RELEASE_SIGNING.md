@@ -1,5 +1,9 @@
 # Release signing — one keystore, in-place updates
 
+## v2.6.3 release
+
+Version 2.6.3+26 retains the production signing identity for install-over updates. The release also ships the manager Code.gs/Map.html/Charts.html bundle and setup guide. Verify package version/build and certificate with Android build-tools, and install over the existing app without clearing storage. Google deployment upgrades are a separate manager action; APK updates do not modify Apps Script.
+
 Goal: every release APK is signed with the **same** key so new versions
 install as in-place updates (no uninstall, no "package conflicts", data
 intact).

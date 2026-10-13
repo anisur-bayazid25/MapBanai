@@ -1,4 +1,4 @@
-# MapBanai 2.6.1 field workflow
+# MapBanai 2.6.3 field workflow
 
 ## One project, three ways to collect
 
@@ -18,7 +18,7 @@ Import previous WGS84 features in Study Area from GeoJSON, KML, shapefile, GeoPa
 
 ## Complete a linked field visit
 
-1. Select the project and tap Start/resume field visit.
+1. Select the project and tap Visit a study site.
 2. Select a baseline site, review its attributes/location, assign a status and explain changes. Add new sites in Study Area first.
 3. Select the project's form and fill it. Known site attributes prefill matching questions. Saved drafts retain their original form definition even after a form update.
 4. Take/import a geotagged photo, then finalize. Answers, evidence and the map revision share a permanent visit ID.
@@ -78,7 +78,7 @@ Next priorities: a site timeline comparing repeated salinity visits; collector a
 
 ## New local improvements
 
-Map studio provides PNG/JPEG, themed posters, titles and labels. See [design references](GEOSPATIAL_APP_IDEAS.md). Project sharing can optionally include the sync connection. [Google Sheets questionnaire setup](ONLINE_QUESTIONNAIRES.md) explains how to deploy the handler and update XLSForms without overwriting previous observations. These additions are local changes after v2.6.1 until a new release is published.
+Map studio provides PNG/JPEG, themed posters, titles and labels. See [design references](GEOSPATIAL_APP_IDEAS.md). Project sharing can optionally include the sync connection. [Google Sheets questionnaire setup](ONLINE_QUESTIONNAIRES.md) explains how to deploy the handler and update XLSForms without overwriting previous observations. These features are included in the published releases.
 
 ## v2.6.2 - Repeated observations and templates
 
@@ -87,3 +87,9 @@ Guided visits remain separate observations, linked through stable feature UUIDs.
 Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
 
 This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).
+
+## v2.6.3: enumerator flow and manager workspace
+
+Set My name in the Home three-bar menu, import/select a project, sync its questionnaire from Survey Mode, collect offline, correct records through My responses, then use Home Cloud Sync. Each saved correction keeps its UUID, increments response_revision and records edited_by/edited_at. Original user_name remains the collector. The revision-aware backend updates current rows and stores uploaded versions in revisions; competing versions remain queued for manager review. This does not download other devices' records or implement automatic conflict merging.
+
+[Manager setup](server/manager/README.md) includes all three updated Apps Script files and explains preserving your key/URL while redeploying. Twelve map designs, exact wallpaper dimensions and reference vector layers support field reports and presentations. Reference overlays remain separate from surveyed study sites; import actionable sites in Study Area rather than only WebMap Layers.

@@ -45,7 +45,8 @@ class ProjectTemplateService {
         'kind': layerOnly ? 'layer' : 'project',
         'project': data.project,
         'settings': settings,
-        'layers': data.layers,
+        'layers': Map<String, dynamic>.from(data.layers)
+          ..remove('vector_overlays'),
         'forms': forms
       });
       await db.setSetting(_key, jsonEncode(templates));

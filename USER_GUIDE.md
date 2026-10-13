@@ -27,7 +27,7 @@ No account, no registration, no internet needed for data collection.
 | **GPS CSV Viewer · Cloud Sync · WebMap** | Utility row under the mode tiles |
 | Collected data | Survey-response and GIS-feature counts of the selected project |
 | Project settings · History · Export | Project management, past records, and file export |
-| ☰ (top-right) | Opens **Settings** |
+| ☰ (top-right) | **My name · My responses · Help & manager setup · Settings** |
 
 Everything works offline; tiles open instantly and data stays on the device.
 
@@ -187,3 +187,15 @@ banner offers **Download & Install**. First update asks for the Android
 
 - GitHub issues: https://github.com/anisur-bayazid25/MapBanai
 - Email: anisur.rahman.bayazid@gmail.com
+
+## v2.6.3: enumerator essentials
+
+1. Home → three-bar menu → **My name**. Your name accompanies new records; saved edits preserve the original collector and record the editor separately.
+2. Import the manager's project package and select its project. Survey Mode → **Sync questionnaire** → Check Google Sheet → review → Apply before starting work.
+3. Collect offline in Survey, GIS or Study Area; **Visit a study site** supports linked repeated visits.
+4. Three-bar menu → **My responses** → open a saved record → edit answers. The response revision advances and the record waits to upload again.
+5. Home → **Cloud Sync** when connected. Questionnaire version and response revision are different. Deploy the updated manager backend to sync edits; failures/conflicts stay queued.
+
+Help remains in the three-bar menu, rather than adding another Home card. The [manager guide](server/manager/README.md) explains one workbook, /exec URL, API key retrieval and copying all three script files. Managers can use the Sheet menu for the redesigned map and chart workspaces.
+
+WebMap → **Layers** imports WGS84 reference shapefiles/GeoJSON, with individual visibility, color and opacity. **Download Map** is separate from Explore: choose twelve designs/custom colors, typography, captions, portrait/landscape, aspect ratio and exact pixels; save/share PNG or JPEG. 3840×2160 desktop wallpapers are supported. Limits: 4096 pixels per side and 8.4 megapixels; larger requests show an error. Use No background for vector-only maps. Online backgrounds need internet; keep source credits.

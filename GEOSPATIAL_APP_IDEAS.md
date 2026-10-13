@@ -1,5 +1,9 @@
 # MapBanai design references and priorities
 
+## v2.6.3 delivery
+
+Implemented: separate map download studio with twelve color/design presets and wallpaper dimensions; project reference vector overlays and extra basemaps; clearer enumerator identity/correction/sync access; manager maps/charts with downloadable images; uploaded response revision history. Stable-site repeated observations and reusable templates remain from v2.6.2. Future priorities remain shared-device assignment, conflict review and controlled download of team observations; none is implied by this upload-only backend.
+
 There is no single best field GIS app for every team. The useful comparison is how well it serves enumerators, supervisors and GIS staff. Keep MapBanai's core flow: **Project → Site or new feature → Questions → Evidence → Save → Sync**. A supervisor prepares layers and forms once; enumerators get a ready-to-use project.
 
 | Reference | Useful capability | MapBanai direction |

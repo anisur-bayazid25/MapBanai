@@ -1,5 +1,7 @@
 # RESTORE_BUG_LOG — "Previous data backup found" silently restores nothing
 
+> Historical engineering record. Current v2.6.3 workflows, manager setup and release details are in [README](README.md), [User guide](USER_GUIDE.md), [Manager guide](server/manager/README.md) and [Changelog](CHANGELOG.md).
+
 **Date:** 2026-08-21
 **Investigator:** Muse Spark — Fix1 diagnostics
 **Branch:** main @ d48d9db..0ccfed5 + uncommitted Fix1/Fix2

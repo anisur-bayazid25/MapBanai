@@ -1,7 +1,13 @@
 # MapBanai - System Architecture
 
-**Version:** 1.0.0  
-**Status:** Foundation Design  
+## v2.6.3 implementation update
+
+The current UI is Flutter widgets, not Jetpack Compose; earlier diagrams are foundation design notes. SurveySession JSON carries response revisions/audit fields. AppDatabase centralizes saved edits in a transaction and clears both sync acknowledgements; CloudSyncService sends stable IDs and revisions and checks backend revision capability. Form snapshots remain distinct from record versions.
+
+ProjectVectorLayerService stores validated WGS84 references in project settings, separately from collection records; package import/export carries overlays. WebMap renders references below survey geometry and uses an offscreen-sized viewport for exact PNG/JPEG exports. The manager Apps Script bundle shares this map studio and uses authenticated Sheets RPC for manager workspaces; public sync requests require project UUID and private key. See server/manager/README.md.
+
+**Version:** 2.6.3
+**Status:** Current implementation with retained foundation design notes
 **Technology Stack:** Flutter (Dart) + Native Android APIs
 
 ---

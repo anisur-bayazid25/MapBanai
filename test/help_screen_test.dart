@@ -24,12 +24,12 @@ void main() {
     await tester.pumpWidget(const MaterialApp(
         home: HelpScreen(projectId: 'project-for-this-team')));
     expect(find.text('This project ID: project-for-this-team'), findsOneWidget);
-    final codeSection = find.text('Complete Google Apps Script — copy code');
+    final codeSection = find.text('Code.gs — copy complete code');
     await tester.scrollUntilVisible(codeSection, 300,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(codeSection);
     await tester.pumpAndSettle();
-    final copy = find.text('Copy complete script');
+    final copy = find.text('Copy Code.gs');
     await tester.ensureVisible(copy);
     await tester.pumpAndSettle();
     await tester.tap(copy);
@@ -37,8 +37,8 @@ void main() {
     expect(copied, contains("projectId: 'project-for-this-team'"));
     expect(copied, contains('function doPost(e)'));
     expect(copied, contains('function setupMapBanai()'));
-    expect(copied, contains("payload.action === 'get_questionnaire'"));
-    expect(copied, contains("payload.action === 'sync_data'"));
+    expect(copied, contains("body.action==='get_questionnaire'"));
+    expect(copied, contains("'sync_data','upload_photo'"));
     expect(copied, isNot(contains('PASTE_PROJECT_ID_FROM_MAPBANAI')));
     expect(tester.takeException(), isNull);
   });

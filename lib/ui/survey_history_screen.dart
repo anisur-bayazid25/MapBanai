@@ -12,7 +12,8 @@ import 'package:mapbanai/ui/survey_form_renderer.dart';
 import 'package:mapbanai/ui/survey_session_detail_screen.dart';
 
 class SurveyHistoryScreen extends StatefulWidget {
-  const SurveyHistoryScreen({super.key});
+  const SurveyHistoryScreen({super.key, this.projectId});
+  final int? projectId;
 
   @override
   State<SurveyHistoryScreen> createState() => _SurveyHistoryScreenState();
@@ -37,13 +38,18 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   Future<void> _load() async {
     final projects = await _database.getProjects(includeArchived: true);
     final names = {for (final p in projects) p.id: p.name};
-    final sessions = await _database.getSurveySessions();
+    final sessions = widget.projectId == null
+        ? await _database.getSurveySessions()
+        : await _database.getSurveySessionsByProject(widget.projectId!);
     final drafts = await _database.getDraftSurveySessions();
     if (!mounted) return;
     setState(() {
       _projectNames = names;
       _sessions = sessions;
-      _drafts = drafts;
+      _drafts = drafts
+          .where((s) =>
+              widget.projectId == null || s.projectId == widget.projectId)
+          .toList();
       _loading = false;
     });
   }

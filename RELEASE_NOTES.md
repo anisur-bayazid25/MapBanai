@@ -1,14 +1,13 @@
-MapBanai v2.6.2 - Repeated observations and reusable projects
+MapBanai v2.6.3 — Easier field collection, corrections and map downloads
 
-- Site timelines link completed visits to stable feature UUIDs. Compare salinity or another numeric question by questionnaire, inspect earlier answers, and export all observations as CSV. Each visit keeps earlier measurements; the map shows the latest summary.
-- Imported visit history joins local observations without duplicates. GeoJSON and visit uploads include feature UUIDs. Timelines show local history; downloading observations from other phones is not added.
-- Save project or selected-layer templates. Reuse forms and named layers in fresh projects, or add layers to an existing project. Templates omit collected records, site geometry, photos and cloud credentials.
-- Share project packages with optional Apps Script URL/API key. Review and apply updated XLSForms from Google Sheets while preserving earlier records and drafts.
-- Offline Help covers field modes and manager setup with a complete copyable Sheets/Drive backend. One or two workbooks use one deployment/key per project. Uploads validate project identity and deduplicate retries.
-- WebMap themes, labels, poster captions and PNG/JPEG image export support Android sharing. Missing or blocked basemap tiles may require data-only export.
+- Enumerator shortcuts in the existing three-bar menu: My name, My responses, Help & manager setup and Settings. Questionnaire sync is visible in Survey Mode; data sync stays on Home.
+- Saved corrections retain stable IDs and original collectors, record editors and increment response revisions. They return to the upload queue. An older backend cannot silently acknowledge edited data.
+- Updated manager Code.gs uses one workbook/deployment/key per project, preserves compatible old Responses/Features and existing keys, stores uploaded revision history and rejects conflicts. Map.html and Charts.html provide refreshed manager workspaces, themes, filters and image downloads. All three files are copyable in offline Help and attached to this release with setup guidance.
+- Separate Download Map button with twelve designs, custom colors/type/captions, portrait/landscape, aspect ratios and exact HD/Full HD/QHD/4K/custom sizes. Save or share PNG/JPEG; export limit is 4096 pixels per side and 8.4 megapixels.
+- Project-owned shapefile/ZIP/GeoJSON references with visibility/color/opacity, package portability and image exports. Six basemaps include topographic, humanitarian, cycling and No background.
 
-Install over your existing app using the signed APK. Photos still require geotags; GPS accuracy is recorded without imposing an accuracy threshold.
+Install the signed APK over the existing app to retain local storage. Photos require geotags; GPS accuracy is noted without a mandatory threshold. Repeated observations and reusable templates remain available.
 
-Automated app/backend checks, static analysis, browser map checks and signing verification cover this release. No phone/emulator or live Google deployment was available. Pilot camera/GNSS and your endpoint before fieldwork. Fill the supplied script configuration with your project UUID, workbook IDs, Drive folder and private key, run setupMapBanai and deploy it; existing Google deployments are not changed automatically.
+Managers must update Code.gs (and Map.html/Charts.html for the new workspaces), run setupMapBanai and deploy a new version of their existing /exec endpoint. The APK does not modify your Google deployment. See the attached manager README and ONLINE_QUESTIONNAIRES.md for URL/key retrieval and migration. The backend uploads records; it does not download other phones' data or automatically merge competing edits.
 
-See FIELD_WORKFLOW.md and ONLINE_QUESTIONNAIRES.md in the repository for setup and limits.
+Validation includes automated Flutter/backend tests, static analysis, browser workspaces/map exports and production signing checks. No physical Android device or live Google deployment was available; test the native save picker and one complete collect/edit/sync cycle before rollout.

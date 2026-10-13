@@ -1,5 +1,9 @@
 # MapBanai - Project TODO
 
+## v2.6.3 completed / next validation
+
+Completed enumerator name/menu access, visible questionnaire sync in Survey Mode, edit revisions/outbox retry, updated manager Code.gs/Map.html/Charts.html, reference layers and expanded map design/download controls. Next field checks: signed upgrade on a phone, native PNG/JPEG picker, geotagged camera, and live Google workbook import/collect/edit/sync. Future: explicit conflict review, assigned workloads and project-scoped team record download.
+
 **Status:** Phase 4j — v2.4.4 gating proof + hardening (Complete — tests green, APK built 2026-08-23)  
 **Last Updated:** 2026-08-23  
 **Version:** 2.4.4

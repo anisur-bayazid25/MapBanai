@@ -8,10 +8,10 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.6.1](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.1)**
+**Latest release: [v2.6.3](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.3)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
-**Version: 2.6.1+24.** See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area, named study layers, the project atlas, sync and research-informed next priorities. Photo GPS accuracy remains advisory.
+**Version: 2.6.3+26.** See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area, named study layers, the project atlas, sync and research-informed next priorities. Photo GPS accuracy remains advisory.
 
 ---
 
@@ -22,17 +22,17 @@ other phones.
 2. Open the APK and install it (allow "install from this source" if asked).
 3. First launch asks for your **name** — it is stamped on everything you
    collect.
-4. Create a project: **Home → Open → New project**.
+4. Enumerators can import a shared project; managers can create a project: **Home → Open → New project**.
 
 No account, no registration, no internet needed.
 
 ## Home screen
 
-- **Start/resume field visit** — review a site, fill its form and attach a geotagged photo.
+- **Visit a study site** — review a site, fill its form and attach a geotagged photo.
 - **Field quality / Offline maps** — inspect project issues and manage permitted map packages.
 - **Mode tiles** — Survey, GIS, GPS and Study Area as a 2×2 grid of square
   cards; below them GPS CSV Viewer, Cloud Sync and WebMap in one row.
-- **Settings** — the ☰ menu icon in the top-right corner.
+- **Three-bar menu** — My name, My responses, Help & manager setup and Settings.
 - **Project settings** — create, rename, archive or delete projects (the
   former "Open" button).
 - **History** — past survey sessions, captured features and **drafts**
@@ -55,6 +55,14 @@ No account, no registration, no internet needed.
   placeholders in labels update live; colored/styled labels render like
   ODK Collect), responses are saved as you go.
 - Every answer is stored **on the device only** — offline-friendly.
+
+## Correct responses, sync and manager tools
+
+Set **Home → three-bar menu → My name**, import a project, then collect offline. **Survey Mode → Sync questionnaire** checks online form updates; **Home → Cloud Sync** sends data. **Three-bar menu → My responses** opens the selected project's saved records. Editing queues a new response revision, preserving the original collector and recording the editor.
+
+Deploy the [updated manager workspace](server/manager/README.md) to sync corrections and retain uploaded revision history. The bundle includes Code.gs, Map.html and Charts.html, all available to copy in app Help. One workbook/URL/key handles questions and data; setup retains compatible old tables and existing credentials.
+
+WebMap has a separate **Download Map** button with twelve designs, custom colors, portrait/landscape, aspect ratio and exact HD through 4K/custom pixel sizes. PNG/JPEG can be saved or shared. Six backgrounds include No background; **Layers** imports multiple WGS84 shapefile bundles/GeoJSON references with visibility, color and opacity. Reference layers travel with project packages and appear in exported images.
 
 ## GPS mode
 
