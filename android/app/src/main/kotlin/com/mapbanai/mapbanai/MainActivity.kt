@@ -14,6 +14,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
@@ -21,6 +22,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
+    private var compassStream: CompassStream? = null
     private val gnssChannel = "mapbanai/gnss"
     private val intentsChannel = "mapbanai/intents"
     private val updateChannel = "mapbanai/update"
@@ -174,6 +176,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        compassStream = CompassStream(this)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, "mapbanai/compass").setStreamHandler(compassStream)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             gnssChannel
@@ -262,7 +266,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onResume() { super.onResume(); compassStream?.resume() }
+    override fun onPause() { compassStream?.pause(); super.onPause() }
     override fun onDestroy() {
+        compassStream?.pause()
         val listener = gnssListener
         if (listener != null) {
             val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager

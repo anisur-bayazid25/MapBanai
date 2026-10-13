@@ -548,13 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _formatLastSynced(DateTime? dt, [AppLocalizations? l10n]) {
     if (dt == null) return l10n?.syncNever ?? 'Never synced';
     final local = dt.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    final date = '$y-$m-$d $hh:$mm';
-    return l10n != null ? l10n.syncLastSynced(date) : 'Last synced: $date';
+    return '${local.day}/${local.month} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildSyncSquare(BuildContext context, String selected) {
@@ -1506,8 +1500,8 @@ class _SquareModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 0.92,
+    return SizedBox(
+      height: 150 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.5),
       child: Card(
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -1531,26 +1525,30 @@ class _SquareModeCard extends StatelessWidget {
                   child: Icon(icon, color: color, size: 28),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        height: 1.15,
-                      ),
+                SizedBox(
+                  height: 34 * MediaQuery.textScalerOf(context).scale(1),
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.15,
+                        ),
+                  ),
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle!,
+                const SizedBox(height: 3),
+                SizedBox(
+                  height: 14 * MediaQuery.textScalerOf(context).scale(1),
+                  child: Text(
+                    subtitle ?? '',
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                   ),
-                ],
+                ),
               ],
             ),
           ),

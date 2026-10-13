@@ -76,7 +76,19 @@ class WebMapGenerator {
     } catch (_) {
       studio = await File('assets/webmap/map_studio.js').readAsString();
     }
+    Future<String> asset(String path) async {
+      try {
+        return await rootBundle.loadString(path);
+      } catch (_) {
+        return File(path).readAsString();
+      }
+    }
+
+    final symbols = await asset('assets/webmap/map_symbols.js');
+    final fonts = await asset('assets/webmap/fonts.css');
     return template
+        .replaceAll('__MAP_SYMBOLS_JS__', symbols)
+        .replaceAll('__MAP_FONT_CSS__', fonts)
         .replaceAll('__MAP_STUDIO_JS__', studio)
         .replaceAll('__LEAFLET_CSS__', css)
         .replaceAll('__LEAFLET_JS__', js)

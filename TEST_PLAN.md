@@ -1,5 +1,9 @@
 # MapBanai - Test Plan
 
+## v2.6.4 verification
+
+Verified the 370-test app suite plus three new compass/basemap checks. Circular heading filtering covers north wrap, invalid readings and jitter; shared basemap tests cover native zoom ceilings and an empty-background style. Browser checks cover semantic legends, renaming, icon choices, safe SVG/PNG imports, seven font choices, Full HD/4K/portrait dimensions and removal of footer counts/no-basemap text. Manager backend contracts and workspace browser fixtures pass. Android debug build compiles the orientation-sensor implementation. Physical-device compass calibration/rotation, native file picking and indoor/outdoor altitude remain device checks. No new release or push is performed.
+
 ## v2.6.3 verification and rollout
 
 Local v2.6.3 verification: **370 Flutter tests passed**, backend contract checks passed, and browser map/chart fixtures passed. Static analysis has no errors; three existing unused-variable test warnings remain. The signed release APK was built and verified as versionName 2.6.3 / versionCode 26 with the existing production certificate; all three manager files are bundled.
@@ -8,7 +12,7 @@ Run flutter test --concurrency=1, flutter analyze, and node tool/test_manager_ba
 
 Browser fixtures check manager map/chart initialization, refresh, mobile layouts, aggregation/numeric scatter, designs and exact image exports. Verify the release APK package version/build and production signer. With a physical phone and live workbook, complete import/questionnaire sync → collect → sync → edit → sync; confirm one latest row and revision history, photo geotag/accuracy, native save picker and offline restart. Those native/live checks were unavailable locally and remain rollout checks.
 
-**Version:** 2.6.3
+**Version:** 2.6.4
 **Last Updated:** 2026-10-13
 **Strategy:** Test-Driven Development (TDD) with focus on data integrity and offline resilience
 
@@ -664,3 +668,9 @@ Before merging, verify:
 - Keep test documentation current
 - Monitor test execution time
 - Archive obsolete tests
+
+Connection diagnostics: seven client tests cover authenticated POST, Google POST-to-GET redirect, developer URL rejection, HTML/sign-in responses, outdated backends and key mismatch. The manager backend contract verifies authentication and that checking a connection changes no sheet rows. Live deployment/device verification still requires the manager’s deployed script.
+
+After the connection-check update, the complete Flutter suite passed: 380 tests. Targeted analysis reports no errors (three style infos). Manager backend contract checks also passed.
+
+v2.6.4 release validation: final suite 380/380 passed; backend contract and browser map/chart checks passed. Signed release APK verified versionName 2.6.4, versionCode 27 and production certificate SHA-256 913b1052c94f0dda17c965d5964592c1daf8b01002b2e1b7458b6ba67f5fd599. Bundled scripts and map/font assets match source bytes. Live Android sensors and Google deployment remain field checks.

@@ -949,51 +949,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  String _buildStyleString(Basemap basemap) {
-    return '''
-
-    {
-
-      "version": 8,
-
-      "sources": {
-
-        "basemap": {
-
-          "type": "raster",
-
-          "tiles": ["${basemap.url}"],
-
-          "tileSize": 256,
-
-          "attribution": "${basemap.attribution}"
-
-        }
-
-      },
-
-      "layers": [
-
-        {
-
-          "id": "basemap",
-
-          "type": "raster",
-
-          "source": "basemap",
-
-          "minzoom": 0,
-
-          "maxzoom": 22
-
-        }
-
-      ]
-
-    }
-
-    ''';
-  }
+  String _buildStyleString(Basemap basemap) =>
+      MapStyleChoice.online(basemap).style;
 
   Future<void> _showBasemapDialog() async {
     final choice =

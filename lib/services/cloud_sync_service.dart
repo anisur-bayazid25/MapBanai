@@ -31,6 +31,92 @@ class CloudSyncService {
   CloudSyncService(this.db, {http.Client? client, this.studyAreaStore})
       : _client = client;
 
+  /// Checks credentials and spreadsheet access without sending field records.
+  Future<void> testConnection({
+    required String endpoint,
+    required String apiKey,
+    required String projectId,
+  }) async {
+    final uri = Uri.tryParse(endpoint.trim());
+    if (uri == null ||
+        uri.host.isEmpty ||
+        !['http', 'https'].contains(uri.scheme)) {
+      throw const CloudSyncException(
+          'Paste the complete Apps Script Web app URL, starting with https:// and ending /exec.');
+    }
+    if (uri.host == 'script.google.com' &&
+        (uri.scheme != 'https' ||
+            !RegExp(r'^/macros/s/[^/]+/exec$').hasMatch(uri.path))) {
+      throw const CloudSyncException(
+          'Use Deploy → Manage deployments → Web app URL ending /exec. Editor and /dev URLs cannot be used.');
+    }
+    if (projectId.trim().isEmpty) {
+      throw const CloudSyncException(
+          'Project identity is missing. Reopen the project and try again.');
+    }
+    if (apiKey.trim().isEmpty) {
+      throw const CloudSyncException(
+          'Enter the API key shown by the manager setup.');
+    }
+    final client = _client ?? http.Client();
+    try {
+      final response = await _postJsonWithRedirect(
+        client: client,
+        uri: uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'test_connection',
+          'projectId': projectId,
+          'apiKey': apiKey.trim()
+        }),
+      ).timeout(const Duration(seconds: 25));
+      final body = response.body.trim();
+      final lower = body.toLowerCase();
+      if (lower.contains('accounts.google.com') ||
+          lower.contains('servicelogin')) {
+        throw const CloudSyncException(
+            'Google requires sign-in. Deploy the Web app with Execute as: Me and Who has access: Anyone, then copy its /exec URL.');
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw CloudSyncException(
+            'Google returned HTTP ${response.statusCode}. Check the deployment URL and Web app access in Deploy → Manage deployments.');
+      }
+      dynamic decoded;
+      try {
+        decoded = jsonDecode(body);
+      } catch (_) {
+        throw const CloudSyncException(
+            'The URL returned a web page instead of the MapBanai API. Deploy the bundled Code.gs as a Web app (Execute as: Me; access: Anyone). For an existing deployment, select Edit → New version → Deploy.');
+      }
+      if (decoded is! Map || decoded['ok'] != true) {
+        final error = decoded is Map ? decoded['error']?.toString() ?? '' : '';
+        if (error.toLowerCase().contains('unknown action')) {
+          throw const CloudSyncException(
+              'This deployment uses an older script. Replace Code.gs with the bundled manager script, then Edit deployment → New version → Deploy. Keep the same URL and API key.');
+        }
+        if (error.toLowerCase().contains('api key') ||
+            error.toLowerCase().contains('project id')) {
+          throw const CloudSyncException(
+              'Project ID or API key does not match the manager script. Copy this project’s ID into manager setup and use its API key.');
+        }
+        throw const CloudSyncException(
+            'Manager setup could not be verified. Run setupMapBanai, authorize spreadsheet access, and deploy the latest script version.');
+      }
+      if (decoded['connectionVerified'] != true) {
+        throw const CloudSyncException(
+            'The server replied but did not verify credentials. Update Code.gs and deploy a new version to enable the connection check.');
+      }
+    } on TimeoutException {
+      throw const CloudSyncException(
+          'Connection timed out. Check internet access and try again.');
+    } on http.ClientException {
+      throw const CloudSyncException(
+          'Could not reach the server. Check internet access and the Web app URL.');
+    } finally {
+      if (_client == null) client.close();
+    }
+  }
+
   Future<List<SurveySession>> queryUnsyncedResponses(int projectId) async {
     final all = await (db.select(db.surveySessions)
           ..where((t) => t.projectId.equals(projectId))

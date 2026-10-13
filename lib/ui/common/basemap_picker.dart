@@ -25,15 +25,24 @@ class MapStyleChoice {
       style: jsonEncode({
         'version': 8,
         'sources': {
-          'basemap': {
-            'type': 'raster',
-            'tiles': [basemap.url],
-            'tileSize': 256,
-            'attribution': basemap.attribution
-          }
+          if (basemap.url.isNotEmpty)
+            'basemap': {
+              'type': 'raster',
+              'tiles': [basemap.url],
+              'tileSize': 256,
+              'maxzoom': basemap.maxNativeZoom,
+              'attribution': basemap.attribution
+            }
         },
         'layers': [
-          {'id': 'basemap', 'type': 'raster', 'source': 'basemap'}
+          if (basemap.url.isEmpty)
+            {
+              'id': 'paper',
+              'type': 'background',
+              'paint': {'background-color': '#f6f8f3'}
+            },
+          if (basemap.url.isNotEmpty)
+            {'id': 'basemap', 'type': 'raster', 'source': 'basemap'}
         ]
       }));
   factory MapStyleChoice.package(OfflineMapPackage package) => MapStyleChoice(

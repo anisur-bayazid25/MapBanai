@@ -1,45 +1,12 @@
-# Google Sheets questionnaire sync
+# Google Sheets questionnaire sync — v2.6.4
 
-A project can distribute its questions and sync connection to enumerators, then pull updated XLSForm questions from a Google Sheet. This client implementation needs the accompanying Apps Script handler deployed on your existing endpoint. It does not automatically modify an existing Google deployment.
+For each new project, use one fresh Google spreadsheet, one Apps Script deployment and one private API key. Follow [the complete new-project setup](server/manager/README.md). The same Code.gs, Map.html and Charts.html are copyable offline in Home → three-bar menu → Help & manager setup.
 
-## Recommended complete setup (v2.6.3)
+Create the project in MapBanai and copy its UUID. From the new spreadsheet open Extensions → Apps Script. Paste the three supplied files and replace only MAPBANAI.projectId in Code.gs. Leave all four other placeholders unchanged. Run setupMapBanai to use that spreadsheet for questions and answers, generate the key, create the photo folder and prepare data tabs.
 
-Use [the manager workspace guide](server/manager/README.md) and its **Code.gs, Map.html, Charts.html**. All three are also copyable in offline Help, reached through the Home **three-bar menu → Help & manager setup**. One bound workbook and one deployment/key per project handle questionnaire updates, data and photos. Run setupMapBanai; it retains an existing key/photo folder and compatible legacy Responses/Features, or creates missing settings/tabs. No manual key generation or second deployment is required.
+Reload the spreadsheet → MapBanai → Connection and setup guide to copy the key. Deploy a new Web app with Execute as: Me and Who has access: Anyone. Copy the complete /exec URL. Save both URL and key in MapBanai Project Details → Cloud Sync, then Test Connection.
 
-Home **Cloud Sync** uploads data. **Survey Mode → Sync questionnaire** checks and applies questions. Home three-bar menu **My name / My responses** identifies the enumerator and opens saved records for correction. Corrections retain stable IDs and original collector, increment response_revision and clear upload acknowledgements. The new backend updates latest rows and preserves uploaded versions in revisions. Deploy the updated Code.gs before syncing edits; the client keeps edits queued if an old backend claims success without revision support.
-
-Google Sheets shows readable metadata and answer columns plus authoritative json_1–json_4 chunks. MapBanai's spreadsheet menu opens the redesigned map/chart manager workspaces. See the guide for /exec URL, API key retrieval, deployment upgrades, limits and migration checks.
-
-## Existing backend: questionnaire-only adapter alternative
-
-1. Keep your XLSForm in a Google Spreadsheet with `survey`, `choices` and `settings` tabs. Use the normal XLSForm headers. In `settings`, give it a stable `form_id` matching the form already imported in MapBanai. Avoid changing that ID when editing questions. The current implementation links one live XLSForm workbook per project; other local forms are kept.
-2. Configure the project's HTTPS Google Apps Script `/exec` URL and enumerator API key in MapBanai's project settings.
-3. Obtain the project UUID from `project.json` in its exported `.mbproj` package (a ZIP file), or the project ID shown in settings. Keep the same project identity across the team; do not import as a new copy for this shared field campaign.
-4. Add [questionnaire_apps_script.gs](server/questionnaire_apps_script.gs) to your existing Apps Script project. After your existing `doPost` parses its request, route `get_questionnaire` before its existing data-sync handling:
-
-```javascript
-if (payload.action === 'get_questionnaire') {
-  return mapbanaiQuestionnaire(payload);
-}
-```
-
-Use the variable name your script uses for its parsed request instead of `payload`. Keep your existing collection/photo upload branches. This adapter alone does not add response revision support.
-
-5. In Apps Script Project Settings, add script property `MAPBANAI_QUESTIONNAIRES` containing:
-
-```json
-{
-  "YOUR_PROJECT_UUID": {
-    "spreadsheetId": "YOUR_GOOGLE_SPREADSHEET_ID",
-    "apiKey": "YOUR_ENUMERATOR_KEY"
-  }
-}
-```
-
-Use the ID between `/d/` and `/edit` in the Google Sheet URL. Additional projects can have independent spreadsheet IDs and keys. The script owner must have access to each Sheet.
-
-6. Update the web-app deployment to a new script version, executing as the owner with access permitted for your app's non-Google-login requests, subject to your organization's restrictions. Authorize spreadsheet access. Reuse the deployed `/exec` URL. Google's [web-app guide](https://developers.google.com/apps-script/guides/web) explains deployment; [ContentService](https://developers.google.com/apps-script/guides/content) explains the JSON response and Google redirect that the app follows.
-7. In MapBanai, open Survey Mode or project settings and tap **Sync questionnaire → Check Google Sheet**. Review and apply the result. Test your existing data/photo sync too before distributing the project.
+Survey Mode → Sync questionnaire checks and applies questions. Home → Cloud Sync uploads data. The Home three-bar menu contains My name and My responses. Corrections keep stable IDs, increment response_revision and upload the latest record alongside its revision history. Use a fresh setup for each new project.
 
 ## Share with enumerators
 

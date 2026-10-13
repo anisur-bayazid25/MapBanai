@@ -30,7 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const String _distanceUnitKey = 'distance_unit';
   static const String _areaUnitKey = 'area_unit';
 
-  final TextEditingController _nameController = TextEditingController();
   bool _loading = true;
   String _language = 'system';
   String _themeMode = 'system';
@@ -46,7 +45,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _load() async {
-    final name = await widget.database.getSetting(_userNameKey);
     var language = await widget.database.getSetting(_languageKey) ?? 'system';
     if (!['system', 'en', 'bn'].contains(language)) {
       language = 'system';
@@ -70,7 +68,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _nameController.text = name ?? '';
       _language = language;
       _themeMode = theme;
       _appVersion = appVersion;
@@ -80,15 +77,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    await widget.database.setSetting(
-      _userNameKey,
-      _nameController.text.trim(),
-    );
     await widget.database.setSetting(_languageKey, _language);
     await widget.database.setSetting(_themeKey, _themeMode);
     await widget.database.setSetting(_distanceUnitKey, _distanceUnit.name);
@@ -218,26 +210,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                SectionHeader(
-                  title: l10n.settingsUserTitle,
-                  subtitle: l10n.settingsUserSubtitle,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: l10n.userNameLabel,
-                    hintText: l10n.userNameHint,
-                    prefixIcon: const Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.userNameLeaveEmpty,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-                const Divider(height: 32),
                 SectionHeader(
                   title: l10n.languageSection,
                   subtitle: l10n.languageSubtitle,

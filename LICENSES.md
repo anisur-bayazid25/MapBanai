@@ -1,5 +1,9 @@
 # MapBanai - Licenses & Legal
 
+## Bundled map fonts (local improvements)
+
+Nunito, Lora, Oswald and Lobster are embedded for offline map titles, subtitles and legends under the SIL Open Font License 1.1. Their original notices, source links and license text are preserved in [FONT_LICENSES.txt](assets/webmap/FONT_LICENSES.txt). Sources: the official [Google Fonts repository](https://github.com/google/fonts/tree/main/ofl). Existing system-font choices remain available.
+
 **Version:** 1.0.0  
 **Last Updated:** 2026-08-17  
 **Status:** Foundation - To be updated with actual dependency versions

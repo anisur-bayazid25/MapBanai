@@ -4,6 +4,19 @@ All notable changes to MapBanai are documented here.
 Format: Keep-a-Changelog style. SemVer, but the Android build number is
 managed by `tool/bump_version.dart` (see AI_CHANGELOG.md).
 
+## [2.6.4] - 2026-10-13
+
+- Replaced the public health-only sync test with authenticated, read-only project/key/data-sheet verification, with deployment/sign-in diagnostics and updated manager setup guidance.
+
+- Unified GIS/Study Area basemaps through the existing shared picker; removed CARTO and added Topographic, Humanitarian, Cycling and No background with native tile zoom limits.
+- Kept the name editor only in Home → three-bar menu → My name. Removed the duplicate Data collection fields editor; survey forms define questions across collection modes, while legacy fields/data are retained.
+- Aligned Home card icons/titles with fixed title/subtitle space and shorter sync timestamps.
+- Added semantic, view-aware legends with editable names, point symbols, line patterns, polygon outlines and PNG/self-contained SVG icons. Exported legends include matching symbols and only mapped categories.
+- Scaled map export text, symbols and north arrow with image resolution, plus readability options and independent title/subtitle/legend fonts. Bundled Nunito, Lora, Oswald and Lobster for offline use.
+- Removed feature/reference counts and no-basemap notices from images; only an included basemap receives source attribution.
+- Replaced GPS travel bearing as the primary compass with foreground orientation sensors, circular smoothing and isolated compass updates. GPS bearing remains explicitly labelled fallback; altitude reference/uncertainty is clearer.
+- Rewrote offline Help and manager documentation around a fresh project: edit only the project ID, generate the key/photo folder automatically, and deploy a new Web app. Formatted the complete Code.gs for readability.
+
 ## [2.6.3] - 2026-10-13
 
 - Simplified enumerator access: My name/My responses/Help in the existing three-bar menu, questionnaire sync in Survey Mode and data sync on Home.

@@ -103,6 +103,8 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
       ..setBackgroundColor(Colors.white)
       ..enableZoom(true)
       ..addJavaScriptChannel('MapBanaiExport', onMessageReceived: _exportData)
+      ..addJavaScriptChannel('MapBanaiSymbols',
+          onMessageReceived: _pickMapSymbol)
       ..addJavaScriptChannel('MapBanaiLayers',
           onMessageReceived: _onLayersMessage)
       ..setNavigationDelegate(
@@ -119,6 +121,33 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
         ),
       )
       ..loadFile(_file.path);
+  }
+
+  Future<void> _pickMapSymbol(JavaScriptMessage message) async {
+    try {
+      final key = (jsonDecode(message.message) as Map)['key'];
+      if (key is! String || key.length > 256) return;
+      final picked = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['png', 'svg'],
+          withData: true);
+      if (picked == null) return;
+      final file = picked.files.single;
+      final bytes = file.bytes ??
+          (file.path == null ? null : await File(file.path!).readAsBytes());
+      if (bytes == null || bytes.length > 524288)
+        throw const FormatException('Use an icon up to 512 KB.');
+      final mime = file.extension?.toLowerCase() == 'svg'
+          ? 'image/svg+xml'
+          : 'image/png';
+      final data = 'data:$mime;base64,${base64Encode(bytes)}';
+      await _controller.runJavaScript(
+          'receiveMapSymbol(${jsonEncode(key)}, ${jsonEncode(data)});');
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Cannot load icon: $error')));
+    }
   }
 
   Future<void> _exportData(JavaScriptMessage message) async {

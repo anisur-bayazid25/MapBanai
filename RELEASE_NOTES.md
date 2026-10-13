@@ -1,13 +1,11 @@
-MapBanai v2.6.3 — Easier field collection, corrections and map downloads
+MapBanai v2.6.4 — Clear manager setup and better field maps
 
-- Enumerator shortcuts in the existing three-bar menu: My name, My responses, Help & manager setup and Settings. Questionnaire sync is visible in Survey Mode; data sync stays on Home.
-- Saved corrections retain stable IDs and original collectors, record editors and increment response revisions. They return to the upload queue. An older backend cannot silently acknowledge edited data.
-- Updated manager Code.gs uses one workbook/deployment/key per project, preserves compatible old Responses/Features and existing keys, stores uploaded revision history and rejects conflicts. Map.html and Charts.html provide refreshed manager workspaces, themes, filters and image downloads. All three files are copyable in offline Help and attached to this release with setup guidance.
-- Separate Download Map button with twelve designs, custom colors/type/captions, portrait/landscape, aspect ratios and exact HD/Full HD/QHD/4K/custom sizes. Save or share PNG/JPEG; export limit is 4096 pixels per side and 8.4 megapixels.
-- Project-owned shapefile/ZIP/GeoJSON references with visibility/color/opacity, package portability and image exports. Six basemaps include topographic, humanitarian, cycling and No background.
+- New-project manager setup: copy only the project UUID into Code.gs, leave the other four placeholders unchanged, run setupMapBanai to create the API key, photo folder and data tabs, then deploy a new Web app. All instructions are available offline in Help. Complete readable Code.gs, Map.html, Charts.html and guides are included.
+- Test Connection verifies the project ID, API key and data-sheet access without sending field records. Clear diagnostics explain sign-in pages, incorrect URLs and unsupported scripts.
+- Same six basemaps in GIS and Study Area, including No background. Questionnaire fields replace the duplicate project Data collection fields editor; previous data remain stored. One name editor in the Home three-bar menu. Home icons and titles align with shorter sync timestamps.
+- Map exports show only mapped legend categories with actual symbols and editable names. Choose point icons, line patterns and polygon outlines or upload PNG/self-contained SVG point icons. Resolution-aware titles, legends, symbols and north arrows improve FHD/4K readability. Seven independent title/subtitle/legend font choices and readability presets. Images show only basemap attribution when a basemap is included, without feature/reference counts or a No basemap footer.
+- Smoother Android sensor compass with GPS travel-bearing fallback and clearer altitude reference/uncertainty. GNSS altitude is not floor height.
 
-Install the signed APK over the existing app to retain local storage. Photos require geotags; GPS accuracy is noted without a mandatory threshold. Repeated observations and reusable templates remain available.
+Validated: 380 Flutter tests, manager backend contract checks and browser map/chart image-export checks. Static analysis has no errors; three pre-existing unused-variable warnings remain. Native sensor behavior and a live Google deployment require field validation.
 
-Managers must update Code.gs (and Map.html/Charts.html for the new workspaces), run setupMapBanai and deploy a new version of their existing /exec endpoint. The APK does not modify your Google deployment. See the attached manager README and ONLINE_QUESTIONNAIRES.md for URL/key retrieval and migration. The backend uploads records; it does not download other phones' data or automatically merge competing edits.
-
-Validation includes automated Flutter/backend tests, static analysis, browser workspaces/map exports and production signing checks. No physical Android device or live Google deployment was available; test the native save picker and one complete collect/edit/sync cycle before rollout.
+For a new project, download the manager workspace ZIP and follow its README. Install app-release.apk. Version 2.6.4+27.

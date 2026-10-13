@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:mapbanai/services/compass_heading_filter.dart';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart' as drift;
@@ -43,27 +44,36 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
 
   /// Unwrapped heading (no 359→0 jumps) used to animate the compass dial
   /// smoothly across consecutive fixes.
-  double? _continuousHeading;
+  final CompassHeadingFilter _headingFilter = CompassHeadingFilter();
+  double? get _continuousHeading => _headingFilter.value;
+  final ValueNotifier<double?> _compass = ValueNotifier(null);
+  StreamSubscription<dynamic>? _compassSubscription;
+  bool _sensorCompass = false;
+  int _compassAccuracy = 0;
+  void _startCompass() {
+    _compassSubscription = const EventChannel('mapbanai/compass')
+        .receiveBroadcastStream()
+        .listen((event) {
+      if (!mounted || event is! Map) return;
+      _sensorCompass = event['available'] == true;
+      _compassAccuracy = (event['accuracy'] as num?)?.toInt() ?? 0;
+      if (_sensorCompass && event['heading'] is num)
+        _noteHeading((event['heading'] as num).toDouble(), sensor: true);
+    }, onError: (_) {
+      _sensorCompass = false;
+    });
+  }
 
   /// Feeds [heading] into the continuous/unwrapped accumulator so the
   /// compass dial can rotate through the shortest path instead of spinning
   /// backwards when crossing north.
-  void _noteHeading(double? heading) {
-    if (heading == null || heading.isNaN) return;
-    final deg = ((heading % 360) + 360) % 360;
-    final prev = _continuousHeading;
-    if (prev == null) {
-      _continuousHeading = deg;
-      return;
-    }
-    var next = deg;
-    while (next - prev > 180) {
-      next -= 360;
-    }
-    while (next - prev < -180) {
-      next += 360;
-    }
-    _continuousHeading = next;
+  void _noteHeading(double? heading, {bool sensor = false}) {
+    if ((_sensorCompass && !sensor) ||
+        heading == null ||
+        !heading.isFinite ||
+        heading < 0) return;
+    _compass.value =
+        _headingFilter.update(heading, smoothing: sensor ? .45 : 1);
   }
 
   List<GpsLog> _logs = [];
@@ -81,6 +91,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     _loadLogs();
     _startListening();
     _startGnssPolling();
+    _startCompass();
   }
 
   void _startGnssPolling() {
@@ -206,6 +217,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     BackgroundGps.instance.removeListener(_onBackgroundChange);
     _subscription?.cancel();
     _gnssTimer?.cancel();
+    _compassSubscription?.cancel();
+    _compass.dispose();
     _database.close();
     super.dispose();
   }
@@ -616,8 +629,12 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     );
   }
 
-  Widget _buildCompassCard() {
-    final heading = _latest?.heading;
+  Widget _buildCompassCard() => ValueListenableBuilder<double?>(
+        valueListenable: _compass,
+        builder: (context, heading, _) => _compassCard(heading),
+      );
+
+  Widget _compassCard(double? heading) {
     final hasHeading = heading != null && !heading.isNaN;
     final deg = hasHeading ? ((heading % 360) + 360) % 360 : 0.0;
     // The dial rotates to -heading (shortest path via unwrapped value);
@@ -635,7 +652,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           hasHeading
-              ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} (from North)'
+              ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} ${_sensorCompass ? '(magnetic north)' : '(GPS travel bearing)'}'
               : 'No heading yet',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
@@ -654,7 +671,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                       // Rotating dial: degree ring + direction labels.
                       AnimatedRotation(
                         turns: dialTurns,
-                        duration: const Duration(milliseconds: 220),
+                        duration: const Duration(milliseconds: 100),
                         curve: Curves.easeOut,
                         child:
                             const CustomPaint(painter: _CompassDialPainter()),
@@ -678,7 +695,11 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                               ),
                             ),
                             Text(
-                              hasHeading ? 'from North' : 'Waiting…',
+                              hasHeading
+                                  ? (_sensorCompass
+                                      ? 'magnetic north'
+                                      : 'travel direction')
+                                  : 'Waiting…',
                               style: TextStyle(
                                   fontSize: 10, color: Colors.grey.shade600),
                             ),
@@ -691,8 +712,11 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                 const SizedBox(height: 8),
                 Text(
                   hasHeading
-                      ? 'Red needle shows where the phone is facing • '
-                          '${deg.toStringAsFixed(1)}° ${_cardinalFromDegrees(deg)}'
+                      ? (_sensorCompass
+                          ? (_compassAccuracy <= 1
+                              ? 'Compass needs calibration: move the phone in a figure-eight, away from metal.'
+                              : 'Phone direction · magnetic north. Keep the phone reasonably flat.')
+                          : 'GPS direction of travel; this does not show where a stationary phone faces.')
                       : 'Move with GPS to get a heading fix',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   textAlign: TextAlign.center,
@@ -818,9 +842,12 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           Text(
               position == null || position.altitudeAccuracy <= 0
                   ? 'Vertical accuracy unavailable. GNSS altitude is not a reliable floor-height measurement indoors.'
-                  : 'Vertical accuracy ±${position.altitudeAccuracy.toStringAsFixed(1)} m · WGS84 ellipsoid',
+                  : 'Vertical uncertainty ±${position.altitudeAccuracy.toStringAsFixed(1)} m · WGS84 ellipsoid, not sea level or height above ground.',
               style: TextStyle(fontSize: 11, color: Colors.teal.shade700),
               textAlign: TextAlign.center),
+          const Text(
+              'Indoor readings, including negative values, may be unreliable. Test outdoors before setting a ground reference.',
+              style: TextStyle(fontSize: 11)),
           if (_groundRefAltitude != null && position != null)
             Text(
                 'Height change from your reference: ${_formatRelativeElevation(position.altitude)}'),

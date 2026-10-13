@@ -7,7 +7,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' as drift;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:mapbanai/services/cloud_sync_service.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
@@ -37,7 +37,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   late final AppDatabase _database = widget.database ?? AppDatabase();
   Project? _project;
   int _sessionCount = 0;
-  List<ProjectField> _fields = [];
   List<StoredForm> _forms = [];
   bool _loading = true;
 
@@ -71,9 +70,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final count = project == null
         ? 0
         : await _database.surveySessionCountForProject(project.id);
-    final fields = project == null
-        ? <ProjectField>[]
-        : await _database.getProjectFields(project.id);
     final forms = project == null
         ? <StoredForm>[]
         : await _database.getStoredFormsForProject(project.id);
@@ -83,7 +79,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     setState(() {
       _project = project;
       _sessionCount = count;
-      _fields = fields;
       _forms = forms;
       _syncConfig = syncConfig;
       _syncUrlController.text = syncConfig?.syncEndpointUrl ?? '';
@@ -264,100 +259,29 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   }
 
   Future<void> _testSyncConnection() async {
-    final rawUrl = _syncUrlController.text.trim();
-    if (rawUrl.isEmpty) {
-      _showSyncSnack('Please enter a sync URL first', success: false);
-      return;
-    }
-    Uri uri;
-    try {
-      uri = Uri.parse(rawUrl);
-      if (!uri.hasScheme || !(uri.scheme == 'http' || uri.scheme == 'https')) {
-        throw const FormatException('URL must start with http:// or https://');
-      }
-      if (uri.host.isEmpty) {
-        throw const FormatException('Invalid URL');
-      }
-    } catch (e) {
-      _showSyncSnack('Invalid URL: $e', success: false);
-      return;
-    }
-
+    final project = _project;
+    if (project == null) return;
     setState(() => _testingSync = true);
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        _showSyncSnack(
-          'Connection failed: HTTP ${response.statusCode}',
-          success: false,
-        );
-        return;
-      }
-      dynamic decoded;
-      try {
-        decoded = jsonDecode(response.body);
-      } catch (_) {
-        _showSyncSnack(
-          'Connection failed: response is not valid JSON',
-          success: false,
-        );
-        return;
-      }
-      if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
-        _showSyncSnack('Connection successful', success: true);
-      } else {
-        _showSyncSnack(
-          'Connection failed: missing {ok: true} in response',
-          success: false,
-        );
-      }
+      final workspace =
+          await ProjectWorkspaceService(_database).load(project.id);
+      await CloudSyncService(_database).testConnection(
+        endpoint: _syncUrlController.text,
+        apiKey: _syncApiKeyController.text,
+        projectId: workspace.project.externalId ?? project.externalId ?? '',
+      );
+      _showSyncSnack(
+          'Connection verified: project, API key and data sheet are ready.',
+          success: true);
     } catch (e) {
-      _showSyncSnack('Connection failed: $e', success: false);
+      _showSyncSnack(
+          e is CloudSyncException
+              ? e.message
+              : 'Connection could not be checked. Verify internet access and manager setup.',
+          success: false);
     } finally {
       if (mounted) setState(() => _testingSync = false);
     }
-  }
-
-  // ── data collection fields ──────────────────────────────────
-
-  Future<void> _addField() async {
-    final name = await _showEditDialog(
-      title: 'Field name',
-      initial: '',
-      hint: 'e.g., Material, Condition, Owner',
-    );
-    if (name == null || name.trim().isEmpty) return;
-    await _database.insertProjectField(widget.projectId, name.trim());
-    await _load();
-    _showSnack('Field "${name.trim()}" added');
-  }
-
-  Future<void> _renameField(ProjectField field) async {
-    final name = await _showEditDialog(
-      title: 'Field name',
-      initial: field.name,
-      hint: 'Field label shown in GIS data capture',
-    );
-    if (name == null || name.trim().isEmpty || name.trim() == field.name)
-      return;
-    await _database.renameProjectField(field.id, name.trim());
-    await _load();
-    _showSnack('Field renamed');
-  }
-
-  Future<void> _deleteField(ProjectField field) async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Delete field',
-      message: 'Delete "${field.name}"?',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      destructive: true,
-    );
-    if (!confirmed) return;
-    await _database.deleteProjectField(field.id);
-    await _load();
-    _showSnack('Field deleted');
   }
 
   // ── survey forms ─────────────────────────────────────────────
@@ -660,69 +584,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Data collection fields',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Custom fields shown when recording a GIS feature in this '
-                  'project (points, lines, polygons).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 8),
-                if (_fields.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: const Text(
-                      'No custom fields yet. Add one to collect extra '
-                      'attributes with each GIS feature.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  )
-                else
-                  for (final field in _fields) ...[
-                    ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.label_outline, size: 20),
-                      title: Text(field.name),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Rename field',
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            onPressed: () => _renameField(field),
-                          ),
-                          IconButton(
-                            tooltip: 'Delete field',
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: Colors.red,
-                            ),
-                            onPressed: () => _deleteField(field),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                  ],
-                const SizedBox(height: 4),
-                OutlinedButton.icon(
-                  onPressed: _addField,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add field'),
-                ),
-                const SizedBox(height: 24),
-                Text(
                   'Survey forms',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -730,7 +591,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Questionnaires used for data collection in this project. '
+                  'One questionnaire supplies Survey, GIS and Study Area questions. '
                   'You can create a form, edit it, or import an XLSForm '
                   '(.xlsx) file.',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),

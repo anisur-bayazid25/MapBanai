@@ -103,8 +103,14 @@ class OfflineMapRequest {
 class OfflineSourcePolicy {
   static bool isBlockedHost(String host) {
     host = host.toLowerCase();
-    return ['openstreetmap.org', 'cartocdn.com', 'arcgisonline.com', 'esri.com']
-        .any((domain) => host == domain || host.endsWith('.$domain'));
+    return [
+      'openstreetmap.org',
+      'openstreetmap.fr',
+      'opentopomap.org',
+      'cartocdn.com',
+      'arcgisonline.com',
+      'esri.com'
+    ].any((domain) => host == domain || host.endsWith('.$domain'));
   }
 
   static Uri validateUrl(String value, {Uri? base}) {

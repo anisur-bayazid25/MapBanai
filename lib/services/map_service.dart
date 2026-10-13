@@ -6,12 +6,14 @@ class Basemap {
   final String name;
   final String url;
   final String attribution;
+  final int maxNativeZoom;
 
   const Basemap({
     required this.id,
     required this.name,
     required this.url,
     required this.attribution,
+    this.maxNativeZoom = 19,
   });
 
   static const List<Basemap> defaults = [
@@ -22,17 +24,26 @@ class Basemap {
       attribution: '© OpenStreetMap contributors',
     ),
     Basemap(
-      id: 'carto_light',
-      name: 'CartoDB Light',
-      url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-      attribution: '© OpenStreetMap contributors, © CARTO',
-    ),
+        id: 'topographic',
+        maxNativeZoom: 17,
+        name: 'Topographic',
+        url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution:
+            '© OpenStreetMap contributors · SRTM · © OpenTopoMap (CC-BY-SA)'),
     Basemap(
-      id: 'carto_dark',
-      name: 'CartoDB Dark',
-      url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      attribution: '© OpenStreetMap contributors, © CARTO',
-    ),
+        id: 'humanitarian',
+        name: 'Humanitarian',
+        url: 'https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+        attribution:
+            '© OpenStreetMap contributors · HOT · OpenStreetMap France'),
+    Basemap(
+        id: 'cycling',
+        maxNativeZoom: 20,
+        name: 'Cycling',
+        url: 'https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        attribution:
+            '© OpenStreetMap contributors · CyclOSM · OpenStreetMap France'),
+    Basemap(id: 'none', name: 'No background', url: '', attribution: ''),
     Basemap(
       id: 'satellite',
       name: 'Satellite (Esri)',

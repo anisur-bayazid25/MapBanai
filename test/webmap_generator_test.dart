@@ -102,7 +102,7 @@ void main() {
     expect(html, contains('<option value="Bob">Bob</option>'));
 
     // Legend present
-    expect(html, contains('Point / Geopoint'));
+    expect(html, contains('mappedEntries'));
     expect(html, contains('Line'));
     expect(html, contains('Polygon'));
 

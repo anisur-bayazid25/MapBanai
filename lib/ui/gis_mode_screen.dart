@@ -1561,30 +1561,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     );
   }
 
-  String _buildStyleString(Basemap basemap) {
-    return '''
-    {
-      "version": 8,
-      "sources": {
-        "basemap": {
-          "type": "raster",
-          "tiles": ["${basemap.url}"],
-          "tileSize": 256,
-          "attribution": "${basemap.attribution}"
-        }
-      },
-      "layers": [
-        {
-          "id": "basemap",
-          "type": "raster",
-          "source": "basemap",
-          "minzoom": 0,
-          "maxzoom": 22
-        }
-      ]
-    }
-    ''';
-  }
+  String _buildStyleString(Basemap basemap) =>
+      MapStyleChoice.online(basemap).style;
 
   Widget _buildProjectBar() => ProjectWorkspaceBar(
       database: _database,

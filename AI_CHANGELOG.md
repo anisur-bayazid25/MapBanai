@@ -866,3 +866,7 @@ Guided visits remain separate observations, linked through stable feature UUIDs.
 Reusable project/layer templates preserve definitions, omit data and credentials, and create fresh project/layer identities. Templates are stored in database settings for backup preservation.
 
 This release also includes online XLSForm updates, optional connection sharing, styled PNG/JPEG export and offline Help with the complete Google backend. The parent/child pattern follows Mergin Maps one-to-many relations: https://merginmaps.com/docs/layer/one-to-n-relations/ (no service dependency added).
+
+## [2.6.4] — 2026-10-13
+
+Unified basemaps and identity controls; removed the duplicate field editor; aligned Home tiles; added mapped-only semantic legends, selectable/uploaded symbols, resolution-aware typography and bundled fonts; smoothed the Android sensor compass and clarified altitude reference. Added authenticated read-only cloud connection testing. Manager Help and documents now start with a fresh project and automatic key/folder setup. Release version 2.6.4+27.

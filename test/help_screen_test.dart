@@ -37,8 +37,9 @@ void main() {
     expect(copied, contains("projectId: 'project-for-this-team'"));
     expect(copied, contains('function doPost(e)'));
     expect(copied, contains('function setupMapBanai()'));
-    expect(copied, contains("body.action==='get_questionnaire'"));
-    expect(copied, contains("'sync_data','upload_photo'"));
+    expect(
+        copied, contains(RegExp(r"body\.action\s*===\s*'get_questionnaire'")));
+    expect(copied, contains(RegExp(r"'sync_data',\s*'upload_photo'")));
     expect(copied, isNot(contains('PASTE_PROJECT_ID_FROM_MAPBANAI')));
     expect(tester.takeException(), isNull);
   });

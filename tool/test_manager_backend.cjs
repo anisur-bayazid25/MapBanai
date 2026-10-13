@@ -18,7 +18,7 @@ class Sheet {
   }; }
 }
 const tabs = {survey:new Sheet([['type','name','label'],['text','name','Name']]), choices:new Sheet([['list_name','name','label']]),settings:new Sheet([['form_id','form_title'],['test','Test']])};
-const book={getSheetByName:n=>tabs[n],insertSheet:n=>(tabs[n]=new Sheet([],n)),getSpreadsheetTimeZone:()=> 'Asia/Dhaka'};
+const book={getName:()=> 'Manager workbook',getSheetByName:n=>tabs[n],insertSheet:n=>(tabs[n]=new Sheet([],n)),getSpreadsheetTimeZone:()=> 'Asia/Dhaka'};
 const properties=new Map();let activeUser='manager@example.com';
 const files=new Map(); let writes=0; let locked=false;
 const context=vm.createContext({
@@ -35,6 +35,10 @@ vm.runInContext(fs.readFileSync('assets/help/manager_apps_script.gs','utf8'),con
 vm.runInContext("Object.assign(MAPBANAI,{projectId:'project-a',questionnaireSheetId:'questions',dataSheetId:'data',apiKey:'secret',photoFolderId:'folder'});setupMapBanai();",context);
 const call=p=>context.doPost({postData:{contents:JSON.stringify({projectId:'project-a',apiKey:'secret',...p})}});
 assert.equal(context.doGet().ok,true);
+const beforeConnection = JSON.stringify(Object.fromEntries(Object.entries(tabs).map(([name, sheet]) => [name, sheet.rows])));
+assert.equal(call({action:'test_connection'}).connectionVerified,true);
+assert.equal(call({action:'test_connection',apiKey:'wrong'}).ok,false);
+assert.equal(JSON.stringify(Object.fromEntries(Object.entries(tabs).map(([name, sheet]) => [name, sheet.rows]))),beforeConnection);
 assert.equal(call({action:'get_questionnaire',apiKey:'wrong'}).ok,false);
 assert.equal(call({action:'get_questionnaire',projectId:'other-project'}).ok,false);
 const form=call({action:'get_questionnaire'}); assert.equal(form.ok,true);assert.equal(form.projectId,'project-a');assert.equal(form.sheets.survey[1][1],'name');
