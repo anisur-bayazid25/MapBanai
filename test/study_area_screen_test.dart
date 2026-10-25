@@ -75,7 +75,7 @@ void main() {
         home: StudyAreaModeScreen(store: store, database: db, viewOnly: true)));
     await fakes.pumpFrames(tester, 20);
     expect(find.text('1 / 1 features'), findsOneWidget);
-    expect(find.text('Categories & colors'), findsOneWidget);
+    expect(find.byTooltip('Categories & colors'), findsOneWidget);
     expect(find.byTooltip('Record survey at GPS'), findsNothing);
     final import = tester.widget<IconButton>(find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == 'Import sites'));
