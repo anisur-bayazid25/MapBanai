@@ -1743,10 +1743,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 child: Text(
                     '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
                     style: const TextStyle(fontWeight: FontWeight.w700))),
-            IconButton(
-                tooltip: 'Layer colours and visibility',
+            TextButton.icon(
                 onPressed: _chooseCategories,
-                icon: const Icon(Icons.palette_outlined)),
+                icon: const Icon(Icons.palette_outlined),
+                label: const Text('Categories & colors')),
             DropdownButton<StudyAreaStatus>(
                 value: _filter,
                 underline: const SizedBox.shrink(),
@@ -2250,7 +2250,13 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
               latitude: lat,
               longitude: lon,
               attributes: attrs,
-              status: _status,
+              status: widget.isNew && _status == StudyAreaStatus.pending
+                  ? StudyAreaStatus.newFeature
+                  : _status == StudyAreaStatus.completed &&
+                          widget.site.status.verificationStatus ==
+                              StudyAreaStatus.completed
+                      ? widget.site.status
+                      : _status,
               changeNote: _noteCtrl.text.trim(),
             );
             Navigator.pop(context, updated);
