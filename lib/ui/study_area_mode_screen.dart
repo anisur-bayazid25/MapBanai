@@ -408,6 +408,18 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
   Future<void> _saveVerificationUpdate(StudyAreaSite updated,
       {required String successMessage}) async {
+    final workspace = _workspace;
+    if (updated.projectId == null && workspace != null) {
+      // Older imports can be matched to the open project by its external ID
+      // while lacking the local database ID required by the sync outbox.
+      updated.projectId = workspace.project.id;
+    }
+    if (updated.projectExternalId == null) {
+      updated.projectExternalId = workspace?.project.externalId;
+    }
+    if (updated.layerId.isEmpty && workspace != null) {
+      updated.layerId = workspace.layerId;
+    }
     try {
       await _store.updateSite(updated,
           expectedRevision: updated.revision,
@@ -421,6 +433,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _showSnack(successMessage);
       }
     } on StudyAreaConflict {
+      await _loadSites();
+      if (mounted) {
+        setState(() => _selectedSite =
+            _sites.where((site) => site.id == updated.id).firstOrNull);
+      }
       _showSnack(
           'This feature changed elsewhere. Reopen it and review the latest version.');
     } catch (error) {
@@ -1743,10 +1760,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 child: Text(
                     '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
                     style: const TextStyle(fontWeight: FontWeight.w700))),
-            TextButton.icon(
+            IconButton(
+                tooltip: 'Categories & colors',
                 onPressed: _chooseCategories,
-                icon: const Icon(Icons.palette_outlined),
-                label: const Text('Categories & colors')),
+                icon: const Icon(Icons.palette_outlined)),
             DropdownButton<StudyAreaStatus>(
                 value: _filter,
                 underline: const SizedBox.shrink(),

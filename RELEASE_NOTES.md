@@ -1,4 +1,11 @@
-# MapBanai v2.6.7
+# MapBanai v2.6.8
+
+- Fixed the Study Area toolbar card wrapping its feature count vertically on phone screens.
+- Fixed verification saves for imported sites without a local project ID, and refreshes feature details after a concurrent edit conflict.
+
+Install app-release.apk over the existing MapBanai installation to preserve local data.
+
+## v2.6.7
 
 - Cleaner Study Area review cards show only feature ID, layer, name and location. Quick actions mark a feature unchanged, move it to a corrected location, remove it, or edit its fields/status.
 - Verification now uses Pending verification, Verification Complete and Needs review. Circle, square and triangle shapes distinguish status while category colours remain available.

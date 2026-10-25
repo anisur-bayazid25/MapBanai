@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.6.8 — 2026-10-25
+
+- Fixed the Study Area header so its category-color control stays compact and the visible-feature count no longer wraps vertically on phones.
+- Fixed verification saves for older imported features that match a project by external ID but do not yet have a local project ID; their edits can now be queued for project sync.
+- Refresh the selected feature from storage after a revision conflict so the user can review the latest saved state.
+
 ## v2.6.7 — 2026-10-25
 
 - Reworked Study Area point details to show only ID, layer, name and location. Added quick Unchanged, Location changed, Location removed and Edit/status actions; moving a point now uses a map placement screen with Cancel and Save.

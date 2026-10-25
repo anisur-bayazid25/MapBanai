@@ -8,10 +8,10 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.6.7](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.7)**
+**Latest release: [v2.6.8](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.8)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
-**Version: 2.6.7+30.** Study Area now has compact identity details, three verification states with distinct map shapes, map-based point movement and road-network shortest paths. Project packages preserve source forms/layers and cloud sync scripts/settings. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
+**Version: 2.6.8+31.** Study Area now has compact identity details, three verification states with distinct map shapes, map-based point movement and road-network shortest paths. Project packages preserve source forms/layers and cloud sync scripts/settings. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
 
 ---
 
