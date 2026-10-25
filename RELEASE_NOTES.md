@@ -1,4 +1,14 @@
-# MapBanai v2.6.6
+# MapBanai v2.6.7
+
+- Cleaner Study Area review cards show only feature ID, layer, name and location. Quick actions mark a feature unchanged, move it to a corrected location, remove it, or edit its fields/status.
+- Verification now uses Pending verification, Verification Complete and Needs review. Circle, square and triangle shapes distinguish status while category colours remain available.
+- Added project road layers and shortest-path routes from the current GPS location, with distances shown in metres below 1 km and kilometres above it.
+- Project settings now import study-area, facility and road source files in shapefile/ZIP, CSV, Excel, GeoJSON and GeoPackage formats. Original source files, XLSForms, project settings and cloud sync manager scripts travel in the project package.
+- Fixed the clipped Latitude/Longitude labels in the Study Area edit form.
+
+Install app-release.apk over the existing MapBanai installation to preserve local data. Project packages include the sync URL and API key by default for trusted team sharing; clear the option before exporting to other recipients.
+
+## v2.6.6
 
 - Poster map fills over 80% of the image, with compact titles/legends and a fit-data extent option. Shared by Android WebMap and Google Sheets atlas.
 - WebMap categorical colours, per-value visibility and editable symbols support text fields such as imported layer categories. Added browser GeoJSON/shapefile ZIP overlays and map/chart fullscreen controls.

@@ -1,4 +1,5 @@
 import 'package:mapbanai/services/project_vector_layer_service.dart';
+import 'package:mapbanai/services/project_asset_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -599,11 +600,34 @@ class ProjectImporter {
             'form_id': selectedForm
           }));
     }
+    final styleConfigs = data.settings['study_category_styles'];
+    final layerConfigs = data.settings['study_layers'];
+    if (styleConfigs is Map && layerConfigs is List) {
+      final layerIds = layerConfigs
+          .whereType<Map>()
+          .map((layer) => layer['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      for (final entry in styleConfigs.entries) {
+        final layerId = entry.key.toString();
+        if (!layerIds.contains(layerId) || entry.value is! Map) continue;
+        await _database.setSetting(
+            'study_category:$externalId:$layerId', jsonEncode(entry.value));
+      }
+    }
     if (data.layers['vector_overlays'] is List) {
       await ProjectVectorLayerService(_database).save(
           projectId,
           (data.layers['vector_overlays'] as List)
               .map((l) => Map<String, dynamic>.from(l as Map))
+              .toList());
+    }
+    final sourceFiles = data.project['source_files'];
+    if (sourceFiles is List && sourceFiles.isNotEmpty) {
+      await ProjectAssetService(_database).save(
+          projectId,
+          sourceFiles
+              .map((asset) => Map<String, dynamic>.from(asset as Map))
               .toList());
     }
     return ImportCommitResult(

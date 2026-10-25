@@ -13,6 +13,7 @@ class ProjectVectorLayerService {
   final AppDatabase db;
   ProjectVectorLayerService(this.db);
   static const maxBytes = 64 * 1024 * 1024;
+  static const maxStoredBytes = 96 * 1024 * 1024;
   static const maxFeatures = 50000;
   Future<List<Map<String, dynamic>>> load(int projectId) async {
     final raw = await db.getSetting('webmap_vectors_$projectId');
@@ -57,15 +58,72 @@ class ProjectVectorLayerService {
       }
     }
     final raw = jsonEncode(layers);
-    if (utf8.encode(raw).length > maxBytes) {
-      throw const FormatException('Reference layers exceed 64 MB.');
+    if (utf8.encode(raw).length > maxStoredBytes) {
+      throw const FormatException('Project reference files exceed 96 MB.');
     }
     await db.setSetting('webmap_vectors_$projectId', raw);
   }
 
   static Future<List<Map<String, dynamic>>> parseFiles(
-          Map<String, Uint8List> files) =>
-      Isolate.run(() => parseFilesSync(files));
+      Map<String, Uint8List> files) async {
+    final geopackages = <Map<String, dynamic>>[];
+    final other = <String, Uint8List>{};
+    final geopackageInputs = <String, Uint8List>{};
+    for (final entry in files.entries) {
+      final ext = p.extension(entry.key).toLowerCase();
+      if (ext == '.zip') {
+        final archive = ZipDecoder().decodeBytes(entry.value, verify: false);
+        for (final item in archive.where((f) =>
+            f.isFile &&
+            ['.gpkg', '.geopackage']
+                .contains(p.extension(f.name).toLowerCase()))) {
+          geopackageInputs['${entry.key}/${item.name}'] =
+              Uint8List.fromList(item.content as List<int>);
+        }
+        other[entry.key] = entry.value;
+      } else if (ext != '.gpkg' && ext != '.geopackage') {
+        other[entry.key] = entry.value;
+        continue;
+      } else {
+        geopackageInputs[entry.key] = entry.value;
+      }
+    }
+    for (final entry in geopackageInputs.entries) {
+      final sites = await StudyAreaService.parseGeoPackageBytes(entry.value);
+      if (sites.isEmpty)
+        throw FormatException(
+            '${p.basename(entry.key)} contains no supported features.');
+      geopackages.add({
+        'id': const Uuid().v4(),
+        'name': p.basenameWithoutExtension(entry.key),
+        'visible': true,
+        'color': '#467ca1',
+        'opacity': 0.8,
+        'role': 'reference',
+        'features': sites
+            .map((site) => <String, dynamic>{
+                  'type': 'Feature',
+                  'geometry': site.currentGeometry,
+                  'properties': site.sourceProperties ?? site.attributes,
+                })
+            .toList(),
+      });
+    }
+    final parsed = other.isEmpty
+        ? <Map<String, dynamic>>[]
+        : await Isolate.run(() => parseFilesSync(other));
+    final result = [...parsed, ...geopackages];
+    if (result.isNotEmpty) {
+      result.first['source_files'] = [
+        for (final file in files.entries)
+          {
+            'name': p.basename(file.key),
+            'bytes_base64': base64Encode(file.value)
+          }
+      ];
+    }
+    return result;
+  }
 
   static List<Map<String, dynamic>> parseFilesSync(
       Map<String, Uint8List> files) {
@@ -95,8 +153,19 @@ class ProjectVectorLayerService {
         }
         for (final file in archive) {
           if (!file.isFile ||
-              !['.shp', '.dbf', '.shx', '.prj', '.cpg', '.geojson', '.json']
-                  .contains(p.extension(file.name).toLowerCase())) continue;
+              ![
+                '.shp',
+                '.dbf',
+                '.shx',
+                '.prj',
+                '.cpg',
+                '.geojson',
+                '.json',
+                '.csv',
+                '.xlsx',
+                '.gpkg',
+                '.geopackage'
+              ].contains(p.extension(file.name).toLowerCase())) continue;
           if (size + file.size > maxBytes) {
             throw const FormatException('Unpacked files exceed 64 MB.');
           }
@@ -116,7 +185,8 @@ class ProjectVectorLayerService {
     try {
       for (final entry in expanded.entries) {
         final ext = p.extension(entry.key);
-        if (!['.shp', '.geojson', '.json'].contains(ext)) continue;
+        if (!['.shp', '.geojson', '.json', '.csv', '.xlsx'].contains(ext))
+          continue;
         List<Map<String, dynamic>> features;
         if (ext == '.shp') {
           _validateShp(entry.value);
@@ -131,6 +201,17 @@ class ProjectVectorLayerService {
                     'type': 'Feature',
                     'geometry': site.currentGeometry,
                     'properties': site.sourceProperties,
+                  })
+              .toList();
+        } else if (ext == '.csv' || ext == '.xlsx') {
+          final sites = ext == '.csv'
+              ? StudyAreaService.parseCsvBytes(entry.value)
+              : StudyAreaService.parseXlsxBytes(entry.value);
+          features = sites
+              .map((site) => <String, dynamic>{
+                    'type': 'Feature',
+                    'geometry': site.currentGeometry,
+                    'properties': site.sourceProperties ?? site.attributes,
                   })
               .toList();
         } else {
@@ -165,6 +246,7 @@ class ProjectVectorLayerService {
             '#8b79ae'
           ][layers.length % 4],
           'opacity': 0.8,
+          'role': 'reference',
           'features': features,
           'warning': ext == '.shp' &&
                   !expanded.containsKey(

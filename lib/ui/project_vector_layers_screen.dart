@@ -122,7 +122,7 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
           appBar: AppBar(title: const Text('Project vector layers')),
           body: ListView(padding: const EdgeInsets.all(16), children: [
             const Text(
-                'Add streets, buildings or waterbodies as reference layers. Select multiple ZIP bundles, or select each .shp with its .dbf, .shx, .prj and .cpg files. GeoJSON also works. Use WGS84 (EPSG:4326).'),
+                'Add study-area, facility or road layers. Supported files: shapefile or ZIP, CSV, Excel, GeoJSON and GeoPackage. Road layers can provide shortest-path directions in Study Area Mode. Use WGS84 (EPSG:4326).'),
             const SizedBox(height: 12),
             FilledButton.icon(
                 onPressed: busy ? null : _import,
@@ -157,6 +157,44 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                                     layer['visible'] = v;
                                     await _save();
                                   }),
+                        DropdownButtonFormField<String>(
+                            value: [
+                              'reference',
+                              'study_area',
+                              'facility',
+                              'road'
+                            ].contains(layer['role'])
+                                ? layer['role'] as String
+                                : 'reference',
+                            decoration: const InputDecoration(
+                                labelText: 'Layer type', isDense: true),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'reference',
+                                  child: Text('Reference layer')),
+                              DropdownMenuItem(
+                                  value: 'study_area',
+                                  child: Text('Study area')),
+                              DropdownMenuItem(
+                                  value: 'facility', child: Text('Facilities')),
+                              DropdownMenuItem(
+                                  value: 'road', child: Text('Road network')),
+                            ],
+                            onChanged: busy
+                                ? null
+                                : (value) async {
+                                    if (value == null) return;
+                                    layer['role'] = value;
+                                    await _save();
+                                    if (mounted) setState(() {});
+                                  }),
+                        if ((layer['source_files'] as List?)?.isNotEmpty ==
+                            true)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                  '${(layer['source_files'] as List).length} source file(s) included in project package',
+                                  style: const TextStyle(fontSize: 11))),
                         if ((layer['warning'] ?? '').toString().isNotEmpty)
                           Text(layer['warning'].toString()),
                         Row(children: [

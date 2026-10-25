@@ -8,10 +8,10 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.6.6](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.6)**
+**Latest release: [v2.6.7](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.7)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
-**Version: 2.6.6+29.** See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area, named study layers, the project atlas, sync and research-informed next priorities. Photo GPS accuracy remains advisory.
+**Version: 2.6.7+30.** Study Area now has compact identity details, three verification states with distinct map shapes, map-based point movement and road-network shortest paths. Project packages preserve source forms/layers and cloud sync scripts/settings. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
 
 ---
 
@@ -62,7 +62,7 @@ Set **Home → three-bar menu → My name**, import a project, then collect offl
 
 Deploy the [updated manager workspace](server/manager/README.md) to sync corrections and retain uploaded revision history. The bundle includes Code.gs, Map.html and Charts.html, all available to copy in app Help. One workbook/URL/key handles questions and data; setup retains compatible old tables and existing credentials.
 
-WebMap has a separate **Download Map** button with twelve designs, custom colors, portrait/landscape, aspect ratio and exact HD through 4K/custom pixel sizes. PNG/JPEG can be saved or shared. Six backgrounds include No background; **Layers** imports multiple WGS84 shapefile bundles/GeoJSON references with visibility, color and opacity. Reference layers travel with project packages and appear in exported images.
+WebMap has a separate **Download Map** button with twelve designs, custom colors, portrait/landscape, aspect ratio and exact HD through 4K/custom pixel sizes. PNG/JPEG can be saved or shared. Six backgrounds include No background; project settings import WGS84 shapefile bundles, CSV, Excel, GeoJSON and GeoPackage layers with visibility, type, colour and opacity. Road layers provide shortest-path directions in Study Area Mode, and original files travel with project packages.
 
 ## GPS mode
 

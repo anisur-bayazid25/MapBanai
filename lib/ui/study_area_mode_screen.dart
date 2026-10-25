@@ -1,5 +1,7 @@
 import 'package:mapbanai/services/study_feature_policy.dart';
 import 'package:mapbanai/services/study_category_style.dart';
+import 'package:mapbanai/services/road_routing_service.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/services/spatial_file_import.dart';
 import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
@@ -16,6 +18,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -26,8 +29,10 @@ import 'package:mapbanai/services/map_service.dart';
 import 'package:mapbanai/services/study_area_service.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/study_area_merge_dialog.dart';
+import 'package:mapbanai/ui/project_vector_layers_screen.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:image/image.dart' as img;
 
 class StudyAreaModeScreen extends StatefulWidget {
   const StudyAreaModeScreen(
@@ -65,12 +70,22 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   List<StudyAreaSite> _sites = [];
   StudyAreaSite? _selectedSite;
   final Map<String, Circle> _circles = {};
+  final List<Circle> _referenceCircles = [];
+  final List<Line> _referenceLines = [];
+  final List<Fill> _referenceFills = [];
+  List<Map<String, dynamic>> _referenceLayers = [];
+  final List<Symbol> _symbols = [];
+  final Set<String> _markerImages = {};
+  StudyAreaSite? _movingSite;
+  LatLng? _movingCoordinates;
+  Line? _routeLine;
+  String? _routeSiteId;
+  double? _routeDistanceM;
+  List<LatLng>? _routeCoordinates;
 
   // GPS
   StreamSubscription<Position>? _posSub;
   Position? _currentPos;
-  double? _distanceM;
-  double? _bearingDeg;
 
   bool _isLoading = true;
   StudyAreaStatus? _filter;
@@ -171,6 +186,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _showSnack('Cannot load study area: $e. Stored data was preserved.');
       }
       return;
+    }
+    try {
+      _referenceLayers = _workspace == null || widget.viewOnly
+          ? []
+          : await ProjectVectorLayerService(_database)
+              .load(_workspace!.project.id);
+    } catch (_) {
+      _referenceLayers = [];
     }
     final styleKey =
         'study_category:${_workspace?.project.externalId}:${_workspace?.layerId}';
@@ -292,27 +315,6 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     ).listen((pos) {
       if (!mounted) return;
       setState(() => _currentPos = pos);
-      _updateBearingDistance();
-    });
-  }
-
-  void _updateBearingDistance() {
-    final pos = _currentPos;
-    final site = _selectedSite;
-    if (pos == null || site == null) {
-      setState(() {
-        _distanceM = null;
-        _bearingDeg = null;
-      });
-      return;
-    }
-    final d = StudyAreaService.distanceMeters(
-        pos.latitude, pos.longitude, site.latitude, site.longitude);
-    final b = StudyAreaService.bearingDegrees(
-        pos.latitude, pos.longitude, site.latitude, site.longitude);
-    setState(() {
-      _distanceM = d;
-      _bearingDeg = b;
     });
   }
 
@@ -328,8 +330,227 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     controller.onFeatureTapped.add(_onFeatureTapped);
   }
 
+  Uint8List _markerImage(StudyAreaStatus status, String fillHex) {
+    final image = img.Image(width: 44, height: 44, numChannels: 4);
+    final fill = int.parse(fillHex.substring(1), radix: 16);
+    final fillR = (fill >> 16) & 255,
+        fillG = (fill >> 8) & 255,
+        fillB = fill & 255;
+    final borderHex = switch (status.verificationStatus) {
+      StudyAreaStatus.pending => '#E53935',
+      StudyAreaStatus.completed => '#2E7D32',
+      StudyAreaStatus.needsReview => '#F9A825',
+      _ => '#616161',
+    };
+    final border = int.parse(borderHex.substring(1), radix: 16);
+    final borderR = (border >> 16) & 255,
+        borderG = (border >> 8) & 255,
+        borderB = border & 255;
+    bool inside(double x, double y) {
+      switch (status.verificationStatus) {
+        case StudyAreaStatus.pending:
+          final dx = x - 22, dy = y - 22;
+          return dx * dx + dy * dy <= 19 * 19;
+        case StudyAreaStatus.completed:
+          return x >= 5 && x <= 39 && y >= 5 && y <= 39;
+        case StudyAreaStatus.needsReview:
+          final a = (22.0, 3.0), b = (41.0, 39.0), c = (3.0, 39.0);
+          final d1 = (x - b.$1) * (a.$2 - b.$2) + (a.$1 - b.$1) * (y - b.$2);
+          final d2 = (x - c.$1) * (b.$2 - c.$2) + (b.$1 - c.$1) * (y - c.$2);
+          final d3 = (x - a.$1) * (c.$2 - a.$2) + (c.$1 - a.$1) * (y - a.$2);
+          return !((d1 < 0 || d2 < 0 || d3 < 0) &&
+              (d1 > 0 || d2 > 0 || d3 > 0));
+        default:
+          return false;
+      }
+    }
+
+    bool borderPixel(double x, double y) {
+      if (!inside(x, y)) return false;
+      switch (status.verificationStatus) {
+        case StudyAreaStatus.pending:
+          final dx = x - 22, dy = y - 22;
+          final d = dx * dx + dy * dy;
+          return d >= 16 * 16;
+        case StudyAreaStatus.completed:
+          return x < 9 || x > 35 || y < 9 || y > 35;
+        case StudyAreaStatus.needsReview:
+          return !inside(x, y + 3) ||
+              !inside(x, y - 3) ||
+              !inside(x + 3, y) ||
+              !inside(x - 3, y);
+        default:
+          return false;
+      }
+    }
+
+    for (var y = 0; y < 44; y++) {
+      for (var x = 0; x < 44; x++) {
+        if (borderPixel(x.toDouble(), y.toDouble())) {
+          image.setPixelRgba(x, y, borderR, borderG, borderB, 255);
+        } else if (inside(x.toDouble(), y.toDouble())) {
+          image.setPixelRgba(x, y, fillR, fillG, fillB, 255);
+        }
+      }
+    }
+    return Uint8List.fromList(img.encodePng(image));
+  }
+
+  Future<void> _markUnchanged(StudyAreaSite site) async {
+    final updated = site.revised(
+        latitude: site.latitude,
+        longitude: site.longitude,
+        attributes: Map.from(site.attributes),
+        status: StudyAreaStatus.completed,
+        changeNote: 'Location unchanged');
+    await _saveVerificationUpdate(updated, successMessage: 'Marked unchanged');
+  }
+
+  Future<void> _saveVerificationUpdate(StudyAreaSite updated,
+      {required String successMessage}) async {
+    try {
+      await _store.updateSite(updated,
+          expectedRevision: updated.revision,
+          expectedRevisionId: updated.revisionToken,
+          author: _fieldworker);
+      await StudyAreaOutboxService(_database).enqueue(updated, _fieldworker);
+      await _loadSites();
+      if (mounted) {
+        setState(() => _selectedSite =
+            _sites.where((s) => s.id == updated.id).firstOrNull);
+        _showSnack(successMessage);
+      }
+    } on StudyAreaConflict {
+      _showSnack(
+          'This feature changed elsewhere. Reopen it and review the latest version.');
+    } catch (error) {
+      _showSnack('Could not save the feature: $error');
+    }
+  }
+
+  void _beginMove(StudyAreaSite site) {
+    if (site.currentGeometry['type'] != 'Point') {
+      _showSnack(
+          'Move is available for points. Use Redraw geometry for lines and areas.');
+      return;
+    }
+    setState(() {
+      _movingSite = site;
+      _movingCoordinates = LatLng(site.latitude, site.longitude);
+      _selectedSite = null;
+      _routeSiteId = null;
+      _routeCoordinates = null;
+      _routeDistanceM = null;
+    });
+    _controller?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(site.latitude, site.longitude), 18));
+    _refreshMapMarkers();
+  }
+
+  void _cancelMove() {
+    final site = _movingSite;
+    setState(() {
+      _movingSite = null;
+      _movingCoordinates = null;
+      _selectedSite = site;
+    });
+    _refreshMapMarkers();
+  }
+
+  Future<void> _saveMove() async {
+    final site = _movingSite, coordinates = _movingCoordinates;
+    if (site == null || coordinates == null) return;
+    final updated = site.revised(
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        attributes: Map.from(site.attributes),
+        status: StudyAreaStatus.completed,
+        changeNote: 'Location changed');
+    setState(() {
+      _movingSite = null;
+      _movingCoordinates = null;
+    });
+    await _saveVerificationUpdate(updated, successMessage: 'Location updated');
+    await _refreshMapMarkers();
+  }
+
+  Future<void> _showRoadRoute(StudyAreaSite site) async {
+    final position = _currentPos, workspace = _workspace;
+    if (position == null || workspace == null) {
+      _showSnack(position == null
+          ? 'Waiting for a GPS fix'
+          : 'Select a project first');
+      return;
+    }
+    try {
+      final layers =
+          await ProjectVectorLayerService(_database).load(workspace.project.id);
+      final route = RoadRoutingService.shortestRoute(
+          layers: layers,
+          startLatitude: position.latitude,
+          startLongitude: position.longitude,
+          endLatitude: site.latitude,
+          endLongitude: site.longitude);
+      if (route == null) {
+        _showSnack(
+            'No connected road route found. Add a road layer in Project settings.');
+        return;
+      }
+      setState(() {
+        _routeSiteId = site.id;
+        _routeDistanceM = route.distanceMeters;
+        _routeCoordinates = route.coordinates
+            .map((point) => LatLng(point[1], point[0]))
+            .toList();
+      });
+      await _refreshMapMarkers();
+      if (_routeCoordinates != null && _routeCoordinates!.isNotEmpty) {
+        _controller?.animateCamera(CameraUpdate.newLatLngBounds(
+            _boundsOf(_routeCoordinates!),
+            left: 48,
+            top: 200,
+            right: 48,
+            bottom: 300));
+      }
+    } catch (error) {
+      _showSnack('Could not calculate a road route: $error');
+    }
+  }
+
+  LatLngBounds _boundsOf(List<LatLng> points) {
+    var south = points.first.latitude, north = south;
+    var west = points.first.longitude, east = west;
+    for (final point in points.skip(1)) {
+      south = math.min(south, point.latitude);
+      north = math.max(north, point.latitude);
+      west = math.min(west, point.longitude);
+      east = math.max(east, point.longitude);
+    }
+    return LatLngBounds(
+        southwest: LatLng(south, west), northeast: LatLng(north, east));
+  }
+
+  Future<void> _manageProjectLayers() async {
+    final workspace = _workspace;
+    if (workspace == null) {
+      _showSnack('Select a project first');
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ProjectVectorLayersScreen(
+            database: _database, projectId: workspace.project.id)));
+    if (!mounted) return;
+    await _loadSites();
+  }
+
   void _onStyleLoaded() {
     _styleReady = true;
+    _markerImages.clear();
+    final controller = _controller;
+    if (controller != null) {
+      unawaited(controller.setSymbolIconAllowOverlap(true));
+      unawaited(controller.setSymbolIconIgnorePlacement(true));
+    }
     _refreshMapMarkers();
   }
 
@@ -353,6 +574,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       } catch (_) {}
     }
     _circles.clear();
+    for (final symbol in _symbols) {
+      try {
+        await controller.removeSymbol(symbol);
+      } catch (_) {}
+    }
+    _symbols.clear();
     for (final line in _lines) {
       try {
         await controller.removeLine(line);
@@ -363,19 +590,127 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         await controller.removeFill(fill);
       } catch (_) {}
     }
+    if (_routeLine != null) {
+      try {
+        await controller.removeLine(_routeLine!);
+      } catch (_) {}
+    }
     _lines.clear();
     _fills.clear();
+    for (final circle in _referenceCircles) {
+      try {
+        await controller.removeCircle(circle);
+      } catch (_) {}
+    }
+    for (final line in _referenceLines) {
+      try {
+        await controller.removeLine(line);
+      } catch (_) {}
+    }
+    for (final fill in _referenceFills) {
+      try {
+        await controller.removeFill(fill);
+      } catch (_) {}
+    }
+    _referenceCircles.clear();
+    _referenceLines.clear();
+    _referenceFills.clear();
+    _routeLine = null;
     _categoryStyle.categories(_sites);
+    List<LatLng> points(dynamic values) => (values as List)
+        .map((v) => LatLng((v[1] as num).toDouble(), (v[0] as num).toDouble()))
+        .toList();
+    for (final layer
+        in _referenceLayers.where((item) => item['visible'] != false)) {
+      final color = (layer['color'] ?? '#467ca1').toString();
+      final opacity =
+          ((layer['opacity'] as num?)?.toDouble() ?? 0.8).clamp(0.0, 1.0);
+      for (final feature in layer['features'] as List? ?? const []) {
+        if (feature is! Map || feature['geometry'] is! Map) continue;
+        final geometry = feature['geometry'] as Map;
+        final coords = geometry['coordinates'];
+        try {
+          switch (geometry['type']) {
+            case 'LineString':
+              _referenceLines.add(await controller.addLine(LineOptions(
+                  geometry: points(coords),
+                  lineColor: color,
+                  lineOpacity: opacity,
+                  lineWidth: 2)));
+              break;
+            case 'MultiLineString':
+              for (final line in coords as List)
+                _referenceLines.add(await controller.addLine(LineOptions(
+                    geometry: points(line),
+                    lineColor: color,
+                    lineOpacity: opacity,
+                    lineWidth: 2)));
+              break;
+            case 'Polygon':
+              _referenceFills.add(await controller.addFill(FillOptions(
+                  geometry: (coords as List).map(points).toList(),
+                  fillColor: color,
+                  fillOpacity: opacity * 0.2,
+                  fillOutlineColor: color)));
+              break;
+            case 'MultiPolygon':
+              for (final polygon in coords as List)
+                _referenceFills.add(await controller.addFill(FillOptions(
+                    geometry: (polygon as List).map(points).toList(),
+                    fillColor: color,
+                    fillOpacity: opacity * 0.2,
+                    fillOutlineColor: color)));
+              break;
+            case 'Point':
+              _referenceCircles.add(await controller.addCircle(CircleOptions(
+                  geometry: LatLng((coords[1] as num).toDouble(),
+                      (coords[0] as num).toDouble()),
+                  circleRadius: 4,
+                  circleColor: color,
+                  circleOpacity: opacity,
+                  circleStrokeColor: '#FFFFFF',
+                  circleStrokeWidth: 1)));
+              break;
+            case 'MultiPoint':
+              for (final point in coords as List)
+                _referenceCircles.add(await controller.addCircle(CircleOptions(
+                    geometry: LatLng((point[1] as num).toDouble(),
+                        (point[0] as num).toDouble()),
+                    circleRadius: 4,
+                    circleColor: color,
+                    circleOpacity: opacity,
+                    circleStrokeColor: '#FFFFFF',
+                    circleStrokeWidth: 1)));
+              break;
+          }
+        } catch (_) {}
+      }
+    }
     for (final site in _sites.where((s) =>
-        (_filter == null || s.status == _filter) &&
+        (_movingSite == null || s.id != _movingSite!.id) &&
+        (_filter == null || s.status.verificationStatus == _filter) &&
         _categoryStyle.visible(s))) {
       try {
         final color = _categoryStyle.color(site);
-        List<LatLng> points(dynamic values) => (values as List)
-            .map((v) =>
-                LatLng((v[1] as num).toDouble(), (v[0] as num).toDouble()))
-            .toList();
         final data = {'site_id': site.id};
+        Future<void> drawPoint(double lon, double lat) async {
+          final status = site.status.verificationStatus;
+          final colorHex = _categoryStyle.color(site);
+          final imageName = 'mapbanai_${status.name}_${colorHex.substring(1)}';
+          if (_markerImages.add(imageName)) {
+            await controller.addImage(
+                imageName, _markerImage(status, colorHex));
+          }
+          _symbols.add(await controller.addSymbol(
+              SymbolOptions(
+                geometry: LatLng(lat, lon),
+                iconImage: imageName,
+                iconSize: _categoryStyle.radius / 12,
+                iconAnchor: 'center',
+              ),
+              data));
+        }
+
         Future<void> drawGeometry(Map geom) async {
           final coords = geom['coordinates'];
           if (geom['type'] == 'GeometryCollection') {
@@ -386,16 +721,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             final vertices =
                 geom['type'] == 'Point' ? [coords] : coords as List;
             for (final vertex in vertices) {
-              final circle = await controller.addCircle(
-                  CircleOptions(
-                      geometry: LatLng((vertex[1] as num).toDouble(),
-                          (vertex[0] as num).toDouble()),
-                      circleRadius: _categoryStyle.radius,
-                      circleColor: color,
-                      circleStrokeColor: '#FFFFFF',
-                      circleStrokeWidth: 2),
-                  data);
-              _circles['${site.id}_${_circles.length}'] = circle;
+              await drawPoint(
+                  (vertex[0] as num).toDouble(), (vertex[1] as num).toDouble());
             }
           } else if (geom['type'] == 'LineString' ||
               geom['type'] == 'MultiLineString') {
@@ -426,18 +753,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         await drawGeometry(site.currentGeometry);
         if (site.currentGeometry['type'] != 'Point' &&
             site.currentGeometry['type'] != 'MultiPoint') {
-          final circle = await controller.addCircle(
-            CircleOptions(
-              geometry: LatLng(site.latitude, site.longitude),
-              circleRadius: _categoryStyle.radius,
-              circleColor: color,
-              circleStrokeWidth: 2,
-              circleStrokeColor: '#FFFFFF',
-              draggable: false,
-            ),
-            {'site_id': site.id},
-          );
-          _circles[site.id] = circle;
+          await drawPoint(site.longitude, site.latitude);
         }
       } catch (_) {}
     }
@@ -447,9 +763,34 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         if (_drawType == 'Polygon' && _draft.length >= 3) _draft.first
       ], lineColor: '#FF6F00', lineWidth: 4)));
     }
+    final moving = _movingCoordinates;
+    if (_movingSite != null && moving != null) {
+      final imageName = 'mapbanai_moving_marker';
+      if (_markerImages.add(imageName)) {
+        await controller.addImage(
+            imageName, _markerImage(StudyAreaStatus.completed, '#1565C0'));
+      }
+      _symbols.add(await controller.addSymbol(
+          SymbolOptions(
+            geometry: moving,
+            iconImage: imageName,
+            iconSize: 0.65,
+            iconAnchor: 'center',
+          ),
+          {'site_id': _movingSite!.id}));
+    }
+    if (_routeSiteId != null &&
+        _routeLine == null &&
+        _routeCoordinates != null) {
+      _routeLine = await controller.addLine(LineOptions(
+          geometry: _routeCoordinates!, lineColor: '#1565C0', lineWidth: 5));
+    }
     if (mounted) setState(() {});
     // Auto fit bounds if sites exist and no selection.
-    if (_sites.isNotEmpty && _selectedSite == null && _drawType == null) {
+    if (_sites.isNotEmpty &&
+        _selectedSite == null &&
+        _drawType == null &&
+        _movingSite == null) {
       _fitBounds();
     }
   }
@@ -486,6 +827,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     if (annotation != null) {
       final data = switch (annotation) {
         Circle c => c.data,
+        Symbol s => s.data,
         Line l => l.data,
         Fill f => f.data,
         _ => null
@@ -496,8 +838,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       if (site == null) return;
       setState(() {
         _selectedSite = site;
+        _movingSite = null;
+        _routeSiteId = null;
+        _routeDistanceM = null;
+        _routeCoordinates = null;
       });
-      _updateBearingDistance();
+      _refreshMapMarkers();
     }
   }
 
@@ -676,7 +1022,6 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       await _loadSites();
       if (!mounted) return true;
       setState(() => _selectedSite = updated);
-      _updateBearingDistance();
       _showSnack('Feature saved');
       return true;
     }
@@ -996,8 +1341,6 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     if (!mounted) return;
     setState(() {
       _selectedSite = null;
-      _distanceM = null;
-      _bearingDeg = null;
     });
     await _loadSites();
     _showSnack('Displayed sites cleared');
@@ -1069,6 +1412,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               if (widget.viewOnly && v != 'fit') return;
               if (v == 'claim') _claimLegacy();
               if (v == 'operator') _editOperator();
+              if (v == 'layers') _manageProjectLayers();
               if (v == 'line') _startDrawing('LineString');
               if (v == 'polygon') _startDrawing('Polygon');
               if (v == 'clear') _clearAll();
@@ -1080,6 +1424,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               const PopupMenuItem(
                   value: 'claim',
                   child: Text('Assign previous unassigned sites')),
+              if (!widget.viewOnly)
+                const PopupMenuItem(
+                    value: 'layers',
+                    child: Text('Manage project files and road layers')),
               const PopupMenuItem(
                   value: 'line', child: Text('Add line (tap vertices)')),
               const PopupMenuItem(
@@ -1102,6 +1450,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             ),
             onMapCreated: _onMapCreated,
             onMapClick: (_, coordinates) {
+              if (_movingSite != null) {
+                setState(() => _movingCoordinates = coordinates);
+                _refreshMapMarkers();
+                return;
+              }
               if (_drawType != null) {
                 setState(() => _draft.add(coordinates));
                 _refreshMapMarkers();
@@ -1117,6 +1470,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             compassEnabled: true,
             annotationConsumeTapEvents: const [
               AnnotationType.circle,
+              AnnotationType.symbol,
               AnnotationType.line,
               AnnotationType.fill,
             ],
@@ -1162,6 +1516,34 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             right: 12,
             child: _buildHeaderCard(),
           ),
+          if (_movingSite != null)
+            Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Card(
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Text(
+                              'Tap the map to place this feature at its new location.'),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(
+                                child: OutlinedButton(
+                                    onPressed: _cancelMove,
+                                    child: const Text('Cancel'))),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                child: FilledButton(
+                                    onPressed: _movingCoordinates == null
+                                        ? null
+                                        : _saveMove,
+                                    child: const Text('Save location'))),
+                          ])
+                        ])))),
           if (_drawType != null)
             Positioned(
                 left: 12,
@@ -1355,55 +1737,77 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
   Widget _buildHeaderCard() => Card(
       child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                    '${_sites.where((s) => (_filter == null || s.status == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                TextButton.icon(
-                    onPressed: _chooseCategories,
-                    icon: const Icon(Icons.palette_outlined),
-                    label: Text(_categoryStyle.column == null
-                        ? 'Categories & colors'
-                        : _categoryStyle.column == '__verification_status__'
-                            ? 'Colors: Verification status'
-                            : 'Categories: ${_categoryStyle.column}')),
-                DropdownButton<StudyAreaStatus>(
-                    value: _filter,
-                    isExpanded: true,
-                    hint: const Text('All verification statuses'),
-                    items: [
-                      const DropdownMenuItem(
-                          value: null, child: Text('All features')),
-                      ...StudyAreaStatus.values.map((status) => DropdownMenuItem(
-                          value: status,
-                          child: Text(
-                              '${status.label}: ${_sites.where((s) => s.status == status).length}',
-                              style: TextStyle(
-                                  color: Color(int.parse(
-                                      status.colorHex.replaceFirst('#', 'FF'),
-                                      radix: 16))))))
-                    ],
-                    onChanged: (value) {
-                      setState(() => _filter = value);
-                      _refreshMapMarkers();
-                    }),
-              ])));
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(children: [
+            Expanded(
+                child: Text(
+                    '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} of ${_sites.length} features',
+                    style: const TextStyle(fontWeight: FontWeight.w700))),
+            IconButton(
+                tooltip: 'Layer colours and visibility',
+                onPressed: _chooseCategories,
+                icon: const Icon(Icons.palette_outlined)),
+            DropdownButton<StudyAreaStatus>(
+                value: _filter,
+                underline: const SizedBox.shrink(),
+                hint: const Text('All'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All')),
+                  for (final status in [
+                    StudyAreaStatus.pending,
+                    StudyAreaStatus.completed,
+                    StudyAreaStatus.needsReview
+                  ])
+                    DropdownMenuItem(
+                        value: status,
+                        child: Text(
+                            '${status.label}: ${_sites.where((s) => s.status.verificationStatus == status).length}')),
+                ],
+                onChanged: (value) {
+                  setState(() => _filter = value);
+                  _refreshMapMarkers();
+                }),
+          ])));
+
+  String _siteField(StudyAreaSite site, List<String> keys,
+      {String fallback = '—'}) {
+    for (final key in keys) {
+      for (final entry in site.attributes.entries) {
+        if (entry.key.trim().toLowerCase() == key.toLowerCase() &&
+            entry.value.trim().isNotEmpty) {
+          return entry.value.trim();
+        }
+      }
+    }
+    return fallback;
+  }
 
   Widget _buildSelectedPanel() {
     final site = _selectedSite!;
-    if (widget.viewOnly)
+    final id =
+        _siteField(site, ['id', 'feature_id', 'site_id'], fallback: site.id);
+    final layer = _siteField(site, ['layer', 'layer_name'],
+        fallback: _workspace?.layer.name ?? site.layerId);
+    final name = _siteField(site, ['name', 'site_name', 'label'],
+        fallback: site.displayName);
+    final location =
+        _siteField(site, ['location', 'locality', 'locality_name']);
+    if (widget.viewOnly) {
       return Card(
           child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(
-                  '${site.displayName}\n${site.attributes.entries.map((e) => "${e.key}: ${e.value}").join("\n")}')));
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('ID  $id'),
+                    Text('Layer  $layer'),
+                    Text('Name  $name'),
+                    Text('Location  $location')
+                  ])));
+    }
     final pos = _currentPos;
-    final dist = _distanceM;
-    final bear = _bearingDeg;
+    final routeVisible = _routeSiteId == site.id && _routeDistanceM != null;
     return Card(
       elevation: 6,
       child: Padding(
@@ -1414,21 +1818,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: Color(int.parse(
-                        site.status.colorHex.replaceFirst('#', 'FF'),
-                        radix: 16)),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    site.displayName,
+                    'ID  $id',
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13),
                     maxLines: 1,
@@ -1438,13 +1830,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 Chip(
                   label: Text(site.status.label,
                       style: const TextStyle(fontSize: 11)),
-                  backgroundColor: site.status == StudyAreaStatus.completed
-                      ? Colors.green.shade50
-                      : Colors.red.shade50,
+                  backgroundColor: switch (site.status.verificationStatus) {
+                    StudyAreaStatus.completed => Colors.green.shade50,
+                    StudyAreaStatus.needsReview => Colors.amber.shade50,
+                    _ => Colors.red.shade50,
+                  },
                   side: BorderSide(
-                      color: site.status == StudyAreaStatus.completed
-                          ? Colors.green.shade200
-                          : Colors.red.shade200),
+                      color: Color(int.parse(
+                          site.status.colorHex.replaceFirst('#', 'FF'),
+                          radix: 16))),
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                 ),
@@ -1453,48 +1847,17 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => setState(() {
                     _selectedSite = null;
-                    _distanceM = null;
-                    _bearingDeg = null;
+                    _routeSiteId = null;
+                    _routeCoordinates = null;
+                    _routeDistanceM = null;
+                    _refreshMapMarkers();
                   }),
                 ),
               ],
             ),
-            Text(
-              '${site.latitude.toStringAsFixed(6)}, ${site.longitude.toStringAsFixed(6)}',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-            ),
-            if (site.attributes.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...site.attributes.entries.take(4).map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 90,
-                          child: Text(
-                            e.key,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            e.value.isEmpty ? '—' : e.value,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-              if (site.attributes.length > 4)
-                Text('+ ${site.attributes.length - 4} more attributes',
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-            ],
+            _detailRow('Layer', layer),
+            _detailRow('Name', name),
+            _detailRow('Location', location),
             if (site.currentGeometry['type'] == 'LineString' ||
                 site.currentGeometry['type'] == 'Polygon')
               TextButton.icon(
@@ -1517,75 +1880,35 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 onPressed: () => _showHistory(site),
                 icon: const Icon(Icons.history),
                 label: Text('Revision history (${site.history.length})')),
-            const Divider(height: 16),
+            if (routeVisible)
+              Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                      'Shortest road route  ${StudyAreaService.formatDistance(_routeDistanceM!)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600))),
+            const SizedBox(height: 6),
             if (pos == null)
-              Row(
-                children: [
-                  Icon(Icons.gps_off, size: 16, color: Colors.orange.shade700),
-                  const SizedBox(width: 6),
-                  Text('Waiting for GPS fix…',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.orange.shade700)),
-                ],
-              )
-            else if (dist != null && bear != null) ...[
-              Row(
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.grey.shade300),
-                          color: Colors.grey.shade50,
-                        ),
-                        child: const Icon(Icons.navigation_outlined,
-                            size: 14, color: Colors.grey),
-                      ),
-                      Transform.rotate(
-                        angle: bear * math.pi / 180,
-                        child: Icon(Icons.navigation,
-                            size: 28, color: Colors.blue.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          StudyAreaService.formatDistance(dist),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 16),
-                        ),
-                        Text(
-                          StudyAreaService.formatBearing(bear),
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade700),
-                        ),
-                        Text(
-                          'From GPS: ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
-                          style: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade500),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 8),
+              const Text('Waiting for GPS fix', style: TextStyle(fontSize: 11)),
+            Row(children: [
+              Expanded(
+                  child: OutlinedButton.icon(
+                      onPressed: () => _markUnchanged(site),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Unchanged'))),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: OutlinedButton.icon(
+                      onPressed: () => _beginMove(site),
+                      icon: const Icon(Icons.location_on_outlined, size: 16),
+                      label: const Text('Location changed'))),
+            ]),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _editSite(site),
                     icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit'),
+                    label: const Text('Edit / status'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1596,11 +1919,20 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                     ),
                     onPressed: () => _deleteSite(site),
                     icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('Delete'),
+                    label: const Text('Location removed'),
                   ),
                 ),
               ],
             ),
+            if (pos != null)
+              SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                      onPressed: () => _showRoadRoute(site),
+                      icon: const Icon(Icons.directions_outlined, size: 17),
+                      label: Text(routeVisible
+                          ? 'Refresh road directions'
+                          : 'Show road directions'))),
             const SizedBox(height: 4),
             SizedBox(
               width: double.infinity,
@@ -1622,6 +1954,23 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       ),
     );
   }
+
+  Widget _detailRow(String label, String value) => Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+            width: 68,
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600))),
+        Expanded(
+            child: Text(value,
+                style: const TextStyle(fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis)),
+      ]));
 }
 
 extension _FirstWhereOrNull<E> on Iterable<E> {
@@ -1655,7 +2004,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
     super.initState();
     _latCtrl = TextEditingController(text: widget.site.latitude.toString());
     _lonCtrl = TextEditingController(text: widget.site.longitude.toString());
-    _status = widget.site.status;
+    _status = widget.site.status.verificationStatus;
     _noteCtrl.text = widget.site.changeNote;
     _attrControllers = widget.site.attributes.entries
         .map((e) => MapEntry(e.key, TextEditingController(text: e.value)))
@@ -1703,35 +2052,39 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _latCtrl,
-                      enabled: widget.site.currentGeometry['type'] == 'Point',
-                      decoration: const InputDecoration(
-                        labelText: 'Latitude',
-                        border: OutlineInputBorder(),
+              Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _latCtrl,
+                          enabled:
+                              widget.site.currentGeometry['type'] == 'Point',
+                          decoration: const InputDecoration(
+                            labelText: 'Latitude',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true, signed: true),
+                        ),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _lonCtrl,
-                      enabled: widget.site.currentGeometry['type'] == 'Point',
-                      decoration: const InputDecoration(
-                        labelText: 'Longitude',
-                        border: OutlineInputBorder(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _lonCtrl,
+                          enabled:
+                              widget.site.currentGeometry['type'] == 'Point',
+                          decoration: const InputDecoration(
+                            labelText: 'Longitude',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true, signed: true),
+                        ),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: true),
-                    ),
-                  ),
-                ],
-              ),
+                    ],
+                  )),
               const SizedBox(height: 12),
               DropdownButtonFormField<StudyAreaStatus>(
                 value: _status,
@@ -1739,7 +2092,11 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                   labelText: 'Status',
                   border: OutlineInputBorder(),
                 ),
-                items: StudyAreaStatus.values
+                items: const [
+                  StudyAreaStatus.pending,
+                  StudyAreaStatus.completed,
+                  StudyAreaStatus.needsReview
+                ]
                     .map((status) => DropdownMenuItem(
                         value: status, child: Text(status.label)))
                     .toList(),

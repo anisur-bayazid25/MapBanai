@@ -212,7 +212,7 @@ Future<void> showExportProjectOptions(
   required ProjectSharingFlow flow,
   required Project project,
 }) async {
-  var includeSyncConnection = false;
+  var includeSyncConnection = true;
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -229,8 +229,7 @@ Future<void> showExportProjectOptions(
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'The project package includes forms, questions, settings and '
-                      'layers. Collected data and photos are never exported.',
+                      'The project package includes forms, source files, map layers, settings and the cloud setup scripts. The sync URL and API key are included; share only with trusted team members. Collected records and photos are not included.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     CheckboxListTile(

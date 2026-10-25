@@ -48,21 +48,35 @@ extension StudyAreaStatusX on StudyAreaStatus {
 
   String get label => switch (this) {
         StudyAreaStatus.pending => 'Pending verification',
-        StudyAreaStatus.completed => 'Completed (legacy)',
-        StudyAreaStatus.verified => 'Verified unchanged',
-        StudyAreaStatus.updated => 'Updated',
-        StudyAreaStatus.newFeature => 'New feature',
-        StudyAreaStatus.notFound => 'Not found',
+        StudyAreaStatus.completed ||
+        StudyAreaStatus.verified ||
+        StudyAreaStatus.updated =>
+          'Verification Complete',
+        StudyAreaStatus.newFeature => 'Pending verification',
+        StudyAreaStatus.notFound => 'Location Removed',
         StudyAreaStatus.needsReview => 'Needs review',
       };
 
   String get colorHex => switch (this) {
         StudyAreaStatus.pending => '#E53935',
-        StudyAreaStatus.completed || StudyAreaStatus.verified => '#2E7D32',
-        StudyAreaStatus.updated => '#1565C0',
-        StudyAreaStatus.newFeature => '#7B1FA2',
+        StudyAreaStatus.completed ||
+        StudyAreaStatus.verified ||
+        StudyAreaStatus.updated =>
+          '#2E7D32',
+        StudyAreaStatus.newFeature => '#E53935',
         StudyAreaStatus.notFound => '#616161',
-        StudyAreaStatus.needsReview => '#EF6C00',
+        StudyAreaStatus.needsReview => '#F9A825',
+      };
+
+  /// Legacy outcomes are folded into the three field verification states.
+  StudyAreaStatus get verificationStatus => switch (this) {
+        StudyAreaStatus.completed ||
+        StudyAreaStatus.verified ||
+        StudyAreaStatus.updated =>
+          StudyAreaStatus.completed,
+        StudyAreaStatus.newFeature => StudyAreaStatus.pending,
+        StudyAreaStatus.notFound => StudyAreaStatus.needsReview,
+        _ => this,
       };
 
   /// Material color value for map circle.
@@ -323,7 +337,8 @@ class StudyAreaSite {
             (k, v) => MapEntry(k.toString(), v.toString()),
           ) ??
           {},
-      status: StudyAreaStatusX.fromString(json['status']?.toString()),
+      status: StudyAreaStatusX.fromString(json['status']?.toString())
+          .verificationStatus,
       sourceProperties: json['source_properties'] is Map
           ? Map<String, dynamic>.from(json['source_properties'])
           : null,

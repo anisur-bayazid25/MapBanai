@@ -94,19 +94,12 @@ Everything works offline; tiles open instantly and data stays on the device.
 
 ## 7. Study Area Mode
 
-Site visits with status tracking and walk-to navigation:
-
-1. **Import sites** (blue download icon): CSV, GeoJSON, KML, **KMZ**,
-   **SHP**, GeoPackage (.gpkg) or Excel (.xlsx). Choose *Replace all* or
-   *Append*.
-   - Column names are flexible: `latitude/longitude`, `lat/lon`, `x/y`,
-     `point_x/point_y` and similar synonyms all work — or provide a WKT
-     geometry column (`POINT (lon lat)`).
-2. Sites render as circles: red = pending, green = completed.
-3. Tap a site: the panel shows distance and bearing from your live GPS with
-   an arrow pointing the way. **Center on site** jumps the map there.
-4. Mark sites **Completed/Pending**, edit coordinates and attributes, delete.
-5. **Export sites** (green upload icon) back out as CSV or Excel.
+- The map header keeps the visible feature count, category styling and three-state verification filter compact.
+- Point details show only ID, layer, name and location. **Unchanged** marks Verification Complete; **Location changed** lets you place the point on the map and save or cancel; **Location removed** deletes it; **Edit / status** lets you edit attributes and choose Pending verification, Verification Complete or Needs review.
+- Pending points are circles with a red outline, Verification Complete points are squares with a green outline, and Needs review points are triangles with a yellow outline. The shape shows verification state while the fill colour can still represent a layer or category.
+- **Road directions** draws the shortest route through a project layer marked Road network and reports its distance in metres below 1 km or kilometres at/above 1 km. This is a map route, not turn-by-turn navigation.
+- Add or classify layers under **Home → Project settings → Project files and map layers**. Supported sources are shapefile/ZIP, CSV, Excel, GeoJSON and GeoPackage in WGS84 (EPSG:4326). Mark a line layer as **Road network** for directions.
+- Latitude and Longitude fields in Edit are now fully visible. Coordinates and source metadata remain available in the edit workflow; the point summary stays focused on the four identity fields.
 
 ## 8. History
 
@@ -144,7 +137,8 @@ Site visits with status tracking and walk-to navigation:
   small projects also fit in a **QR code**.
 - Receiver: open the received `.mbproj` ("Open with MapBanai"), or import via
   **camera QR scan**, **QR from gallery image**, or paste the code text.
-- Responses/photos are never included in a shared project — only definitions.
+- Responses/photos are never included in a shared project. Forms, original imported XLSForms, project settings, source map files/layers and cloud sync manager scripts are included.
+- The Apps Script URL and API key are included by default for trusted team handoff. Uncheck **Include sync connection** before sharing with anyone who should not receive the key.
 - Name conflicts offer *Import as new copy* or *Replace*; nothing is
   overwritten silently.
 

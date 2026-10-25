@@ -8,6 +8,8 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/app_info.dart';
 import 'package:mapbanai/services/map_service.dart';
 import 'package:mapbanai/services/project_package.dart';
+import 'package:mapbanai/services/project_asset_service.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 /// Builds .mbproj packages from a project stored in the local database.
 ///
@@ -60,6 +62,7 @@ class ProjectExporter {
       'updated_at': project.createdAt.toUtc().toIso8601String(),
       'fields': fields.map((f) => f.name).toList(),
       'forms': formIndex,
+      'source_files': await ProjectAssetService(_database).load(project.id),
     };
 
     final settingsJson = <String, dynamic>{
@@ -69,6 +72,16 @@ class ProjectExporter {
       'gps_accuracy_threshold_m': project.gpsThresholdM,
       'archived': project.archived,
     };
+    final studyCategoryStyles = <String, dynamic>{};
+    for (final layer in workspace.layers) {
+      final raw =
+          await _database.getSetting('study_category:$externalId:${layer.id}');
+      if (raw == null) continue;
+      try {
+        studyCategoryStyles[layer.id] = jsonDecode(raw);
+      } catch (_) {}
+    }
+    settingsJson['study_category_styles'] = studyCategoryStyles;
 
     if (includeSyncConnection) {
       final sync = await _database.getSyncConfig(project.id);
@@ -146,6 +159,15 @@ class ProjectExporter {
     for (final form in data.forms) {
       final name = '${ProjectPackageFormat.formsDir}${form['id']}.json';
       contentFiles[name] = Uint8List.fromList(utf8.encode(jsonEncode(form)));
+    }
+    for (final bundled in const {
+      'assets/help/manager_apps_script.gs': 'assets/cloud_sync/Code.gs',
+      'assets/help/Map.html': 'assets/cloud_sync/Map.html',
+      'assets/help/Charts.html': 'assets/cloud_sync/Charts.html',
+    }.entries) {
+      final dataBytes = await rootBundle.load(bundled.key);
+      contentFiles[bundled.value] = dataBytes.buffer
+          .asUint8List(dataBytes.offsetInBytes, dataBytes.lengthInBytes);
     }
 
     final checksums = <String, String>{};

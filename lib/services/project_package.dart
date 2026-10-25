@@ -46,7 +46,7 @@ class ProjectPackageFormat {
   /// are generous but bounded.
   static const int maxEntries = 4000;
   static const int maxTotalUncompressedBytes = 256 * 1024 * 1024;
-  static const int maxSingleEntryBytes = 64 * 1024 * 1024;
+  static const int maxSingleEntryBytes = 128 * 1024 * 1024;
 
   static String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 
@@ -54,12 +54,13 @@ class ProjectPackageFormat {
     required String appVersion,
     required int mapbanaiDbSchema,
     String? packager,
-  }) => {
-    'package_format_version': supportedPackageVersion,
-    'app_version': appVersion,
-    'mapbanai_db_schema': mapbanaiDbSchema,
-    'serialized_by': packager ?? 'mapbanai-unknown',
-  };
+  }) =>
+      {
+        'package_format_version': supportedPackageVersion,
+        'app_version': appVersion,
+        'mapbanai_db_schema': mapbanaiDbSchema,
+        'serialized_by': packager ?? 'mapbanai-unknown',
+      };
 
   /// True when the top-level path of a zip entry is allowed in the package.
   static bool isAllowedTopLevel(String firstSegment) {
@@ -150,13 +151,13 @@ class ProjectPackageData {
   final String exportedAt;
 
   static ProjectPackageData from(
-    ProjectPackageMeta meta,
-    Map<String, dynamic> project,
-    Map<String, dynamic> settings,
-    Map<String, dynamic> layers,
-    List<Map<String, dynamic>> forms,
-    {String? exportedAt,
-    Map<String, dynamic>? versionMetadata}) {
+      ProjectPackageMeta meta,
+      Map<String, dynamic> project,
+      Map<String, dynamic> settings,
+      Map<String, dynamic> layers,
+      List<Map<String, dynamic>> forms,
+      {String? exportedAt,
+      Map<String, dynamic>? versionMetadata}) {
     final metaExport = meta.exportedAt.isNotEmpty
         ? meta.exportedAt
         : exportedAt ?? DateTime.now().toUtc().toIso8601String();

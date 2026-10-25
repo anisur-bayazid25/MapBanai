@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.6.7 — 2026-10-25
+
+- Reworked Study Area point details to show only ID, layer, name and location. Added quick Unchanged, Location changed, Location removed and Edit/status actions; moving a point now uses a map placement screen with Cancel and Save.
+- Simplified status to Pending verification, Verification Complete and Needs review. Verification states use circle, square and triangle markers with status outlines while retaining user-selected layer colours.
+- Added road-network overlays and shortest-path directions from the current GPS position, with metre/kilometre distance display.
+- Project settings can add and classify study-area, facility and road layers from shapefile/ZIP, CSV, Excel, GeoJSON and GeoPackage files. Original imported source files are preserved with normalized layers in project packages.
+- Project packages retain original XLSForms, project settings, map layers and the matching cloud sync Code.gs/Map.html/Charts.html bundle. Sync URL/API key is included by default for team handoff and can be unchecked before export.
+- Fixed clipped Latitude/Longitude labels in the Study Area edit dialog and refreshed Study Area guidance.
+
 ## v2.6.6 — 2026-10-13
 
 - Poster map fills over 80% of the image, with compact titles/legends and a fit-data extent option. Shared by Android WebMap and Google Sheets atlas.

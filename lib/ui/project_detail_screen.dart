@@ -12,11 +12,13 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
 import 'package:mapbanai/services/xlsform_parser.dart';
 import 'package:mapbanai/services/project_sharing_flow.dart';
+import 'package:mapbanai/services/project_asset_service.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/import_flow_dialogs.dart';
 import 'package:mapbanai/ui/project_qr_screen.dart';
+import 'package:mapbanai/ui/project_vector_layers_screen.dart';
 import 'package:mapbanai/ui/survey_form_builder_screen.dart';
 import 'package:mapbanai/ui/survey_form_detail_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
@@ -424,6 +426,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           'Imported "${form.name}" with ${form.questions.length} questions',
         );
       }
+      await ProjectAssetService(_database)
+          .add(widget.projectId, file.name, bytes);
     } on XlsFormParseException catch (e) {
       _showSnack('Import failed: ${e.message}');
     } catch (e) {
@@ -583,6 +587,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   onTap: _editName,
                 ),
                 const SizedBox(height: 8),
+                Text(
+                  'Project files and map layers',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add study-area, facility and road layers. Source files travel with project exports.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.layers_outlined),
+                  title: const Text('Manage project files and layers'),
+                  subtitle: const Text(
+                      'Shapefile, CSV, Excel, GeoJSON and GeoPackage'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => ProjectVectorLayersScreen(
+                            database: _database, projectId: widget.projectId)));
+                    await _load();
+                  },
+                ),
+                const SizedBox(height: 24),
                 Text(
                   'Survey forms',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
