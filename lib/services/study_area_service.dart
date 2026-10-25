@@ -337,8 +337,9 @@ class StudyAreaSite {
             (k, v) => MapEntry(k.toString(), v.toString()),
           ) ??
           {},
-      status: StudyAreaStatusX.fromString(json['status']?.toString())
-          .verificationStatus,
+      // Preserve the original outcome in storage so older visit and revision
+      // records remain lossless. The UI normalizes legacy outcomes for display.
+      status: StudyAreaStatusX.fromString(json['status']?.toString()),
       sourceProperties: json['source_properties'] is Map
           ? Map<String, dynamic>.from(json['source_properties'])
           : null,

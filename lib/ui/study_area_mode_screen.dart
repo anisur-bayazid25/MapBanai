@@ -401,7 +401,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         latitude: site.latitude,
         longitude: site.longitude,
         attributes: Map.from(site.attributes),
-        status: StudyAreaStatus.completed,
+        status: StudyAreaStatus.verified,
         changeNote: 'Location unchanged');
     await _saveVerificationUpdate(updated, successMessage: 'Marked unchanged');
   }
@@ -464,7 +464,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         attributes: Map.from(site.attributes),
-        status: StudyAreaStatus.completed,
+        status: StudyAreaStatus.updated,
         changeNote: 'Location changed');
     setState(() {
       _movingSite = null;
@@ -1741,7 +1741,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           child: Row(children: [
             Expanded(
                 child: Text(
-                    '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} of ${_sites.length} features',
+                    '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
                     style: const TextStyle(fontWeight: FontWeight.w700))),
             IconButton(
                 tooltip: 'Layer colours and visibility',
@@ -1908,7 +1908,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => _editSite(site),
                     icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit / status'),
+                    label: const Text('Edit'),
                   ),
                 ),
                 const SizedBox(width: 8),

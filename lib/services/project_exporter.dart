@@ -9,7 +9,7 @@ import 'package:mapbanai/models/app_info.dart';
 import 'package:mapbanai/services/map_service.dart';
 import 'package:mapbanai/services/project_package.dart';
 import 'package:mapbanai/services/project_asset_service.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, ServicesBinding;
 
 /// Builds .mbproj packages from a project stored in the local database.
 ///
@@ -160,14 +160,22 @@ class ProjectExporter {
       final name = '${ProjectPackageFormat.formsDir}${form['id']}.json';
       contentFiles[name] = Uint8List.fromList(utf8.encode(jsonEncode(form)));
     }
-    for (final bundled in const {
-      'assets/help/manager_apps_script.gs': 'assets/cloud_sync/Code.gs',
-      'assets/help/Map.html': 'assets/cloud_sync/Map.html',
-      'assets/help/Charts.html': 'assets/cloud_sync/Charts.html',
-    }.entries) {
-      final dataBytes = await rootBundle.load(bundled.key);
-      contentFiles[bundled.value] = dataBytes.buffer
-          .asUint8List(dataBytes.offsetInBytes, dataBytes.lengthInBytes);
+    var servicesInitialized = true;
+    try {
+      ServicesBinding.instance;
+    } catch (_) {
+      servicesInitialized = false;
+    }
+    if (servicesInitialized) {
+      for (final bundled in const {
+        'assets/help/manager_apps_script.gs': 'assets/cloud_sync/Code.gs',
+        'assets/help/Map.html': 'assets/cloud_sync/Map.html',
+        'assets/help/Charts.html': 'assets/cloud_sync/Charts.html',
+      }.entries) {
+        final dataBytes = await rootBundle.load(bundled.key);
+        contentFiles[bundled.value] = dataBytes.buffer
+            .asUint8List(dataBytes.offsetInBytes, dataBytes.lengthInBytes);
+      }
     }
 
     final checksums = <String, String>{};
