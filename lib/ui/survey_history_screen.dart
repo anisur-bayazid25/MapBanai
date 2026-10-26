@@ -10,6 +10,7 @@ import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:mapbanai/ui/photo_gallery_screen.dart';
 import 'package:mapbanai/ui/survey_form_renderer.dart';
 import 'package:mapbanai/ui/survey_session_detail_screen.dart';
+import 'package:mapbanai/ui/history_cleanup_screen.dart';
 
 class SurveyHistoryScreen extends StatefulWidget {
   const SurveyHistoryScreen({super.key, this.projectId});
@@ -28,6 +29,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   final Set<String> _collapsedProjects = {};
   final Set<String> _collapsedDates = {};
   bool _draftsCollapsed = false;
+  bool _groupingInitialized = false;
 
   @override
   void initState() {
@@ -46,6 +48,11 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     setState(() {
       _projectNames = names;
       _sessions = sessions;
+      if (!_groupingInitialized && sessions.length > 100) {
+        _collapsedProjects.addAll(sessions
+            .map((session) => names[session.projectId] ?? 'Unknown project'));
+      }
+      _groupingInitialized = true;
       _drafts = drafts
           .where((s) =>
               widget.projectId == null || s.projectId == widget.projectId)
@@ -263,6 +270,18 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
       appBar: AppBar(
         title: const Text('Survey History'),
         actions: [
+          IconButton(
+            tooltip: 'Clean up history',
+            icon: const Icon(Icons.delete_sweep_outlined),
+            onPressed: _loading
+                ? null
+                : () async {
+                    await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => HistoryCleanupScreen(
+                            database: _database, projectId: widget.projectId)));
+                    if (mounted) await _load();
+                  },
+          ),
           IconButton(
             tooltip: 'Photo gallery',
             icon: const Icon(Icons.photo_library_outlined),

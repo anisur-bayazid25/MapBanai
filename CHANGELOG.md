@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.6.10 — 2026-10-26
+
+- Added bulk survey-history cleanup by project, study layer, local recorded day, record type and sync status, with optional drafts and linked map-point removal. Deletion also clears the matching sync queue; unchanged map snapshots cannot recreate deleted history records.
+- Clear all sites can now clear the selected layer's history and sync queue together. Unassigned legacy sites have a selectable preview showing their IDs, source and recorded date when available.
+- Connected project vector imports to the Study Area layer selector. Existing source layers become selectable, can be verified on the map, and retain project ownership. Baseline imports do not create collected survey records.
+- Both import screens use the same spatial parser, discover matching shapefile companions in accessible folders without case sensitivity, support selecting companion files together, and offer a folder picker or explicit geometry-only import when DBF attributes are missing.
+- Reuse the native map across point selection and GPS changes, stop redrawing markers when point cards close, coalesce redraws, avoid duplicate source/point drawing, fit the actual layer bounds, and move large map JSON reads/writes into a worker.
+- Home export now offers .mbproj projects with or without collected responses, plus responses-only JSON. Full packages preserve response photos, verification state, GIS sources, forms, settings and optional sync URL/API credentials; importing restores collected data.
+- Fixed Windows local builds by using a writable canonical Java socket/temp directory in the build helper. The local Gradle release task graph now completes without the loopback connection error.
+
 ## v2.6.9 — 2026-10-26
 
 - Project vector layers are available directly from Study Area Mode and retain independent visibility, type, colour and opacity settings.

@@ -8,10 +8,10 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.6.9](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.9)**
+**Latest release: [v2.6.10](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.10)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
-**Version: 2.6.9+32.** Study Area has synchronized project layers, file-level import cleanup, and faster batched rendering for large point layers. Project packages preserve source forms/layers and cloud sync scripts/settings. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
+**Version: 2.6.10+33.** Clean history and pending sync records by project, layer or day; use imported project files as selectable Study Area layers; share .mbproj projects with or without responses/photos. The native map is reused during point selection and GPS updates. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
 
 ---
 
@@ -131,6 +131,8 @@ WebMap has a separate **Download Map** button with twelve designs, custom colors
 Project → **Home → Export** in the selected project view:
 
 - Survey responses as **CSV (Kobo/ODK style)** or JSON
+- Full **.mbproj** projects with responses/photos, or project setup without responses; both include original forms, GIS source files, settings and optional cloud URL/API credentials.
+- **Responses only (JSON)** excludes project configuration, source layers and sync credentials.
 - GIS features as **CSV / GeoJSON / KML / Shapefile-style** files
 
 Files are written to `Android/data/com.mapbanai.mapbanai/files/... /Export/<project>/`
@@ -140,8 +142,9 @@ send files to any app (email, WhatsApp, Drive, ...).
 ## Sharing projects between phones (v2.1.1+)
 
 A MapBanai project (forms, questions, logic, settings, layers) can be
-packaged into a `.mbproj` file. **Survey responses and photos are never
-included** — only the project definition.
+packaged into a `.mbproj` file. Choose **Project with responses** to include
+collected records, response photos and current Study Area state, or
+**Project without responses** to share the setup and original source layers.
 
 **Researcher (sender):**
 1. **Home → Open** →
@@ -179,6 +182,8 @@ MapBanai checks GitHub for new releases on launch and from **Settings**
 **Download & Install** button. No auto-updates — you decide.
 
 ## Troubleshooting & notes
+
+- On Windows, build from PowerShell with `./tool/build_android.ps1 -Mode release` after `flutter pub get`. The helper uses a writable Java socket/temp directory under the Gradle home (or local application data) to avoid the JDK loopback error caused by some temporary-directory aliases.
 
 - Everything is stored on-device (`mapbanai.db` in app documents).
   Uninstalling the app erases collected data — export/share important

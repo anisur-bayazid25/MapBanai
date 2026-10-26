@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// A project owns independent study layers and one shared active form.
@@ -43,8 +44,16 @@ class ProjectWorkspaceService {
     if (raw != null) config = Map<String, dynamic>.from(jsonDecode(raw));
     final layers = <StudyLayer>[const StudyLayer('default', 'Main study area')];
     for (final item in config['layers'] as List? ?? []) {
-      if (item['id'] != 'default')
+      if (item['id'] != 'default' &&
+          !item['id'].toString().startsWith('vector:'))
         layers.add(StudyLayer(item['id'], item['name']));
+    }
+    for (final vector in await ProjectVectorLayerService(db).load(projectId)) {
+      if (vector['role'] == 'road') continue;
+      final id = ProjectVectorLayerService.studyLayerId(vector);
+      if (!layers.any((layer) => layer.id == id)) {
+        layers.add(StudyLayer(id, vector['name'].toString()));
+      }
     }
     final layerId = layers.any((item) => item.id == config['layer_id'])
         ? config['layer_id'] as String

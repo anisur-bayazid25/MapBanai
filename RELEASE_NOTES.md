@@ -1,4 +1,16 @@
-# MapBanai v2.6.9
+# MapBanai v2.6.10
+
+- Clean survey history by project, layer, day, record type or sync status, with previews and optional linked map-point deletion. Cleared records are removed from the sync queue and stay removed until a point is edited again.
+- Project Settings imports now appear as selectable Study Area layers. Adding a baseline shapefile no longer adds every imported point to survey history or the sync queue.
+- Both screens discover shapefile companions in accessible folders, accept multiple selected files, and offer a companion-folder picker. Missing DBF attributes have a clear geometry-only choice.
+- Faster map interaction: preserve the native map while selecting points and receiving GPS fixes, avoid full redraws when closing details, remove duplicate source drawing and process large map files in a worker.
+- Home export supports full .mbproj packages with responses/photos, project setup without responses, and responses-only JSON. Project packages include GIS source files, forms, settings and the sync URL/API key by default.
+- Unassigned map sites can be reviewed and selected before assignment or deletion. Project settings distinguish survey counts from map-history records.
+- Repaired the Windows build helper's Java socket/temp path.
+
+Install app-release.apk over the existing MapBanai installation to preserve local data. Bulk deletion removes local history and pending uploads; records already uploaded to the cloud remain there.
+
+## v2.6.9
 
 - Study Area Mode now opens the project layer manager directly, with project settings shared between imports made in either screen.
 - Imports from Study Area Mode preserve the source file as a project layer. Imported files can be removed with all their points, local revision history and pending sync records.

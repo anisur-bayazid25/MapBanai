@@ -9,23 +9,25 @@ import 'package:mapbanai/models/app_info.dart';
 import 'package:mapbanai/services/map_service.dart';
 import 'package:mapbanai/services/project_package.dart';
 import 'package:mapbanai/services/project_asset_service.dart';
+import 'package:mapbanai/services/project_field_data_service.dart';
+import 'package:mapbanai/services/study_area_store.dart';
 import 'package:flutter/services.dart' show rootBundle, ServicesBinding;
 
 /// Builds .mbproj packages from a project stored in the local database.
 ///
-/// Only the project DEFINITION is exported: metadata, per-project survey
-/// forms (full SurveyForm JSON), project attribute fields, project settings
-/// and the basemap/layer configuration snapshot. Survey responses, GPS
-/// tracks, photos and app-level settings are never included.
+/// Definitions are always included; collected responses, Study Area state and
+/// response photos can optionally travel with the same package.
 class ProjectExporter {
-  ProjectExporter(this._database);
+  ProjectExporter(this._database, {this.studyAreaStore});
 
   final AppDatabase _database;
+  final StudyAreaStore? studyAreaStore;
 
   /// Builds the typed package payload for a project. Used by both the ZIP
   /// export and the inline-QR exporter so both share one code path.
   Future<ProjectPackageData> buildData(Project project,
-      {bool includeSyncConnection = false}) async {
+      {bool includeSyncConnection = false,
+      bool includeResponses = false}) async {
     final exportedAt = DateTime.now().toUtc().toIso8601String();
     final workspace = await ProjectWorkspaceService(_database).load(project.id);
     final externalId = workspace.project.externalId!;
@@ -64,6 +66,11 @@ class ProjectExporter {
       'forms': formIndex,
       'source_files': await ProjectAssetService(_database).load(project.id),
     };
+    if (includeResponses) {
+      projectJson['field_data'] =
+          await ProjectFieldDataService(_database, store: studyAreaStore)
+              .export(workspace.project);
+    }
 
     final settingsJson = <String, dynamic>{
       'study_layers': workspace.layers.map((layer) => layer.toJson()).toList(),
@@ -133,9 +140,11 @@ class ProjectExporter {
 
   /// Serializes a project into the full .mbproj ZIP byte stream.
   Future<Uint8List> buildPackageBytes(Project project,
-      {bool includeSyncConnection = false}) async {
-    final data =
-        await buildData(project, includeSyncConnection: includeSyncConnection);
+      {bool includeSyncConnection = false,
+      bool includeResponses = false}) async {
+    final data = await buildData(project,
+        includeSyncConnection: includeSyncConnection,
+        includeResponses: includeResponses);
 
     final contentFiles = <String, Uint8List>{
       ProjectPackageFormat.projectFileName:
@@ -179,6 +188,14 @@ class ProjectExporter {
     }
 
     final checksums = <String, String>{};
+    if (contentFiles.values.any((bytes) =>
+            bytes.length > ProjectPackageFormat.maxSingleEntryBytes) ||
+        contentFiles.values
+                .fold<int>(0, (total, bytes) => total + bytes.length) >
+            ProjectPackageFormat.maxTotalUncompressedBytes) {
+      throw const FormatException(
+          'This project package is too large. Export the project without responses and share response data separately.');
+    }
     for (final path in contentFiles.keys.toList()..sort()) {
       checksums[path] = ProjectPackageFormat.sha256Hex(contentFiles[path]!);
     }

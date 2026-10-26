@@ -26,11 +26,6 @@ class SpatialFileImport {
       throw const FormatException(
           'Choose GeoJSON, GeoPackage, a zipped shapefile, SHP, CSV, Excel or KML/KMZ.');
     if (p.extension(file.path).toLowerCase() != '.zip') {
-      if (p.extension(file.path).toLowerCase() == '.shp' &&
-          !File(p.setExtension(file.path, '.dbf')).existsSync()) {
-        throw const FormatException(
-            'Shapefile attributes are missing. ZIP the SHP, DBF, PRJ and CPG files together and import that ZIP.');
-      }
       return StudyAreaService.importFromFile(file);
     }
     if (await file.length() > 100 * 1024 * 1024)

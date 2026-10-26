@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:mapbanai/services/study_area_service.dart';
 import 'package:path/path.dart' as p;
@@ -72,6 +73,12 @@ class StudyAreaStore {
       }
     }
     final text = await file.readAsString();
+    return text.length > 256 * 1024
+        ? Isolate.run(() => _decodeSites(text))
+        : _decodeSites(text);
+  }
+
+  static List<StudyAreaSite> _decodeSites(String text) {
     if (text.trim().isEmpty) {
       throw const FormatException(
           'Study area file is empty; restore a backup before saving.');
@@ -111,10 +118,11 @@ class StudyAreaStore {
     final file = await _file();
     final temporary = File('${file.path}.tmp');
     final backup = File('${file.path}.bak');
-    await temporary.writeAsString(
-        const JsonEncoder.withIndent('  ')
-            .convert(sites.map((s) => s.toJson()).toList()),
-        flush: true);
+    final rows = sites.map((site) => site.toJson()).toList();
+    final encoded = sites.length > 200
+        ? await Isolate.run(() => jsonEncode(rows))
+        : jsonEncode(rows);
+    await temporary.writeAsString(encoded, flush: true);
     if (file.existsSync()) {
       if (backup.existsSync()) await backup.delete();
       await file.rename(backup.path);
@@ -140,6 +148,16 @@ class StudyAreaStore {
       await _write(snapshot);
     });
   }
+
+  Future<void> replaceProjectSites(
+          int projectId, String externalId, List<StudyAreaSite> replacement) =>
+      _serialize(() async {
+        final current = await loadSites();
+        final kept = current.where((site) => site.projectExternalId != null
+            ? site.projectExternalId != externalId
+            : site.projectId != projectId);
+        await _write([...kept, ...replacement]);
+      });
 
   Future<void> addSites(List<StudyAreaSite> newSites, {bool replace = false}) {
     final snapshot = newSites
@@ -394,8 +412,17 @@ class StudyAreaStore {
         await _write(sites);
       });
 
-  Future<void> deleteSites(Set<String> ids) => _serialize(() async {
+  Future<void> deleteSites(Set<String> ids,
+          {Map<String, String>? expectedTokens}) =>
+      _serialize(() async {
         final sites = await loadSites();
+        if (expectedTokens != null) {
+          for (final site in sites.where((site) => ids.contains(site.id))) {
+            if (expectedTokens[site.id] != site.revisionToken) {
+              throw StateError('A map point changed. Reload before deleting.');
+            }
+          }
+        }
         sites.removeWhere((site) => ids.contains(site.id));
         await _write(sites);
       });
@@ -417,11 +444,13 @@ class StudyAreaStore {
   Future<int> assignUnclaimedSites(
       {required int projectId,
       required String projectExternalId,
-      required String layerId}) async {
+      required String layerId,
+      Set<String>? ids}) async {
     var count = 0;
     await _serialize(() async {
       final sites = await loadSites();
       for (final site in sites) {
+        if (ids != null && !ids.contains(site.id)) continue;
         if (site.projectId != null || site.projectExternalId != null) continue;
         site.projectId = projectId;
         site.projectExternalId = projectExternalId;

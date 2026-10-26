@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_vector_layer_service.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:mapbanai/services/study_area_outbox_service.dart';
 import 'package:mapbanai/services/study_area_service.dart';
 import 'package:mapbanai/services/study_area_store.dart';
+import 'package:mapbanai/ui/common/shapefile_companions.dart';
 
 class ProjectVectorLayersScreen extends StatefulWidget {
   final AppDatabase database;
@@ -107,9 +109,21 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
         }
         files[file.name] = file.bytes ?? await File(file.path!).readAsBytes();
       }
+      if (!mounted ||
+          !await resolveShapefileCompanions(context, files,
+              selection.files.map((file) => file.path).whereType<String>(),
+              identifiers: selection.files
+                  .map((file) => file.identifier)
+                  .whereType<String>())) return;
       final imported = await ProjectVectorLayerService.parseFiles(files);
       final combined = [...layers, ...imported];
       await service.save(widget.projectId, combined);
+      final selected =
+          imported.where((layer) => layer['role'] != 'road').firstOrNull;
+      if (selected != null) {
+        await ProjectWorkspaceService(widget.database).select(widget.projectId,
+            layerId: ProjectVectorLayerService.studyLayerId(selected));
+      }
       if (mounted) setState(() => layers = combined);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
@@ -119,7 +133,7 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
   }
 
   Future<void> _removeLayer(Map<String, dynamic> layer) async {
-    final batchId = layer['import_batch_id']?.toString();
+    final batchId = (layer['import_batch_id'] ?? layer['id'])?.toString();
     final store = StudyAreaStore();
     final importedSites = batchId == null
         ? <StudyAreaSite>[]
@@ -153,7 +167,7 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
     try {
       final removedLayers = layers
           .where((item) => removeBatch
-              ? item['import_batch_id']?.toString() == batchId
+              ? (item['import_batch_id'] ?? item['id'])?.toString() == batchId
               : identical(item, layer))
           .toList();
       final remaining =

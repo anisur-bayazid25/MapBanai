@@ -6,6 +6,9 @@ import 'package:mapbanai/services/spatial_file_import.dart';
 import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
 import 'package:mapbanai/services/study_area_outbox_service.dart';
+import 'package:mapbanai/services/history_cleanup_service.dart';
+import 'package:mapbanai/ui/history_cleanup_screen.dart';
+import 'package:mapbanai/ui/common/shapefile_companions.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:mapbanai/services/guided_visit_service.dart';
@@ -66,6 +69,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   final LocationService _locationService = LocationService();
   MapLibreMapController? _controller;
   bool _styleReady = false;
+  Widget? _cachedMapWidget;
+  String? _cachedMapStyle;
+  String? _fittedWorkspace;
   String _selectedBasemapId = 'osm';
   MapStyleChoice? _offlineBasemap;
   String _fieldworker = 'Local fieldworker';
@@ -116,8 +122,34 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           id = context.read<ProjectState>().selectedProjectId;
         } catch (_) {}
       }
-      if (id != null && !widget.viewOnly)
+      if (id != null && !widget.viewOnly) {
+        final project = await _database.getProjectById(id);
+        if (project != null)
+          await ProjectVectorLayerService(_database)
+              .linkExistingStudySites(project, _store);
         _workspace = await ProjectWorkspaceService(_database).load(id);
+        final assigned = await _store.loadSites();
+        final hasSites = assigned.any((site) =>
+            GuidedVisitService.belongsToProject(site, _workspace!.project) &&
+            site.layerId == _workspace!.layerId);
+        if (!hasSites) {
+          final raw =
+              await _database.getSetting('project_vector_initialized_$id');
+          final initialized =
+              raw == null ? <dynamic>[] : jsonDecode(raw) as List;
+          final source = (await ProjectVectorLayerService(_database).load(id))
+              .where((layer) =>
+                  layer['role'] != 'road' &&
+                  layer['visible'] != false &&
+                  layer['import_batch_id'] == null &&
+                  !initialized.contains(layer['id']) &&
+                  (layer['features'] as List).isNotEmpty)
+              .firstOrNull;
+          if (source != null)
+            _workspace = await ProjectWorkspaceService(_database).select(id,
+                layerId: ProjectVectorLayerService.studyLayerId(source));
+        }
+      }
       await _loadSites();
       if (widget.initialImportPath != null && !widget.viewOnly)
         await _importSites(pathOverride: widget.initialImportPath);
@@ -156,25 +188,101 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       _showSnack('No unassigned sites');
       return;
     }
-    final ok = await showDialog<bool>(
+    final selected = <String>{};
+    final action = await showDialog<String>(
         context: context,
-        builder: (context) => AlertDialog(
-                title: const Text('Assign previous sites'),
-                content: Text(
-                    'Move ${sites.length} unassigned sites into ${workspace.project.name} / ${workspace.layer.name}? Their original data and history will be kept.'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Assign'))
-                ]));
-    if (ok != true) return;
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+                    title: Text('${sites.length} unassigned map sites'),
+                    content: SizedBox(
+                        width: 520,
+                        height: 360,
+                        child: Column(children: [
+                          const Text(
+                              'These are stored map sites without a project assignment. Review their details before assigning or deleting them. They are separate from survey responses.'),
+                          CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                  'Select all (${selected.length} selected)'),
+                              value: selected.length == sites.length,
+                              onChanged: (value) => update(() {
+                                    selected.clear();
+                                    if (value == true)
+                                      selected
+                                          .addAll(sites.map((site) => site.id));
+                                  })),
+                          Expanded(
+                              child: ListView.builder(
+                                  itemCount: sites.length,
+                                  itemBuilder: (context, index) {
+                                    final site = sites[index];
+                                    final source = site.importFileName ??
+                                        site.attributes['layer'] ??
+                                        'Source not recorded';
+                                    final date =
+                                        site.history.firstOrNull?.timestamp ??
+                                            site.updatedAt;
+                                    return CheckboxListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(site.displayName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis),
+                                        subtitle: Text(
+                                            'ID: ${site.id}\n$source${date == null ? '' : '\n${date.toLocal()}'}'),
+                                        value: selected.contains(site.id),
+                                        onChanged: (value) => update(() {
+                                              if (value == true) {
+                                                selected.add(site.id);
+                                              } else {
+                                                selected.remove(site.id);
+                                              }
+                                            }));
+                                  })),
+                        ])),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel')),
+                      TextButton(
+                          onPressed: selected.isEmpty
+                              ? null
+                              : () => Navigator.pop(context, 'delete'),
+                          child: const Text('Delete selected')),
+                      FilledButton(
+                          onPressed: selected.isEmpty
+                              ? null
+                              : () => Navigator.pop(context, 'assign'),
+                          child: const Text('Assign selected'))
+                    ])));
+    if (action == null || !mounted) return;
+    if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                  title: const Text('Delete unassigned sites?'),
+                  content: Text(
+                      'Remove ${selected.length} selected map sites and their local histories? This cannot be undone.'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete'))
+                  ]));
+      if (confirmed == true)
+        await _store.deleteSites(selected, expectedTokens: {
+          for (final site in sites.where((site) => selected.contains(site.id)))
+            site.id: site.revisionToken
+        });
+      if (mounted) await _loadSites();
+      return;
+    }
     await _store.assignUnclaimedSites(
         projectId: workspace.project.id,
         projectExternalId: workspace.project.externalId!,
-        layerId: workspace.layerId);
+        layerId: workspace.layerId,
+        ids: selected);
     await _loadSites();
   }
 
@@ -182,6 +290,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     setState(() => _isLoading = true);
     List<StudyAreaSite> sites;
     try {
+      if (_workspace != null && !widget.viewOnly) {
+        await ProjectVectorLayerService(_database)
+            .ensureStudySites(_workspace!.project, _workspace!.layerId, _store);
+      }
       sites = await _store.loadSites();
     } catch (e) {
       if (mounted) {
@@ -317,7 +429,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       ),
     ).listen((pos) {
       if (!mounted) return;
-      setState(() => _currentPos = pos);
+      final firstFix = _currentPos == null;
+      _currentPos = pos;
+      if (firstFix) setState(() {});
     });
   }
 
@@ -560,6 +674,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         builder: (_) => ProjectVectorLayersScreen(
             database: _database, projectId: workspace.project.id)));
     if (!mounted) return;
+    _workspace =
+        await ProjectWorkspaceService(_database).load(workspace.project.id);
     await _loadSites();
   }
 
@@ -575,10 +691,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   Future<void> _mapUpdates = Future.value();
+  int _mapRenderGeneration = 0;
 
   Future<void> _refreshMapMarkers() {
-    _mapUpdates =
-        _mapUpdates.then((_) => _renderMapMarkers()).catchError((Object error) {
+    final request = ++_mapRenderGeneration;
+    _mapUpdates = _mapUpdates.then((_) async {
+      if (!mounted || request != _mapRenderGeneration) return;
+      await _renderMapMarkers();
+    }).catchError((Object error) {
       _showSnack('Map preview failed: $error. Stored features are retained.');
     });
     return _mapUpdates;
@@ -606,12 +726,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     List<LatLng> points(dynamic values) => (values as List)
         .map((v) => LatLng((v[1] as num).toDouble(), (v[0] as num).toDouble()))
         .toList();
-    final importedBatches =
-        _sites.map((site) => site.importBatchId).whereType<String>().toSet();
     for (final layer
         in _referenceLayers.where((item) => item['visible'] != false)) {
+      // Non-road files are selectable study layers. Drawing their source
+      // geometry as well would duplicate all editable markers and hit targets.
+      if (layer['role'] != 'road') continue;
       final batchId = layer['import_batch_id']?.toString();
-      if (batchId != null && importedBatches.contains(batchId)) continue;
+      if (batchId != null ||
+          ProjectVectorLayerService.studyLayerId(layer) == _workspace?.layerId)
+        continue;
       final color = (layer['color'] ?? '#467ca1').toString();
       final opacity =
           ((layer['opacity'] as num?)?.toDouble() ?? 0.8).clamp(0.0, 1.0);
@@ -696,6 +819,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final fillData = <Map<String, dynamic>>[];
     for (final site in _sites.where((s) =>
         (_movingSite == null || s.id != _movingSite!.id) &&
+        !_referenceLayers.any((layer) =>
+            layer['visible'] == false &&
+            (layer['import_batch_id'] ?? layer['id']) == s.importBatchId) &&
         (_filter == null || s.status.verificationStatus == _filter) &&
         _categoryStyle.visible(s))) {
       try {
@@ -804,7 +930,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _selectedSite == null &&
         _drawType == null &&
         _movingSite == null) {
-      _fitBounds();
+      final workspace =
+          '${_workspace?.project.id}:${_workspace?.layerId}:${_sites.length}';
+      if (_fittedWorkspace != workspace) {
+        _fittedWorkspace = workspace;
+        _fitBounds();
+      }
     }
   }
 
@@ -827,10 +958,23 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       if (s.longitude < minLon) minLon = s.longitude;
       if (s.longitude > maxLon) maxLon = s.longitude;
     }
-    final centerLat = (minLat + maxLat) / 2;
-    final centerLon = (minLon + maxLon) / 2;
+    if (minLat == maxLat) {
+      minLat -= 0.0001;
+      maxLat += 0.0001;
+    }
+    if (minLon == maxLon) {
+      minLon -= 0.0001;
+      maxLon += 0.0001;
+    }
     _controller!.animateCamera(
-      CameraUpdate.newLatLng(LatLng(centerLat, centerLon)),
+      CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+              southwest: LatLng(minLat, minLon),
+              northeast: LatLng(maxLat, maxLon)),
+          left: 32,
+          top: 100,
+          right: 32,
+          bottom: 80),
     );
   }
 
@@ -849,6 +993,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       if (siteId == null) return;
       final site = _sites.where((s) => s.id == siteId).firstOrNull;
       if (site == null) return;
+      unawaited(_clearRoute());
       setState(() {
         _selectedSite = site;
         _movingSite = null;
@@ -856,6 +1001,19 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _routeDistanceM = null;
         _routeCoordinates = null;
       });
+    }
+  }
+
+  Future<void> _clearRoute() async {
+    final line = _routeLine;
+    _routeLine = null;
+    _routeSiteId = null;
+    _routeDistanceM = null;
+    _routeCoordinates = null;
+    if (line != null && _controller != null && _styleReady) {
+      try {
+        await _controller!.removeLine(line);
+      } catch (_) {/* Style changed. */}
     }
   }
 
@@ -867,10 +1025,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final result = pathOverride == null
         ? await FilePicker.platform.pickFiles(
             type: FileType.any,
+            allowMultiple: true,
             withData: false,
           )
         : null;
-    final path = pathOverride ?? result?.files.firstOrNull?.path;
+    final path = pathOverride ??
+        result?.files
+            .where((file) => SpatialFileImport.supports(file.name))
+            .firstOrNull
+            ?.path;
     if (path == null) return;
     final ioFile = File(path);
     if (!SpatialFileImport.supports(path)) {
@@ -886,37 +1049,66 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     );
     var loadingDialogOpen = true;
     try {
-      final imported = await SpatialFileImport.read(ioFile);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      loadingDialogOpen = false;
-      if (imported.isEmpty) {
-        _showSnack('No sites found in file. Check format and lat/lon columns.');
-        return;
-      }
       final workspace = _workspace!;
       final fileBytes = Uint8List.fromList(await ioFile.readAsBytes());
       final layerInputs = <String, Uint8List>{};
-      if (p.extension(path).toLowerCase() == '.shp') {
-        final base = p.basenameWithoutExtension(path);
-        for (final extension in ['.shp', '.dbf', '.shx', '.prj', '.cpg']) {
-          final companion = File(p.setExtension(path, extension));
-          if (await companion.exists()) {
-            layerInputs['$base$extension'] =
-                Uint8List.fromList(await companion.readAsBytes());
+      if (result != null) {
+        for (final file in result.files) {
+          if (file.size > ProjectVectorLayerService.maxBytes) {
+            throw const FormatException(
+                'Select files totalling at most 64 MB.');
           }
+          if (layerInputs.containsKey(file.name))
+            throw const FormatException(
+                'Duplicate filenames. Use separate ZIP files.');
+          layerInputs[file.name] =
+              file.bytes ?? await File(file.path!).readAsBytes();
         }
       } else {
         layerInputs[p.basename(path)] = fileBytes;
       }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      loadingDialogOpen = false;
+      if (!await resolveShapefileCompanions(context, layerInputs,
+          result?.files.map((file) => file.path).whereType<String>() ?? [path],
+          identifiers: result?.files
+                  .map((file) => file.identifier)
+                  .whereType<String>() ??
+              const [])) return;
+      if (!mounted) return;
+      showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      loadingDialogOpen = true;
       final batchId = const Uuid().v4();
       List<Map<String, dynamic>> projectLayers;
+      List<StudyAreaSite> imported;
       try {
         projectLayers = await ProjectVectorLayerService.parseFiles(layerInputs);
+        imported = [];
+        for (final layer in projectLayers) {
+          final parsed = StudyAreaService.parseGeoJson(jsonEncode(
+              {'type': 'FeatureCollection', 'features': layer['features']}));
+          for (final site in parsed) {
+            imported.add(projectLayers.length == 1
+                ? site
+                : StudyAreaSite.fromJson({
+                    ...site.toJson(),
+                    'id': '${layer['name']}:${site.id}',
+                    'attributes': {
+                      ...site.attributes,
+                      'layer': site.attributes['layer'] ?? layer['name']
+                    }
+                  }));
+          }
+        }
       } on FormatException {
         if (!['.kml', '.kmz'].contains(p.extension(path).toLowerCase())) {
           rethrow;
         }
+        imported = await SpatialFileImport.read(ioFile);
         projectLayers = [
           {
             'id': const Uuid().v4(),
@@ -941,11 +1133,39 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           }
         ];
       }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      loadingDialogOpen = false;
+      if (imported.isEmpty) {
+        _showSnack('No sites found in file. Check format and lat/lon columns.');
+        return;
+      }
+      final warnings = projectLayers
+          .map((layer) => layer['warning']?.toString() ?? '')
+          .where((warning) => warning.isNotEmpty)
+          .toSet();
+      if (warnings.isNotEmpty) {
+        final proceed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+                    title: const Text('Check imported files'),
+                    content: Text(warnings.join('\n\n')),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Continue'))
+                    ]));
+        if (proceed != true) return;
+      }
       final fileName = p.basename(path);
       for (final layer in projectLayers) {
         layer['role'] = 'study_area';
         layer['import_batch_id'] = batchId;
         layer['import_file_name'] = fileName;
+        layer['study_layer_id'] = workspace.layerId;
       }
       final existing = await _store.loadSites();
       for (var i = 0; i < imported.length; i++) {
@@ -987,31 +1207,43 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           builder: (_) => StudyAreaMergeReviewDialog(preview: preview));
       if (choices == null) return;
       final vectorService = ProjectVectorLayerService(_database);
+      var sourceOffset = 0;
+      for (final layer in projectLayers) {
+        final count = (layer['features'] as List).length;
+        layer['study_site_ids'] = imported
+            .skip(sourceOffset)
+            .take(count)
+            .map((site) => site.id)
+            .toList();
+        layer['study_source_project_id'] = workspace.project.externalId;
+        sourceOffset += count;
+      }
       final currentLayers = await vectorService.load(workspace.project.id);
       await vectorService
           .save(workspace.project.id, [...currentLayers, ...projectLayers]);
-      final merged = await _store.applyMerge(preview,
-          resolutions: choices,
-          author: _fieldworker,
-          localProjectId: workspace.project.id);
-      final queuedSites = (await _store.loadSites())
-          .where((site) =>
-              site.importBatchId == batchId &&
-              GuidedVisitService.belongsToProject(site, workspace.project) &&
-              site.layerId == workspace.layerId)
-          .toList();
-      for (final site in queuedSites) {
-        // External identity is authoritative across package imports/devices.
-        site.projectId = workspace.project.id;
-      }
+      StudyAreaMergeResult merged;
       try {
-        await StudyAreaOutboxService(_database)
-            .enqueueBatch(queuedSites, _fieldworker);
+        merged = await _store.applyMerge(preview,
+            resolutions: choices,
+            author: _fieldworker,
+            localProjectId: workspace.project.id);
       } catch (_) {
-        _showSnack(
-            'Map imported and saved. Some features could not enter the sync queue; retry Cloud Sync from Home.');
-        return;
+        await vectorService.save(workspace.project.id, currentLayers);
+        rethrow;
       }
+      final initializedKey =
+          'project_vector_initialized_${workspace.project.id}';
+      final initializedRaw = await _database.getSetting(initializedKey);
+      final initialized = initializedRaw == null
+          ? <String>{}
+          : (jsonDecode(initializedRaw) as List)
+              .map((id) => id.toString())
+              .toSet();
+      initialized.addAll(projectLayers.map((layer) => layer['id'].toString()));
+      await _database.setSetting(
+          initializedKey, jsonEncode(initialized.toList()));
+      _workspace =
+          await ProjectWorkspaceService(_database).load(workspace.project.id);
       await _loadSites();
       _showSnack(
           'Imported ${merged.added} new features, updated ${merged.updated}, kept ${merged.kept} local versions.');
@@ -1383,28 +1615,62 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   Future<void> _clearAll() async {
-    if (_sites.isEmpty) return;
+    final workspace = _workspace;
+    if (workspace == null || widget.viewOnly) return;
+    final cleanup = HistoryCleanupService(_database, store: _store);
+    final preview = await cleanup.preview(
+        HistoryScope(
+            projectId: workspace.project.id,
+            layerId: workspace.layerId,
+            includeDrafts: true),
+        removePoints: true,
+        allLayerPoints: true);
+    if (!mounted) return;
+    if (preview.points.isEmpty && preview.records.isEmpty) {
+      _showSnack('This layer has no points or survey history to clear.');
+      return;
+    }
+    var clearHistory = true;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear all sites'),
-        content:
-            Text('Remove all ${_sites.length} sites? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
+      builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+                title: const Text('Clear study layer'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('${workspace.project.name} / ${workspace.layer.name}\n\n'
+                      'Remove all ${preview.points.length} map points? This cannot be undone.'),
+                  CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                          'Also clear survey history and sync queue'),
+                      subtitle: Text(
+                          '${preview.records.length} records, including ${preview.pendingCount} waiting to sync. Cloud copies remain unchanged.'),
+                      value: clearHistory,
+                      onChanged: (value) =>
+                          setDialogState(() => clearHistory = value!)),
+                ]),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Clear'),
+                  ),
+                ],
+              )),
     );
     if (ok != true) return;
     try {
-      await _store.deleteSites(_sites.map((site) => site.id).toSet());
+      if (clearHistory) {
+        await cleanup.delete(preview);
+      } else {
+        await _store.deleteSites(preview.points.map((site) => site.id).toSet(),
+            expectedTokens: {
+              for (final site in preview.points) site.id: site.revisionToken
+            });
+      }
     } catch (error) {
       _showSnack('Could not clear sites: $error');
       return;
@@ -1414,7 +1680,19 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       _selectedSite = null;
     });
     await _loadSites();
-    _showSnack('Displayed sites cleared');
+    _showSnack(clearHistory
+        ? 'Layer points, history and sync queue cleared'
+        : 'Layer points cleared; history kept');
+  }
+
+  Future<void> _cleanupHistory() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => HistoryCleanupScreen(
+            database: _database,
+            store: _store,
+            projectId: _workspace?.project.id,
+            layerId: _workspace?.layerId)));
+    if (mounted) await _loadSites();
   }
 
   void _showSnack(String msg) {
@@ -1437,6 +1715,48 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       await _controller
           ?.animateCamera(CameraUpdate.newLatLngBounds(choice.bounds!));
     }
+  }
+
+  Widget _buildCachedMapView(Basemap basemap) {
+    final style = _offlineBasemap?.style ?? _buildStyleString(basemap);
+    if (_cachedMapWidget == null || _cachedMapStyle != style) {
+      _cachedMapStyle = style;
+      _cachedMapWidget = MapLibreMap(
+        initialCameraPosition: CameraPosition(
+          target: _currentPos != null
+              ? LatLng(_currentPos!.latitude, _currentPos!.longitude)
+              : const LatLng(23.8103, 90.4125),
+          zoom: 12,
+        ),
+        onMapCreated: _onMapCreated,
+        onMapClick: (_, coordinates) {
+          if (_movingSite != null) {
+            setState(() => _movingCoordinates = coordinates);
+            _refreshMapMarkers();
+            return;
+          }
+          if (_drawType != null) {
+            setState(() => _draft.add(coordinates));
+            _refreshMapMarkers();
+          }
+        },
+        onMapLongClick: (_, coordinates) {
+          if (_drawType == null && !widget.viewOnly) _addSite(coordinates);
+        },
+        onStyleLoadedCallback: _onStyleLoaded,
+        styleString: style,
+        myLocationEnabled: true,
+        myLocationRenderMode: MyLocationRenderMode.normal,
+        compassEnabled: true,
+        annotationConsumeTapEvents: const [
+          AnnotationType.circle,
+          AnnotationType.symbol,
+          AnnotationType.line,
+          AnnotationType.fill,
+        ],
+      );
+    }
+    return _cachedMapWidget!;
   }
 
   @override
@@ -1492,6 +1812,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               if (v == 'line') _startDrawing('LineString');
               if (v == 'polygon') _startDrawing('Polygon');
               if (v == 'clear') _clearAll();
+              if (v == 'history_cleanup') _cleanupHistory();
               if (v == 'fit') _fitBounds();
             },
             itemBuilder: (context) => [
@@ -1511,46 +1832,17 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               const PopupMenuItem(value: 'fit', child: Text('Fit all sites')),
               const PopupMenuItem(
                   value: 'clear', child: Text('Clear all sites')),
+              if (!widget.viewOnly)
+                const PopupMenuItem(
+                    value: 'history_cleanup',
+                    child: Text('Clean up survey history')),
             ],
           ),
         ],
       ),
       body: Stack(
         children: [
-          MapLibreMap(
-            initialCameraPosition: CameraPosition(
-              target: _currentPos != null
-                  ? LatLng(_currentPos!.latitude, _currentPos!.longitude)
-                  : const LatLng(23.8103, 90.4125),
-              zoom: 12,
-            ),
-            onMapCreated: _onMapCreated,
-            onMapClick: (_, coordinates) {
-              if (_movingSite != null) {
-                setState(() => _movingCoordinates = coordinates);
-                _refreshMapMarkers();
-                return;
-              }
-              if (_drawType != null) {
-                setState(() => _draft.add(coordinates));
-                _refreshMapMarkers();
-              }
-            },
-            onMapLongClick: (_, coordinates) {
-              if (_drawType == null && !widget.viewOnly) _addSite(coordinates);
-            },
-            onStyleLoadedCallback: _onStyleLoaded,
-            styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
-            myLocationEnabled: true,
-            myLocationRenderMode: MyLocationRenderMode.normal,
-            compassEnabled: true,
-            annotationConsumeTapEvents: const [
-              AnnotationType.circle,
-              AnnotationType.symbol,
-              AnnotationType.line,
-              AnnotationType.fill,
-            ],
-          ),
+          _buildCachedMapView(basemap),
           Positioned(
               left: 8,
               bottom: 8,
@@ -1926,7 +2218,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                     _routeSiteId = null;
                     _routeCoordinates = null;
                     _routeDistanceM = null;
-                    _refreshMapMarkers();
+                    unawaited(_clearRoute());
                   }),
                 ),
               ],

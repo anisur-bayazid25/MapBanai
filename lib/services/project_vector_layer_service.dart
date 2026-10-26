@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/study_area_service.dart';
+import 'package:mapbanai/services/study_area_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
@@ -15,13 +16,166 @@ class ProjectVectorLayerService {
   static const maxBytes = 64 * 1024 * 1024;
   static const maxStoredBytes = 96 * 1024 * 1024;
   static const maxFeatures = 50000;
+  static String studyLayerId(Map<String, dynamic> layer) =>
+      (layer['study_layer_id'] ?? 'vector:${layer['id']}').toString();
+
+  Future<void> linkExistingStudySites(
+      Project project, StudyAreaStore store) async {
+    final layers = await load(project.id);
+    if (!layers.any((layer) =>
+        layer['import_batch_id'] != null && layer['study_layer_id'] == null))
+      return;
+    final sites = await store.loadSites();
+    var changed = false;
+    for (final layer in layers) {
+      if (layer['import_batch_id'] == null || layer['study_layer_id'] != null)
+        continue;
+      final matching = sites
+          .where((site) =>
+              (site.projectExternalId != null
+                  ? site.projectExternalId == project.externalId
+                  : site.projectId == project.id) &&
+              site.importBatchId == layer['import_batch_id'])
+          .firstOrNull;
+      if (matching != null) {
+        layer['study_layer_id'] = matching.layerId;
+        final sourceSites = StudyAreaService.parseGeoJson(jsonEncode(
+            {'type': 'FeatureCollection', 'features': layer['features']}));
+        final owned = sites
+            .where((site) => site.importBatchId == layer['import_batch_id'])
+            .toList();
+        layer['study_site_ids'] = sourceSites
+            .map((source) =>
+                owned
+                    .where((site) =>
+                        site.id == source.id ||
+                        site.id.endsWith(':${source.id}'))
+                    .firstOrNull
+                    ?.id ??
+                source.id)
+            .toList();
+        layer['study_source_project_id'] = project.externalId;
+        changed = true;
+      }
+    }
+    if (changed) await save(project.id, layers);
+  }
+
+  /// File pickers may return only the SHP. Read matching siblings when the
+  /// original directory is accessible; multiple selection also works with SAF.
+  static Future<void> addShapefileCompanions(
+      Map<String, Uint8List> files, Iterable<String> paths) async {
+    final names = files.keys.map((name) => name.toLowerCase()).toSet();
+    for (final path
+        in paths.where((path) => p.extension(path).toLowerCase() == '.shp')) {
+      final base = p.basenameWithoutExtension(path).toLowerCase();
+      try {
+        await for (final item in Directory(p.dirname(path)).list()) {
+          if (item is! File ||
+              p.basenameWithoutExtension(item.path).toLowerCase() != base ||
+              !['.dbf', '.shx', '.prj', '.cpg']
+                  .contains(p.extension(item.path).toLowerCase())) continue;
+          final name = p.basename(item.path);
+          if (names.add(name.toLowerCase())) {
+            if (await item.length() > maxBytes)
+              throw const FormatException('Companion file exceeds 64 MB.');
+            files[name] = await item.readAsBytes();
+          }
+        }
+      } on FileSystemException {
+        // Android document providers can expose a cached SHP with no siblings.
+        // The parser reports missing companions in the import review.
+      }
+    }
+  }
+
+  /// Baseline features are map data, not collected survey responses. Initialize
+  /// each source once locally so clearing points never recreates them on reopen.
+  Future<void> ensureStudySites(
+      Project project, String layerId, StudyAreaStore store) async {
+    final seedKey = 'project_study_seed_${project.id}';
+    final seed = await db.getSetting(seedKey);
+    if (seed != null) {
+      final restored = (jsonDecode(seed) as List)
+          .map((site) =>
+              StudyAreaSite.fromJson(Map<String, dynamic>.from(site as Map)))
+          .toList();
+      await store.replaceProjectSites(
+          project.id, project.externalId!, restored);
+      await (db.delete(db.appSettings)..where((row) => row.key.equals(seedKey)))
+          .go();
+    }
+    final layers = await load(project.id);
+    final matches = layers
+        .where((layer) =>
+            layer['role'] != 'road' && studyLayerId(layer) == layerId)
+        .toList();
+    if (matches.isEmpty) return;
+    final key = 'project_vector_initialized_${project.id}';
+    final raw = await db.getSetting(key);
+    final initialized = raw == null
+        ? <String>{}
+        : (jsonDecode(raw) as List).map((id) => id.toString()).toSet();
+    if (matches.every((layer) => initialized.contains(layer['id']))) return;
+    final existing = await store.loadSites();
+    final ids = existing.map((site) => site.id).toSet();
+    var metadataChanged = false;
+    for (final layer in matches) {
+      final sourceId = layer['id'].toString();
+      if (initialized.contains(sourceId)) continue;
+      final batchId = (layer['import_batch_id'] ?? sourceId).toString();
+      if (!existing.any((site) =>
+          site.projectExternalId == project.externalId &&
+          site.importBatchId == batchId)) {
+        final parsed = StudyAreaService.parseGeoJson(jsonEncode(
+            {'type': 'FeatureCollection', 'features': layer['features']}));
+        final added = <StudyAreaSite>[];
+        final canonicalIds = layer['study_site_ids'] as List?;
+        final restoredIds = <String>[];
+        for (var index = 0; index < parsed.length; index++) {
+          var featureId = canonicalIds != null && index < canonicalIds.length
+              ? canonicalIds[index].toString()
+              : '${project.externalId}:$sourceId:$index';
+          if (canonicalIds != null &&
+              layer['study_source_project_id'] != null &&
+              layer['study_source_project_id'] != project.externalId) {
+            featureId = '${project.externalId}:$featureId';
+          }
+          restoredIds.add(featureId);
+          final site = StudyAreaSite.fromJson({
+            ...parsed[index].toJson(),
+            'id': featureId,
+            'project_id': project.id,
+            'project_external_id': project.externalId,
+            'layer_id': layerId,
+            'import_batch_id': batchId,
+            'import_file_name': layer['import_file_name'] ?? layer['name']
+          });
+          if (ids.add(site.id)) added.add(site);
+        }
+        if (added.isNotEmpty) await store.addSites(added);
+        layer['study_site_ids'] = restoredIds;
+        layer['study_source_project_id'] = project.externalId;
+        metadataChanged = true;
+      }
+      initialized.add(sourceId);
+    }
+    if (metadataChanged) await save(project.id, layers);
+    await db.setSetting(key, jsonEncode(initialized.toList()));
+  }
+
   Future<List<Map<String, dynamic>>> load(int projectId) async {
     final raw = await db.getSetting('webmap_vectors_$projectId');
     if (raw == null) return [];
-    return (jsonDecode(raw) as List)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    return raw.length > 256 * 1024
+        ? Isolate.run(() => _decodeLayers(raw))
+        : _decodeLayers(raw);
   }
+
+  static List<Map<String, dynamic>> _decodeLayers(String raw) =>
+      (jsonDecode(raw) as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
 
   Future<void> save(int projectId, List<Map<String, dynamic>> layers) async {
     if (layers.fold<int>(0, (n, l) => n + (l['features'] as List).length) >
@@ -216,14 +370,17 @@ class ProjectVectorLayerService {
               .toList();
         } else {
           final data = jsonDecode(utf8.decode(entry.value)) as Map;
-          if (data['type'] != 'FeatureCollection' ||
-              data['features'] is! List) {
+          if (data['type'] == 'Feature') {
+            features = [Map<String, dynamic>.from(data)];
+          } else if (data['type'] == 'FeatureCollection' &&
+              data['features'] is List) {
+            features = (data['features'] as List)
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList();
+          } else {
             throw const FormatException(
-                'GeoJSON must contain a FeatureCollection.');
+                'GeoJSON must contain a Feature or FeatureCollection.');
           }
-          features = (data['features'] as List)
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList();
         }
         if (features.isEmpty) {
           throw FormatException(
@@ -248,11 +405,16 @@ class ProjectVectorLayerService {
           'opacity': 0.8,
           'role': 'reference',
           'features': features,
-          'warning': ext == '.shp' &&
-                  !expanded.containsKey(
-                      '${entry.key.substring(0, entry.key.length - 4)}.prj')
-              ? 'No .prj: coordinates assumed WGS84.'
-              : '',
+          'warning': [
+            if (ext == '.shp' &&
+                !expanded.containsKey(
+                    '${entry.key.substring(0, entry.key.length - 4)}.prj'))
+              'No .prj: coordinates assumed WGS84.',
+            if (ext == '.shp' &&
+                !expanded.containsKey(
+                    '${entry.key.substring(0, entry.key.length - 4)}.dbf'))
+              'No .dbf: geometry only. Select the matching DBF file too, choose its folder, or import a ZIP to include names and attributes.'
+          ].join(' '),
         });
         if (layers.fold<int>(0, (n, l) => n + (l['features'] as List).length) >
             maxFeatures) {

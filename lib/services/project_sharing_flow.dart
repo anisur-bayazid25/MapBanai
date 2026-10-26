@@ -110,9 +110,11 @@ class ProjectSharingFlow {
 
   /// Builds the .mbproj bytes without touching any OS API.
   Future<Uint8List> build(Project project,
-          {bool includeSyncConnection = false}) =>
+          {bool includeSyncConnection = false,
+          bool includeResponses = false}) =>
       exporter.buildPackageBytes(project,
-          includeSyncConnection: includeSyncConnection);
+          includeSyncConnection: includeSyncConnection,
+          includeResponses: includeResponses);
 
   /// Suggested filename: `Name_v<N>.mbproj`.
   String suggestedFileName(Project project) =>
@@ -120,10 +122,12 @@ class ProjectSharingFlow {
 
   /// Export → native save dialog. Never requires a storage permission.
   Future<ProjectExportStatus> exportProject(Project project,
-      {bool includeSyncConnection = false}) async {
+      {bool includeSyncConnection = false,
+      bool includeResponses = false}) async {
     try {
-      final bytes =
-          await build(project, includeSyncConnection: includeSyncConnection);
+      final bytes = await build(project,
+          includeSyncConnection: includeSyncConnection,
+          includeResponses: includeResponses);
       final path = await _fileSink.savePackageBytes(
         fileName: suggestedFileName(project),
         bytes: bytes,
@@ -137,10 +141,12 @@ class ProjectSharingFlow {
 
   /// Writes a shareable copy of the package to the app's private temp dir.
   Future<File?> createShareFile(Project project,
-      {bool includeSyncConnection = false}) async {
+      {bool includeSyncConnection = false,
+      bool includeResponses = false}) async {
     try {
-      final bytes =
-          await build(project, includeSyncConnection: includeSyncConnection);
+      final bytes = await build(project,
+          includeSyncConnection: includeSyncConnection,
+          includeResponses: includeResponses);
       final dir = Directory(p.join(
         (await getTemporaryDirectory()).path,
         'mapbanai_share',
@@ -162,9 +168,11 @@ class ProjectSharingFlow {
   /// Runs every available transfer provider; returns true when one
   /// accepted the file.
   Future<bool> shareProject(Project project,
-      {bool includeSyncConnection = false}) async {
+      {bool includeSyncConnection = false,
+      bool includeResponses = false}) async {
     final file = await createShareFile(project,
-        includeSyncConnection: includeSyncConnection);
+        includeSyncConnection: includeSyncConnection,
+        includeResponses: includeResponses);
     if (file == null) return false;
     for (final provider in _transferProviders) {
       if (await provider.isAvailable()) {

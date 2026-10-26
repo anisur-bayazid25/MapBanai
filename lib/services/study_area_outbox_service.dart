@@ -8,6 +8,8 @@ import 'package:mapbanai/services/study_area_service.dart';
 class StudyAreaOutboxService {
   final AppDatabase db;
   StudyAreaOutboxService(this.db);
+  static String exclusionKey(int projectId) =>
+      'study_history_exclusions_$projectId';
   Future<void> enqueue(StudyAreaSite site, String author) =>
       enqueueBatch([site], author);
 
@@ -19,7 +21,19 @@ class StudyAreaOutboxService {
     }
     if (sites.isEmpty) return;
     await db.transaction(() async {
+      final exclusions = <int, Map<String, dynamic>>{};
+      final changedExclusions = <int>{};
       for (final site in sites) {
+        final projectId = site.projectId!;
+        if (!exclusions.containsKey(projectId)) {
+          final raw = await db.getSetting(exclusionKey(projectId));
+          exclusions[projectId] = raw == null
+              ? <String, dynamic>{}
+              : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        }
+        final excluded = exclusions[projectId]!;
+        if (excluded[site.id] == site.revisionToken) continue;
+        if (excluded.remove(site.id) != null) changedExclusions.add(projectId);
         final geometry = site.currentGeometry;
         final type = geometry['type'].toString();
         final response = jsonEncode({
@@ -68,6 +82,10 @@ class StudyAreaOutboxService {
               status: const Value('saved'),
               responses: Value(response)));
         }
+      }
+      for (final projectId in changedExclusions) {
+        await db.setSetting(
+            exclusionKey(projectId), jsonEncode(exclusions[projectId]));
       }
     });
   }

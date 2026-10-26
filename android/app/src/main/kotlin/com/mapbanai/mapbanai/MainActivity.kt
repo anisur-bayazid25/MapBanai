@@ -23,6 +23,7 @@ import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
     private var compassStream: CompassStream? = null
+    private var shapefileFolders: ShapefileFolders? = null
     private val gnssChannel = "mapbanai/gnss"
     private val intentsChannel = "mapbanai/intents"
     private val updateChannel = "mapbanai/update"
@@ -179,6 +180,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        shapefileFolders = ShapefileFolders(this, flutterEngine.dartExecutor.binaryMessenger)
         compassStream = CompassStream(this)
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "mapbanai/compass").setStreamHandler(compassStream)
         MethodChannel(
@@ -271,7 +273,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() { super.onResume(); compassStream?.resume() }
     override fun onPause() { compassStream?.pause(); super.onPause() }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (shapefileFolders?.onActivityResult(requestCode, resultCode, data) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     override fun onDestroy() {
+        shapefileFolders?.close()
         compassStream?.pause()
         val listener = gnssListener
         if (listener != null) {

@@ -193,6 +193,7 @@ class CloudSyncService {
       final operator = await db.getSetting('user_name') ?? 'Local fieldworker';
       for (final site in await studyAreaStore!.loadSites()) {
         if (!GuidedVisitService.belongsToProject(site, project)) continue;
+        if (!site.hasChanges) continue;
         site.projectId = projectId;
         await StudyAreaOutboxService(db)
             .enqueue(site, site.history.lastOrNull?.author ?? operator);
@@ -234,6 +235,29 @@ class CloudSyncService {
       String projectName,
       List<SurveySession> unsyncedResponses,
       List<SurveySession> unsyncedFeatures) async {
+    // A history cleanup may run between queued batches. Recheck storage so
+    // deleted records are never sent from an old in-memory queue snapshot.
+    final expected = {...unsyncedResponses, ...unsyncedFeatures};
+    final ids = expected.map((session) => session.id).toSet();
+    final current = await (db.select(db.surveySessions)
+          ..where((row) => row.projectId.equals(projectId) & row.id.isIn(ids)))
+        .get();
+    final remaining = current
+        .where((session) =>
+            session.status != 'draft' &&
+            session.syncedAt == null &&
+            expected.any((old) =>
+                old.id == session.id && old.responses == session.responses))
+        .map((session) => session.id)
+        .toSet();
+    unsyncedResponses = unsyncedResponses
+        .where((session) => remaining.contains(session.id))
+        .toList();
+    unsyncedFeatures = unsyncedFeatures
+        .where((session) => remaining.contains(session.id))
+        .toList();
+    if (remaining.isEmpty)
+      return const SyncResult(responsesSynced: 0, featuresSynced: 0);
     final responsesPayload =
         _buildResponsesPayload(unsyncedResponses, projectName);
     final featuresPayload =

@@ -99,6 +99,9 @@ Everything works offline; tiles open instantly and data stays on the device.
 - Pending points are circles with a red outline, Verification Complete points are squares with a green outline, and Needs review points are triangles with a yellow outline. The shape shows verification state while the fill colour can still represent a layer or category.
 - **Road directions** draws the shortest route through a project layer marked Road network and reports its distance in metres below 1 km or kilometres at/above 1 km. This is a map route, not turn-by-turn navigation.
 - Add or classify layers under **Home → Project settings → Project files and map layers**. Supported sources are shapefile/ZIP, CSV, Excel, GeoJSON and GeoPackage in WGS84 (EPSG:4326). Mark a line layer as **Road network** for directions.
+- Imported non-road files appear in the **Study layer** dropdown and open as verifiable map features. The selected study layer is drawn once; road networks remain available as route overlays. Baseline imports are not survey responses and do not enter the sync queue until verified or edited.
+- For a loose shapefile, select its SHP. Matching DBF, SHX, PRJ and CPG files are discovered in the same accessible folder, ignoring filename case. Android may provide only a cached SHP: select the companion files together, choose their folder when prompted, or use a ZIP. The Android folder choice grants access through the document provider and can be remembered for later imports from that folder. Geometry-only import is an explicit choice when DBF attributes are unavailable.
+- **⋮ → Assign previous unassigned sites** previews stored map sites without project ownership. Review IDs, source and date when recorded, then select what to assign or delete. These are not a count of survey interviews.
 - Latitude and Longitude fields in Edit are now fully visible. Coordinates and source metadata remain available in the edit workflow; the point summary stays focused on the four identity fields.
 
 ## 8. History
@@ -110,6 +113,9 @@ Everything works offline; tiles open instantly and data stays on the device.
 - Every group header is **collapsible** — tap a project or date header to
   fold/unfold that section. Headers show how many items they contain.
 - The app-bar photo icon opens the geotagged photo gallery.
+- The **Clean up history** icon opens project/layer/day/type/sync-status filters, with optional drafts. Review exact record and pending-sync counts before deleting. Choose **Also remove linked Study Area points** to remove their map state too; related visits are included in the confirmation.
+- **Study Area → ⋮ → Clear all sites** offers **Also clear survey history and sync queue**, selected by default. It affects the selected project and study layer. For old imports whose map points have already been cleared, use the History cleanup filters to remove the leftover records.
+- History-only deletion keeps map points but prevents unchanged snapshots from recreating deleted queue records. A later saved point edit creates a new pending record. Cloud copies already uploaded are not deleted by local cleanup.
 
 ## 9. Cloud Sync
 
@@ -137,7 +143,7 @@ Everything works offline; tiles open instantly and data stays on the device.
   small projects also fit in a **QR code**.
 - Receiver: open the received `.mbproj` ("Open with MapBanai"), or import via
   **camera QR scan**, **QR from gallery image**, or paste the code text.
-- Responses/photos are never included in a shared project. Forms, original imported XLSForms, project settings, source map files/layers and cloud sync manager scripts are included.
+- Choose whether to include collected responses and their photos. Forms, original imported XLSForms, project settings, source map files/layers and cloud sync manager scripts are included in either project-package option. Packages with responses also retain current Study Area verification state and drafts.
 - The Apps Script URL and API key are included by default for trusted team handoff. Uncheck **Include sync connection** before sharing with anyone who should not receive the key.
 - Name conflicts offer *Import as new copy* or *Replace*; nothing is
   overwritten silently.
@@ -145,6 +151,10 @@ Everything works offline; tiles open instantly and data stays on the device.
 ## 12. Exporting data
 
 **Home → Export** (per project):
+
+- **Project with responses (.mbproj)** includes project setup, collected records/photos and current Study Area state.
+- **Project without responses (.mbproj)** includes setup, original GIS files, forms and settings, without collected records or verification edits.
+- **Responses only (JSON)** shares saved response/map-history records without project setup, GIS source layers, API key or web URL.
 
 - Survey responses: **CSV** (Kobo/ODK-style columns) or JSON.
 - GIS features: **CSV / GeoJSON / KML / GeoPackage**.
@@ -206,7 +216,7 @@ For each new project, create a fresh Google spreadsheet and open Extensions → 
 
 ## v2.6.5: importing and reviewing study maps
 
-Use the top Import button in Study Area Mode. The Android picker permits all files; MapBanai validates GeoJSON, WGS84 GeoPackage, SHP/ZIP, CSV, XLSX and KML/KMZ. For shapefiles, ZIP the SHP, DBF, PRJ and CPG together to retain attributes. A ZIP may contain multiple shapefiles. Use WGS84 (EPSG:4326); projected coordinates need reprojection before import. ZIP limits: 100 MB compressed, 200 MB unpacked. GeoPackage imports currently use the first feature table yielding sites.
+Use the top Import button in Study Area Mode. The picker permits multiple files; MapBanai validates GeoJSON, WGS84 GeoPackage, SHP/ZIP, CSV, XLSX and KML/KMZ. Loose shapefiles discover companions in accessible folders, or you can select the companion files together and choose a folder when prompted. A ZIP may contain multiple shapefiles. Use WGS84 (EPSG:4326); projected coordinates need reprojection before import. Project spatial imports support up to 64 MB of source/unpacked files, 50,000 features and 2 million coordinates. GeoPackage imports currently use the first feature table yielding sites.
 
 Opening a spatial file from a file manager offers a selected project, a new project, or View only. View-only maps use temporary storage and do not add projects/sites or permit editing. Availability in Android’s Open with list depends on the file manager’s MIME type; the in-app Import picker is the fallback. A standalone SHP without its DBF prompts you to use a ZIP.
 

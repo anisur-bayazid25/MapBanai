@@ -85,6 +85,52 @@ void main() {
   });
 
   testWidgets(
+      '460-point map is reused when GPS updates and point details close',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase.forTesting();
+    addTearDown(db.close);
+    final projectId =
+        await db.insertProject(ProjectsCompanion.insert(name: 'Large project'));
+    final store = MemoryStudyAreaStore();
+    store.sites.addAll(List.generate(
+        460,
+        (index) => StudyAreaSite(
+            id: 'point-$index',
+            projectId: projectId,
+            latitude: 23.68 + index * .00001,
+            longitude: 90.44,
+            attributes: {'name': 'Facility $index'})));
+    await tester.pumpWidget(MaterialApp(
+        home: StudyAreaModeScreen(
+            store: store,
+            database: db,
+            projectId: projectId,
+            initialSelectedSiteId: 'point-0')));
+    await fakes.pumpFrames(tester, 20);
+    expect(find.text('460 / 460 features'), findsOneWidget);
+    final mapWidget = tester.widget<MapLibreMap>(find.byType(MapLibreMap));
+    gps.emit(fakes.testFix());
+    await fakes.pumpFrames(tester);
+    expect(
+        identical(
+            tester.widget<MapLibreMap>(find.byType(MapLibreMap)), mapWidget),
+        true);
+    await tester.tap(find.byIcon(Icons.close).last);
+    await fakes.pumpFrames(tester);
+    gps.emit(fakes.testFix(lat: 23.7));
+    await fakes.pumpFrames(tester);
+    expect(
+        identical(
+            tester.widget<MapLibreMap>(find.byType(MapLibreMap)), mapWidget),
+        true);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
       'verified feature saves without opening its required-question survey',
       (tester) async {
     tester.view.physicalSize = const Size(800, 2200);

@@ -38,7 +38,8 @@ class ProjectDetailScreen extends StatefulWidget {
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   late final AppDatabase _database = widget.database ?? AppDatabase();
   Project? _project;
-  int _sessionCount = 0;
+  int _surveyCount = 0;
+  int _featureCount = 0;
   List<StoredForm> _forms = [];
   bool _loading = true;
 
@@ -70,8 +71,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           (await ProjectWorkspaceService(_database).load(project.id)).project;
     }
     final count = project == null
-        ? 0
-        : await _database.surveySessionCountForProject(project.id);
+        ? (survey: 0, gis: 0)
+        : await _database.responseCountsForProject(project.id);
     final forms = project == null
         ? <StoredForm>[]
         : await _database.getStoredFormsForProject(project.id);
@@ -80,7 +81,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     if (!mounted) return;
     setState(() {
       _project = project;
-      _sessionCount = count;
+      _surveyCount = count.survey;
+      _featureCount = count.gis;
       _forms = forms;
       _syncConfig = syncConfig;
       _syncUrlController.text = syncConfig?.syncEndpointUrl ?? '';
@@ -544,14 +546,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 const SizedBox(height: 12),
                 _infoTile(
                   icon: Icons.inbox_outlined,
-                  label: 'Survey responses',
-                  value: '$_sessionCount collected',
-                  onTap: () {
-                    Navigator.of(context).push(
+                  label: 'Survey and map history',
+                  value: '$_surveyCount surveys · $_featureCount map records',
+                  onTap: () async {
+                    await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const SurveyHistoryScreen(),
+                        builder: (_) =>
+                            SurveyHistoryScreen(projectId: project.id),
                       ),
                     );
+                    if (mounted) await _load();
                   },
                 ),
                 const SizedBox(height: 24),

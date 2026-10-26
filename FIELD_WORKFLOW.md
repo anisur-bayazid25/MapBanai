@@ -14,7 +14,7 @@ Install over the existing app and re-import XLSForms to use parser fixes. Existi
 
 Unsupported repeats, cascading choice_filter, parameters, dynamic required/read-only expressions and unsupported media types fail import with an explanation. Automatic start/end/device ID metadata produces a warning. MapBanai does not implement the complete ODK specification.
 
-Import previous WGS84 features in Study Area from GeoJSON, KML, shapefile, GeoPackage, CSV or XLSX. Reproject projected datasets before import. Include shapefile DBF/PRJ sidecars. Review attributes and geometry; choose Pending verification, Verified unchanged, Updated, New feature, Not found or Needs review. Add points, lines and polygons as needed. Original baseline attributes and geometry are retained.
+Import previous WGS84 features in Study Area or Project Settings from GeoJSON, KML (Study Area), shapefile, GeoPackage, CSV or XLSX. Reproject projected datasets before import. SHP companion files are discovered in an accessible folder; Android also supports multiple selection or a companion-folder picker. Project source layers appear in the Study layer selector. Baseline imports do not count as survey responses or enter the sync queue. Review a site using Unchanged, Location changed, Location removed or Edit/status; verification states are Pending verification, Verification Complete and Needs review.
 
 ## Complete a linked field visit
 
@@ -61,7 +61,7 @@ A useful next addition is a user-selected portable backup destination with resto
 
 Open WebMap for the current project; its folder button switches projects. Filter by study layer, form, collector, source, status, dates, search or numeric answer. The attribute table contains the collected answers. GeoJSON and CSV export the filtered results; Android opens the share sheet. HTML sharing produces a portable atlas with embedded data and Leaflet. Online street/imagery tiles require internet and provider availability.
 
-Sync is selected-project only. Study-area edits enter the same outbox as collections, with stable site IDs, layer IDs, typed answers and revision metadata. The receiving script must upsert stable IDs and retain these fields. This release does not add remote deletion propagation or a new cloud server. URLs and API keys survive partial saves, successful sync and replacement of the same project definition; they are deliberately omitted from shared project packages. Credentials already erased by an earlier version must be entered again or restored from a backup that contains them.
+Sync is selected-project only. Study-area edits enter the same outbox as collections, with stable site IDs, layer IDs, typed answers and revision metadata. The receiving script must upsert stable IDs and retain these fields. History cleanup removes local queue entries and prevents unchanged map snapshots from recreating them; already uploaded cloud records remain there. URLs and API keys survive partial saves, successful sync and replacement of the same project definition, and are included by default in project packages through the Include sync connection option.
 
 ## GNSS altitude and responsive quality checks
 
@@ -92,4 +92,4 @@ This release also includes online XLSForm updates, optional connection sharing, 
 
 Set My name in the Home three-bar menu, import/select a project, sync its questionnaire from Survey Mode, collect offline, correct records through My responses, then use Home Cloud Sync. Each saved correction keeps its UUID, increments response_revision and records edited_by/edited_at. Original user_name remains the collector. The revision-aware backend updates current rows and stores uploaded versions in revisions; competing versions remain queued for manager review. This does not download other devices' records or implement automatic conflict merging.
 
-[Manager setup](server/manager/README.md) includes all three updated Apps Script files and explains preserving your key/URL while redeploying. Twelve map designs, exact wallpaper dimensions and reference vector layers support field reports and presentations. Reference overlays remain separate from surveyed study sites; import actionable sites in Study Area rather than only WebMap Layers.
+[Manager setup](server/manager/README.md) includes all three Apps Script files and explains preserving your key/URL while redeploying. Twelve map designs and reference vector layers support field reports and presentations. Project Settings source layers are selectable in Study Area; road networks stay available for directions. Home Export offers project packages with or without responses/photos, and response-only files without project configuration.

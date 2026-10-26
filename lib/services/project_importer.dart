@@ -1,4 +1,5 @@
 import 'package:mapbanai/services/project_vector_layer_service.dart';
+import 'package:mapbanai/services/project_field_data_service.dart';
 import 'package:mapbanai/services/project_asset_service.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -618,9 +619,16 @@ class ProjectImporter {
     if (data.layers['vector_overlays'] is List) {
       await ProjectVectorLayerService(_database).save(
           projectId,
-          (data.layers['vector_overlays'] as List)
-              .map((l) => Map<String, dynamic>.from(l as Map))
-              .toList());
+          (data.layers['vector_overlays'] as List).map((l) {
+            final layer = Map<String, dynamic>.from(l as Map);
+            if (newCopy && layer['study_site_ids'] is List) {
+              layer['study_site_ids'] = (layer['study_site_ids'] as List)
+                  .map((id) => '$externalId:$id')
+                  .toList();
+              layer['study_source_project_id'] = externalId;
+            }
+            return layer;
+          }).toList());
     }
     final sourceFiles = data.project['source_files'];
     if (sourceFiles is List && sourceFiles.isNotEmpty) {
@@ -629,6 +637,16 @@ class ProjectImporter {
           sourceFiles
               .map((asset) => Map<String, dynamic>.from(asset as Map))
               .toList());
+    }
+    final fieldData = data.project['field_data'];
+    if (fieldData != null && fieldData is! Map)
+      throw const FormatException('Invalid project responses.');
+    if (fieldData is Map) {
+      await ProjectFieldDataService(_database).import(
+          fieldData, (await _database.getProjectById(projectId))!,
+          newCopy: newCopy);
+    } else {
+      await _database.setSetting('project_study_seed_$projectId', '[]');
     }
     return ImportCommitResult(
         projectId: projectId, name: data.meta.projectName);

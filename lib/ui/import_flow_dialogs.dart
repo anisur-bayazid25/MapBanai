@@ -211,13 +211,18 @@ Future<void> showExportProjectOptions(
   BuildContext context, {
   required ProjectSharingFlow flow,
   required Project project,
+  bool initialIncludeResponses = false,
 }) async {
   var includeSyncConnection = true;
+  var includeResponses = initialIncludeResponses;
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
+    isScrollControlled: true,
+    constraints:
+        BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
     builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -229,8 +234,18 @@ Future<void> showExportProjectOptions(
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'The project package includes forms, source files, map layers, settings and the cloud setup scripts. The sync URL and API key are included; share only with trusted team members. Collected records and photos are not included.',
+                      'The .mbproj package includes forms, GIS source files, map layers, settings and cloud setup scripts. Choose whether to include collected responses and their photos.',
                       style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title:
+                          const Text('Include collected responses and photos'),
+                      subtitle: const Text(
+                          'Includes survey history, drafts and current Study Area points.'),
+                      value: includeResponses,
+                      onChanged: (value) => setSheetState(
+                          () => includeResponses = value ?? false),
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
@@ -269,7 +284,8 @@ Future<void> showExportProjectOptions(
   final messenger = ScaffoldMessenger.of(context);
   if (confirmed) {
     final status = await flow.exportProject(project,
-        includeSyncConnection: includeSyncConnection);
+        includeSyncConnection: includeSyncConnection,
+        includeResponses: includeResponses);
     if (!context.mounted) return;
     messenger.showSnackBar(
       SnackBar(
@@ -282,7 +298,8 @@ Future<void> showExportProjectOptions(
     );
   } else {
     final shared = await flow.shareProject(project,
-        includeSyncConnection: includeSyncConnection);
+        includeSyncConnection: includeSyncConnection,
+        includeResponses: includeResponses);
     if (!context.mounted) return;
     if (shared) {
       messenger.showSnackBar(
