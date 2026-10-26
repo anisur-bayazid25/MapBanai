@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.6.9 — 2026-10-26
+
+- Project vector layers are available directly from Study Area Mode and retain independent visibility, type, colour and opacity settings.
+- Importing spatial files in Study Area Mode now also registers the source layer and original file in Project Settings, keeping both import paths in sync.
+- Imported point files are tracked as batches. Removing a batch deletes its map layer, imported points, local revision history and pending sync records.
+- Large point and reference layers render in batched map updates, and selecting a point no longer redraws every map feature.
 ## v2.6.8 — 2026-10-25
 
 - Fixed the Study Area header so its category-color control stays compact and the visible-feature count no longer wraps vertically on phones.

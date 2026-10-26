@@ -400,6 +400,20 @@ class StudyAreaStore {
         await _write(sites);
       });
 
+  Future<int> deleteImportBatch(String batchId) async {
+    var removed = 0;
+    await _serialize(() async {
+      final sites = await loadSites();
+      final kept = sites.where((site) {
+        if (site.importBatchId != batchId) return true;
+        removed++;
+        return false;
+      }).toList();
+      if (removed > 0) await _write(kept);
+    });
+    return removed;
+  }
+
   Future<int> assignUnclaimedSites(
       {required int projectId,
       required String projectExternalId,

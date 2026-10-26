@@ -8,54 +8,82 @@ import 'package:mapbanai/services/study_area_service.dart';
 class StudyAreaOutboxService {
   final AppDatabase db;
   StudyAreaOutboxService(this.db);
-  Future<void> enqueue(StudyAreaSite site, String author) async {
-    if (site.projectId == null) throw StateError('Study site has no project');
-    final geometry = site.currentGeometry;
-    final type = geometry['type'].toString();
-    final response = jsonEncode({
-      'workflow': 'study_area_feature_v1',
-      'feature_type': type.contains('Polygon')
-          ? 'polygon'
-          : type.contains('Line')
-              ? 'line'
-              : 'point',
-      'geometry': geometry,
-      'latitude': site.latitude,
-      'longitude': site.longitude,
-      'layer_id': site.layerId,
-      'site_id': site.id,
-      'name': site.displayName,
-      'notes': site.changeNote,
-      'user_name': author,
-      'answers': site.formAnswers,
-      'form_snapshot': site.formSnapshot,
-      'form_id': site.formSnapshot?['id'],
-      'form_name': site.formSnapshot?['name'],
-      'attributes': site.attributes,
-      'site': site.toJson(),
-      'edited_at': site.updatedAt?.toIso8601String()
-    });
-    final stableId = 'study:${site.projectExternalId}:${site.id}';
+  Future<void> enqueue(StudyAreaSite site, String author) =>
+      enqueueBatch([site], author);
+
+  Future<void> enqueueBatch(List<StudyAreaSite> sites, String author) async {
+    for (final site in sites) {
+      if (site.projectId == null) {
+        throw StateError('Study site has no project');
+      }
+    }
+    if (sites.isEmpty) return;
     await db.transaction(() async {
-      final existing = await (db.select(db.surveySessions)
-            ..where((row) =>
-                row.externalId.equals(stableId) &
-                row.projectId.equals(site.projectId!)))
-          .getSingleOrNull();
-      if (existing != null) {
-        // Comparing the site snapshot avoids requeuing an unchanged site when
-        // centralized revision/collector audit fields differ from this envelope.
-        final previous = jsonDecode(existing.responses) as Map;
-        if (jsonEncode(previous['site']) == jsonEncode(site.toJson())) return;
-        await db.updateSurveySession(existing.id,
-            title: site.displayName, responses: response, status: 'saved');
-      } else {
-        await db.insertSurveySession(SurveySessionsCompanion(
-            projectId: Value(site.projectId!),
-            externalId: Value(stableId),
-            title: Value(site.displayName),
-            status: const Value('saved'),
-            responses: Value(response)));
+      for (final site in sites) {
+        final geometry = site.currentGeometry;
+        final type = geometry['type'].toString();
+        final response = jsonEncode({
+          'workflow': 'study_area_feature_v1',
+          'feature_type': type.contains('Polygon')
+              ? 'polygon'
+              : type.contains('Line')
+                  ? 'line'
+                  : 'point',
+          'geometry': geometry,
+          'latitude': site.latitude,
+          'longitude': site.longitude,
+          'layer_id': site.layerId,
+          'site_id': site.id,
+          'name': site.displayName,
+          'notes': site.changeNote,
+          'user_name': author,
+          'answers': site.formAnswers,
+          'form_snapshot': site.formSnapshot,
+          'form_id': site.formSnapshot?['id'],
+          'form_name': site.formSnapshot?['name'],
+          'attributes': site.attributes,
+          'site': site.toJson(),
+          'edited_at': site.updatedAt?.toIso8601String()
+        });
+        final stableId = 'study:${site.projectExternalId}:${site.id}';
+        final existing = await (db.select(db.surveySessions)
+              ..where((row) =>
+                  row.externalId.equals(stableId) &
+                  row.projectId.equals(site.projectId!)))
+            .getSingleOrNull();
+        if (existing != null) {
+          // Comparing the site snapshot avoids requeuing an unchanged site when
+          // centralized revision/collector audit fields differ from this envelope.
+          final previous = jsonDecode(existing.responses) as Map;
+          if (jsonEncode(previous['site']) == jsonEncode(site.toJson())) {
+            continue;
+          }
+          await db.updateSurveySession(existing.id,
+              title: site.displayName, responses: response, status: 'saved');
+        } else {
+          await db.insertSurveySession(SurveySessionsCompanion(
+              projectId: Value(site.projectId!),
+              externalId: Value(stableId),
+              title: Value(site.displayName),
+              status: const Value('saved'),
+              responses: Value(response)));
+        }
+      }
+    });
+  }
+
+  Future<void> deleteSites(List<StudyAreaSite> sites) async {
+    final ids = sites
+        .where((site) => site.projectId != null)
+        .map((site) => 'study:${site.projectExternalId}:${site.id}')
+        .toSet();
+    if (ids.isEmpty) return;
+    final rows = await (db.select(db.surveySessions)
+          ..where((row) => row.externalId.isIn(ids)))
+        .get();
+    await db.transaction(() async {
+      for (final row in rows) {
+        await db.deleteSurveySession(row.id);
       }
     });
   }

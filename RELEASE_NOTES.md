@@ -1,3 +1,10 @@
+# MapBanai v2.6.9
+
+- Study Area Mode now opens the project layer manager directly, with project settings shared between imports made in either screen.
+- Imports from Study Area Mode preserve the source file as a project layer. Imported files can be removed with all their points, local revision history and pending sync records.
+- Batched map drawing keeps large point files responsive, and selecting points no longer triggers a full marker redraw.
+
+Install app-release.apk over the existing MapBanai installation to preserve local data.
 # MapBanai v2.6.8
 
 - Fixed the Study Area toolbar card wrapping its feature count vertically on phone screens.

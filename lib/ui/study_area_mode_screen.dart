@@ -33,6 +33,8 @@ import 'package:mapbanai/ui/project_vector_layers_screen.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 class StudyAreaModeScreen extends StatefulWidget {
   const StudyAreaModeScreen(
@@ -73,6 +75,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   final List<Circle> _referenceCircles = [];
   final List<Line> _referenceLines = [];
   final List<Fill> _referenceFills = [];
+  final List<Symbol> _referenceSymbols = [];
   List<Map<String, dynamic>> _referenceLayers = [];
   final List<Symbol> _symbols = [];
   final Set<String> _markerImages = {};
@@ -584,64 +587,37 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<void> _renderMapMarkers() async {
     final controller = _controller;
     if (!mounted || !_styleReady || controller == null) return;
-    // Clear existing
-    for (final c in _circles.values) {
-      try {
-        await controller.removeCircle(c);
-      } catch (_) {}
-    }
+    // One platform operation per annotation type keeps large imported files
+    // responsive when a point is selected or its status changes.
+    await controller.clearCircles();
+    await controller.clearSymbols();
+    await controller.clearLines();
+    await controller.clearFills();
     _circles.clear();
-    for (final symbol in _symbols) {
-      try {
-        await controller.removeSymbol(symbol);
-      } catch (_) {}
-    }
     _symbols.clear();
-    for (final line in _lines) {
-      try {
-        await controller.removeLine(line);
-      } catch (_) {}
-    }
-    for (final fill in _fills) {
-      try {
-        await controller.removeFill(fill);
-      } catch (_) {}
-    }
-    if (_routeLine != null) {
-      try {
-        await controller.removeLine(_routeLine!);
-      } catch (_) {}
-    }
     _lines.clear();
     _fills.clear();
-    for (final circle in _referenceCircles) {
-      try {
-        await controller.removeCircle(circle);
-      } catch (_) {}
-    }
-    for (final line in _referenceLines) {
-      try {
-        await controller.removeLine(line);
-      } catch (_) {}
-    }
-    for (final fill in _referenceFills) {
-      try {
-        await controller.removeFill(fill);
-      } catch (_) {}
-    }
     _referenceCircles.clear();
     _referenceLines.clear();
     _referenceFills.clear();
+    _referenceSymbols.clear();
     _routeLine = null;
     _categoryStyle.categories(_sites);
     List<LatLng> points(dynamic values) => (values as List)
         .map((v) => LatLng((v[1] as num).toDouble(), (v[0] as num).toDouble()))
         .toList();
+    final importedBatches =
+        _sites.map((site) => site.importBatchId).whereType<String>().toSet();
     for (final layer
         in _referenceLayers.where((item) => item['visible'] != false)) {
+      final batchId = layer['import_batch_id']?.toString();
+      if (batchId != null && importedBatches.contains(batchId)) continue;
       final color = (layer['color'] ?? '#467ca1').toString();
       final opacity =
           ((layer['opacity'] as num?)?.toDouble() ?? 0.8).clamp(0.0, 1.0);
+      final circles = <CircleOptions>[];
+      final lines = <LineOptions>[];
+      final fills = <FillOptions>[];
       for (final feature in layer['features'] as List? ?? const []) {
         if (feature is! Map || feature['geometry'] is! Map) continue;
         final geometry = feature['geometry'] as Map;
@@ -649,60 +625,75 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         try {
           switch (geometry['type']) {
             case 'LineString':
-              _referenceLines.add(await controller.addLine(LineOptions(
+              lines.add(LineOptions(
                   geometry: points(coords),
                   lineColor: color,
                   lineOpacity: opacity,
-                  lineWidth: 2)));
+                  lineWidth: 2));
               break;
             case 'MultiLineString':
               for (final line in coords as List)
-                _referenceLines.add(await controller.addLine(LineOptions(
+                lines.add(LineOptions(
                     geometry: points(line),
                     lineColor: color,
                     lineOpacity: opacity,
-                    lineWidth: 2)));
+                    lineWidth: 2));
               break;
             case 'Polygon':
-              _referenceFills.add(await controller.addFill(FillOptions(
+              fills.add(FillOptions(
                   geometry: (coords as List).map(points).toList(),
                   fillColor: color,
                   fillOpacity: opacity * 0.2,
-                  fillOutlineColor: color)));
+                  fillOutlineColor: color));
               break;
             case 'MultiPolygon':
               for (final polygon in coords as List)
-                _referenceFills.add(await controller.addFill(FillOptions(
+                fills.add(FillOptions(
                     geometry: (polygon as List).map(points).toList(),
                     fillColor: color,
                     fillOpacity: opacity * 0.2,
-                    fillOutlineColor: color)));
+                    fillOutlineColor: color));
               break;
             case 'Point':
-              _referenceCircles.add(await controller.addCircle(CircleOptions(
+              circles.add(CircleOptions(
                   geometry: LatLng((coords[1] as num).toDouble(),
                       (coords[0] as num).toDouble()),
                   circleRadius: 4,
                   circleColor: color,
                   circleOpacity: opacity,
                   circleStrokeColor: '#FFFFFF',
-                  circleStrokeWidth: 1)));
+                  circleStrokeWidth: 1));
               break;
             case 'MultiPoint':
               for (final point in coords as List)
-                _referenceCircles.add(await controller.addCircle(CircleOptions(
+                circles.add(CircleOptions(
                     geometry: LatLng((point[1] as num).toDouble(),
                         (point[0] as num).toDouble()),
                     circleRadius: 4,
                     circleColor: color,
                     circleOpacity: opacity,
                     circleStrokeColor: '#FFFFFF',
-                    circleStrokeWidth: 1)));
+                    circleStrokeWidth: 1));
               break;
           }
         } catch (_) {}
       }
+      if (circles.isNotEmpty) {
+        _referenceCircles.addAll(await controller.addCircles(circles));
+      }
+      if (lines.isNotEmpty) {
+        _referenceLines.addAll(await controller.addLines(lines));
+      }
+      if (fills.isNotEmpty) {
+        _referenceFills.addAll(await controller.addFills(fills));
+      }
     }
+    final symbolOptions = <SymbolOptions>[];
+    final symbolData = <Map<String, dynamic>>[];
+    final lineOptions = <LineOptions>[];
+    final lineData = <Map<String, dynamic>>[];
+    final fillOptions = <FillOptions>[];
+    final fillData = <Map<String, dynamic>>[];
     for (final site in _sites.where((s) =>
         (_movingSite == null || s.id != _movingSite!.id) &&
         (_filter == null || s.status.verificationStatus == _filter) &&
@@ -718,14 +709,13 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             await controller.addImage(
                 imageName, _markerImage(status, colorHex));
           }
-          _symbols.add(await controller.addSymbol(
-              SymbolOptions(
-                geometry: LatLng(lat, lon),
-                iconImage: imageName,
-                iconSize: _categoryStyle.radius / 12,
-                iconAnchor: 'center',
-              ),
-              data));
+          symbolOptions.add(SymbolOptions(
+            geometry: LatLng(lat, lon),
+            iconImage: imageName,
+            iconSize: _categoryStyle.radius / 12,
+            iconAnchor: 'center',
+          ));
+          symbolData.add(data);
         }
 
         Future<void> drawGeometry(Map geom) async {
@@ -746,23 +736,21 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             final lines =
                 geom['type'] == 'LineString' ? [coords] : coords as List;
             for (final line in lines) {
-              _lines.add(await controller.addLine(
-                  LineOptions(
-                      geometry: points(line), lineColor: color, lineWidth: 3),
-                  data));
+              lineOptions.add(LineOptions(
+                  geometry: points(line), lineColor: color, lineWidth: 3));
+              lineData.add(data);
             }
           } else if (geom['type'] == 'Polygon' ||
               geom['type'] == 'MultiPolygon') {
             final polygons =
                 geom['type'] == 'Polygon' ? [coords] : coords as List;
             for (final polygon in polygons) {
-              _fills.add(await controller.addFill(
-                  FillOptions(
-                      geometry: (polygon as List).map(points).toList(),
-                      fillColor: color,
-                      fillOpacity: 0.25,
-                      fillOutlineColor: color),
-                  data));
+              fillOptions.add(FillOptions(
+                  geometry: (polygon as List).map(points).toList(),
+                  fillColor: color,
+                  fillOpacity: 0.25,
+                  fillOutlineColor: color));
+              fillData.add(data);
             }
           }
         }
@@ -775,10 +763,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       } catch (_) {}
     }
     if (_drawType != null && _draft.length >= 2) {
-      _lines.add(await controller.addLine(LineOptions(geometry: [
+      lineOptions.add(LineOptions(geometry: [
         ..._draft,
         if (_drawType == 'Polygon' && _draft.length >= 3) _draft.first
-      ], lineColor: '#FF6F00', lineWidth: 4)));
+      ], lineColor: '#FF6F00', lineWidth: 4));
     }
     final moving = _movingCoordinates;
     if (_movingSite != null && moving != null) {
@@ -787,14 +775,22 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         await controller.addImage(
             imageName, _markerImage(StudyAreaStatus.completed, '#1565C0'));
       }
-      _symbols.add(await controller.addSymbol(
-          SymbolOptions(
-            geometry: moving,
-            iconImage: imageName,
-            iconSize: 0.65,
-            iconAnchor: 'center',
-          ),
-          {'site_id': _movingSite!.id}));
+      symbolOptions.add(SymbolOptions(
+        geometry: moving,
+        iconImage: imageName,
+        iconSize: 0.65,
+        iconAnchor: 'center',
+      ));
+      symbolData.add({'site_id': _movingSite!.id});
+    }
+    if (symbolOptions.isNotEmpty) {
+      _symbols.addAll(await controller.addSymbols(symbolOptions, symbolData));
+    }
+    if (lineOptions.isNotEmpty) {
+      _lines.addAll(await controller.addLines(lineOptions, lineData));
+    }
+    if (fillOptions.isNotEmpty) {
+      _fills.addAll(await controller.addFills(fillOptions, fillData));
     }
     if (_routeSiteId != null &&
         _routeLine == null &&
@@ -860,7 +856,6 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _routeDistanceM = null;
         _routeCoordinates = null;
       });
-      _refreshMapMarkers();
     }
   }
 
@@ -900,6 +895,58 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         return;
       }
       final workspace = _workspace!;
+      final fileBytes = Uint8List.fromList(await ioFile.readAsBytes());
+      final layerInputs = <String, Uint8List>{};
+      if (p.extension(path).toLowerCase() == '.shp') {
+        final base = p.basenameWithoutExtension(path);
+        for (final extension in ['.shp', '.dbf', '.shx', '.prj', '.cpg']) {
+          final companion = File(p.setExtension(path, extension));
+          if (await companion.exists()) {
+            layerInputs['$base$extension'] =
+                Uint8List.fromList(await companion.readAsBytes());
+          }
+        }
+      } else {
+        layerInputs[p.basename(path)] = fileBytes;
+      }
+      final batchId = const Uuid().v4();
+      List<Map<String, dynamic>> projectLayers;
+      try {
+        projectLayers = await ProjectVectorLayerService.parseFiles(layerInputs);
+      } on FormatException {
+        if (!['.kml', '.kmz'].contains(p.extension(path).toLowerCase())) {
+          rethrow;
+        }
+        projectLayers = [
+          {
+            'id': const Uuid().v4(),
+            'name': p.basenameWithoutExtension(path),
+            'visible': true,
+            'color': '#467ca1',
+            'opacity': 0.8,
+            'role': 'study_area',
+            'features': imported
+                .map((site) => <String, dynamic>{
+                      'type': 'Feature',
+                      'geometry': site.currentGeometry,
+                      'properties': site.sourceProperties ?? site.attributes,
+                    })
+                .toList(),
+            'source_files': [
+              {
+                'name': p.basename(path),
+                'bytes_base64': base64Encode(fileBytes)
+              }
+            ],
+          }
+        ];
+      }
+      final fileName = p.basename(path);
+      for (final layer in projectLayers) {
+        layer['role'] = 'study_area';
+        layer['import_batch_id'] = batchId;
+        layer['import_file_name'] = fileName;
+      }
       final existing = await _store.loadSites();
       for (var i = 0; i < imported.length; i++) {
         var site = imported[i];
@@ -930,6 +977,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         site.projectId = workspace.project.id;
         site.projectExternalId = workspace.project.externalId;
         site.layerId = workspace.layerId;
+        site.importBatchId = batchId;
+        site.importFileName = fileName;
       }
       final preview = await _store.previewMerge(imported);
       if (!mounted) return;
@@ -937,28 +986,33 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           context: context,
           builder: (_) => StudyAreaMergeReviewDialog(preview: preview));
       if (choices == null) return;
+      final vectorService = ProjectVectorLayerService(_database);
+      final currentLayers = await vectorService.load(workspace.project.id);
+      await vectorService
+          .save(workspace.project.id, [...currentLayers, ...projectLayers]);
       final merged = await _store.applyMerge(preview,
           resolutions: choices,
           author: _fieldworker,
           localProjectId: workspace.project.id);
-      await _loadSites();
-      var queued = true;
-      for (final site in (await _store.loadSites()).where((site) =>
-          GuidedVisitService.belongsToProject(site, workspace.project) &&
-          site.layerId == workspace.layerId)) {
+      final queuedSites = (await _store.loadSites())
+          .where((site) =>
+              site.importBatchId == batchId &&
+              GuidedVisitService.belongsToProject(site, workspace.project) &&
+              site.layerId == workspace.layerId)
+          .toList();
+      for (final site in queuedSites) {
         // External identity is authoritative across package imports/devices.
         site.projectId = workspace.project.id;
-        try {
-          await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
-        } catch (_) {
-          queued = false;
-        }
       }
-      if (!queued) {
+      try {
+        await StudyAreaOutboxService(_database)
+            .enqueueBatch(queuedSites, _fieldworker);
+      } catch (_) {
         _showSnack(
             'Map imported and saved. Some features could not enter the sync queue; retry Cloud Sync from Home.');
         return;
       }
+      await _loadSites();
       _showSnack(
           'Imported ${merged.added} new features, updated ${merged.updated}, kept ${merged.kept} local versions.');
     } catch (e) {
@@ -1423,6 +1477,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             tooltip: 'Basemap',
             icon: const Icon(Icons.map_outlined),
             onPressed: _showBasemapDialog,
+          ),
+          IconButton(
+            tooltip: 'Project layers',
+            icon: const Icon(Icons.layers_outlined),
+            onPressed: _manageProjectLayers,
           ),
           PopupMenuButton<String>(
             onSelected: (v) {

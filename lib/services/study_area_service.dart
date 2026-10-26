@@ -185,6 +185,8 @@ class StudyAreaSite {
   String layerId;
   Map<String, dynamic> formAnswers;
   Map<String, dynamic>? formSnapshot;
+  String? importBatchId;
+  String? importFileName;
 
   StudyAreaSite({
     required this.id,
@@ -205,6 +207,8 @@ class StudyAreaSite {
     this.layerId = 'default',
     Map<String, dynamic>? formAnswers,
     this.formSnapshot,
+    this.importBatchId,
+    this.importFileName,
   })  : attributes = attributes ?? {},
         formAnswers = formAnswers ?? {},
         history = history ?? [] {
@@ -287,6 +291,8 @@ class StudyAreaSite {
         layerId: layerId,
         formAnswers: Map.from(formAnswers),
         formSnapshot: formSnapshot,
+        importBatchId: importBatchId,
+        importFileName: importFileName,
         original: original ??
             {
               'geometry': currentGeometry,
@@ -326,6 +332,8 @@ class StudyAreaSite {
         'feature_uuid': featureUuid,
         'form_answers': formAnswers,
         'form_snapshot': formSnapshot,
+        'import_batch_id': importBatchId,
+        'import_file_name': importFileName,
       };
 
   factory StudyAreaSite.fromJson(Map<String, dynamic> json) {
@@ -365,6 +373,8 @@ class StudyAreaSite {
       formSnapshot: json['form_snapshot'] is Map
           ? Map<String, dynamic>.from(json['form_snapshot'])
           : null,
+      importBatchId: json['import_batch_id']?.toString(),
+      importFileName: json['import_file_name']?.toString(),
     );
   }
 

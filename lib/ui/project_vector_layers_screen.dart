@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_vector_layer_service.dart';
+import 'package:mapbanai/services/study_area_outbox_service.dart';
+import 'package:mapbanai/services/study_area_service.dart';
+import 'package:mapbanai/services/study_area_store.dart';
 
 class ProjectVectorLayersScreen extends StatefulWidget {
   final AppDatabase database;
@@ -110,6 +113,66 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
       if (mounted) setState(() => layers = combined);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _removeLayer(Map<String, dynamic> layer) async {
+    final batchId = layer['import_batch_id']?.toString();
+    final store = StudyAreaStore();
+    final importedSites = batchId == null
+        ? <StudyAreaSite>[]
+        : (await store.loadSites())
+            .where((site) => site.importBatchId == batchId)
+            .toList();
+    if (!mounted) return;
+    final removeBatch = batchId != null;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title:
+                  Text(removeBatch ? 'Remove imported file?' : 'Remove layer?'),
+              content: Text(removeBatch
+                  ? 'This will remove “${layer['import_file_name'] ?? layer['name']}”, its map layer, ${importedSites.length} imported points, and their local history.'
+                  : 'This will remove “${layer['name']}” from this project.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Remove')),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      final removedLayers = layers
+          .where((item) => removeBatch
+              ? item['import_batch_id']?.toString() == batchId
+              : identical(item, layer))
+          .toList();
+      final remaining =
+          layers.where((item) => !removedLayers.contains(item)).toList();
+      await service.save(widget.projectId, remaining);
+      if (removeBatch) {
+        await StudyAreaOutboxService(widget.database)
+            .deleteSites(importedSites);
+        await store.deleteImportBatch(batchId);
+      }
+      if (mounted) {
+        setState(() => layers = remaining);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(removeBatch
+                ? 'Removed ${importedSites.length} imported points and their history.'
+                : 'Layer removed.')));
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = 'Could not remove layer: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -238,13 +301,11 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                                               : null))),
                           ])),
                           IconButton(
-                              tooltip: 'Remove layer',
-                              onPressed: busy
-                                  ? null
-                                  : () async {
-                                      layers.remove(layer);
-                                      await _save();
-                                    },
+                              tooltip: layer['import_batch_id'] == null
+                                  ? 'Remove layer'
+                                  : 'Remove imported file and its points',
+                              onPressed:
+                                  busy ? null : () => _removeLayer(layer),
                               icon: const Icon(Icons.delete_outline))
                         ]),
                         Row(children: [
