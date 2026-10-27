@@ -121,7 +121,7 @@ class ProjectPackageMeta {
 }
 
 /// Fully validated project payload ready to be committed to the database.
-/// Comes from a .mbproj zip (all files parsed) or from an inline QR payload
+/// Comes from a .mbproj package or a reusable project template
 /// (same content, no zip envelope).
 class ProjectPackageData {
   const ProjectPackageData({

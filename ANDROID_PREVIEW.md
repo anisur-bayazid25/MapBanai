@@ -75,3 +75,8 @@ continues to apply the migrated development paths to the current terminal.
 References: [Android device setup](https://docs.flutter.dev/platform-integration/android/setup),
 [Flutter hot reload](https://docs.flutter.dev/tools/hot-reload),
 [scrcpy](https://github.com/Genymobile/scrcpy).
+
+
+## Reopening after disconnecting
+
+Hot reload updates the running Dart session. If the app process closes, launching its icon can load the last installed debug APK, so newer UI edits may appear to have disappeared. Reconnect the phone and run `.\tool\preview_android.ps1` again to compile/install the latest local debug source. This does not push Git changes or publish a release. The apparent rollback reported during phone testing was resolved this way; it was not a field-record restore operation.

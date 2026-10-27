@@ -513,7 +513,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
       }.contains(name.trim().toLowerCase());
   Widget _attributeField(MapEntry<String, TextEditingController> entry) =>
       Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 16),
           child: TextField(
               controller: entry.value,
               decoration: InputDecoration(labelText: ui(context, entry.key))));
@@ -691,6 +691,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                         [_selectedSite!.displayName]),
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(height: 20),
                                 DropdownButtonFormField<StudyAreaStatus>(
                                     itemHeight: null,
                                     value:
@@ -734,12 +735,14 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                     icon: const Icon(Icons.add),
                                     label:
                                         Text(ui(context, 'Add information'))),
+                                const SizedBox(height: 16),
                                 TextField(
                                     controller: _note,
                                     maxLines: 3,
                                     decoration: InputDecoration(
                                         labelText: ui(
                                             context, 'Change or review note'))),
+                                const SizedBox(height: 12),
                                 OutlinedButton.icon(
                                     onPressed: () => _run(() async {
                                           if (![
@@ -799,6 +802,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                 Text(ui(context, '2. Collect information'),
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
+                                const SizedBox(height: 20),
                                 DropdownButtonFormField<int>(
                                     itemHeight: null,
                                     value: _selectedForm?.id,
@@ -815,6 +819,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                         _selectedForm = _forms
                                             .where((form) => form.id == id)
                                             .firstOrNull)),
+                                const SizedBox(height: 12),
                                 FilledButton.tonal(
                                     onPressed: _selectedForm == null
                                         ? null

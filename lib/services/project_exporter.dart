@@ -25,7 +25,7 @@ class ProjectExporter {
   final StudyAreaStore? studyAreaStore;
 
   /// Builds the typed package payload for a project. Used by both the ZIP
-  /// export and the inline-QR exporter so both share one code path.
+  /// export and sharing so both share one code path.
   Future<ProjectPackageData> buildData(Project project,
       {bool includeSyncConnection = false,
       bool includeResponses = false}) async {

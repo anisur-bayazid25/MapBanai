@@ -165,15 +165,7 @@ Done — the project appears in the project list, ready to collect data.
 > **Import as new copy** or **Replace** the existing one — it never
 > silently overwrites anything.
 
-### QR codes
-
-- Project ⋮ menu → **QR code**: small projects can be sent as a **QR**
-  (self-contained); if a project is too large, MapBanai says so and shows a
-  **bootstrap QR** with the project information instead.
-- On the receiving phone, import via **camera scan**, **scan the QR from a
-  saved gallery image** (v2.3.0+), or paste the code text.
-- Receive side: paste the QR text or open the `mapbanai://` link → import
-  instructions are recognized automatically.
+Projects are transferred as `.mbproj` files using Export / Share project and Import Project.
 
 ## Checking for updates
 

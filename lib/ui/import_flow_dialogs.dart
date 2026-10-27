@@ -37,25 +37,21 @@ String friendlyImportMessage(Object error) {
     }
   }
   if (error is FormatException) {
-    return error.message == 'Unsupported project code version'
-        ? 'This project code was created by a newer version of MapBanai. '
-            'Please update MapBanai and try again.'
-        : 'This is not a valid MapBanai project code.';
+    return 'The project file is not a valid MapBanai project.';
   }
   return 'The project could not be imported. Please try again.';
 }
 
 enum ImportChoice { newCopy, replaceExisting, cancel }
 
-/// Runs the full import flow for a chosen file path or QR payload:
+/// Runs the full import flow for a chosen file path:
 /// validate → conflict? decision → commit → success/failure message.
 /// [onImported] is called after a successful commit (e.g. to refresh the
 /// project list).
 Future<void> runProjectImport(
   BuildContext context, {
   required ProjectSharingFlow flow,
-  String? filePath,
-  String? qrPayload,
+  required String filePath,
   required VoidCallback onImported,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
@@ -72,19 +68,8 @@ Future<void> runProjectImport(
   ProjectImportSession? session;
   var progressVisible = true;
   try {
-    session = qrPayload != null && qrPayload.isNotEmpty
-        ? await flow.startQrImport(qrPayload)
-        : await flow.startFileImport(filePath!);
+    session = await flow.startFileImport(filePath);
     if (!context.mounted) return;
-
-    if (session.bootstrapMeta != null) {
-      if (progressVisible) {
-        navigator.pop();
-        progressVisible = false;
-      }
-      await _showBootstrapMessage(context, session.bootstrapMeta!);
-      return;
-    }
 
     ImportChoice choice = ImportChoice.cancel;
     if (session.isConflict) {
@@ -114,7 +99,7 @@ Future<void> runProjectImport(
     onImported();
   } catch (error) {
     // Pop the progress dialog exactly once — finishImport throws with the
-    // dialog already dismissed in some flows (e.g. bootstrap codes), and a
+    // dialog already dismissed in some flows, and a
     // second pop would remove HomeScreen and leave a black screen.
     if (progressVisible) {
       navigator.pop();
@@ -161,30 +146,6 @@ Future<ImportChoice?> showProjectConflictDialog(
         FilledButton(
           onPressed: () => Navigator.pop(context, ImportChoice.replaceExisting),
           child: Text(ui(context, 'Replace existing project')),
-        ),
-      ],
-    ),
-  );
-}
-
-Future<void> _showBootstrapMessage(
-  BuildContext context,
-  ProjectPackageMeta meta,
-) {
-  return showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(ui(context, 'Project code')),
-      content: Text(
-        ui(
-            context,
-            '"{v0}" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.',
-            [meta.projectName, meta.projectVersion]),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(ui(context, 'OK')),
         ),
       ],
     ),

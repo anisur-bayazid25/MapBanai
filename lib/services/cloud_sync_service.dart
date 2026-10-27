@@ -190,6 +190,20 @@ class CloudSyncService {
     final project = (await ProjectWorkspaceService(db).load(projectId)).project;
 
     if (studyAreaStore != null) {
+      final pendingDeletions =
+          await db.getSetting('project_study_deletions_$projectId');
+      final deletions = [
+        ...await studyAreaStore!.loadDeletions(),
+        if (pendingDeletions != null)
+          ...(jsonDecode(pendingDeletions) as List).map((raw) =>
+              StudyAreaDeletion.fromJson(Map<String, dynamic>.from(raw as Map)))
+      ];
+      for (final deletion in deletions) {
+        if (!GuidedVisitService.belongsToProject(deletion.site, project))
+          continue;
+        deletion.site.projectId = projectId;
+        await StudyAreaOutboxService(db).enqueueDeletion(deletion);
+      }
       final operator = await db.getSetting('user_name') ?? 'Local fieldworker';
       for (final site in await studyAreaStore!.loadSites()) {
         if (!GuidedVisitService.belongsToProject(site, project)) continue;
@@ -263,6 +277,37 @@ class CloudSyncService {
     final featuresPayload =
         _buildFeaturesPayload(unsyncedFeatures, projectName);
 
+    final sendsDeletions = featuresPayload.any((row) => row['deleted'] == true);
+    if (sendsDeletions) {
+      final client = _client ?? http.Client();
+      try {
+        final check = await _postJsonWithRedirect(
+            client: client,
+            uri: uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'action': 'test_connection',
+              'apiKey': apiKey,
+              'projectId': externalId
+            })).timeout(const Duration(seconds: 30));
+        final capability = jsonDecode(check.body);
+        if (check.statusCode != 200 ||
+            capability is! Map ||
+            capability['ok'] != true ||
+            capability['connectionVerified'] != true ||
+            capability['deletionSupport'] != true) {
+          throw const CloudSyncException(
+              'Your manager must deploy the updated deletion-aware Code.gs. Deleted features remain saved and waiting to sync.');
+        }
+      } on CloudSyncException {
+        rethrow;
+      } catch (error) {
+        throw CloudSyncException(
+            'Could not verify deletion sync support: $error');
+      } finally {
+        if (_client == null) client.close();
+      }
+    }
     final body = jsonEncode({
       'apiKey': apiKey,
       'action': 'sync_data',
@@ -341,6 +386,10 @@ class CloudSyncService {
     }
 
     if (decoded is Map<String, dynamic> && decoded['ok'] == true) {
+      if (sendsDeletions && decoded['deletionSupport'] != true) {
+        throw const CloudSyncException(
+            'The server did not acknowledge deletion support. Deleted features remain waiting to sync.');
+      }
       final sendsEdits = [...responsesPayload, ...featuresPayload]
           .any((r) => (r['response_revision'] as num) > 1);
       if (sendsEdits && decoded['revisionSupport'] != true) {
@@ -578,6 +627,14 @@ class CloudSyncService {
           : s.id.toString();
       list.add({
         'feature_id': stableId,
+        'site_id': resp['site_id'],
+        'feature_uuid': resp['feature_uuid'],
+        'deleted': resp['deleted'] == true,
+        'status': resp['deleted'] == true ? 'Deleted' : null,
+        'operation': resp['operation'],
+        'deletion_id': resp['deletion_id'],
+        'deleted_at': resp['deleted_at'],
+        'deleted_by': resp['deleted_by'],
         'project_name': projectName,
         'surveyor': resp['user_name']?.toString() ?? '',
         'geometry_type': geometryType,

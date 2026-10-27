@@ -21,8 +21,7 @@ class GpsCsvService {
     if (lines.isEmpty) return [];
     // Find header line.
     int headerIdx = 0;
-    while (headerIdx < lines.length &&
-        lines[headerIdx].trim().isEmpty) {
+    while (headerIdx < lines.length && lines[headerIdx].trim().isEmpty) {
       headerIdx++;
     }
     if (headerIdx >= lines.length) return [];
@@ -54,9 +53,16 @@ class GpsCsvService {
       final cols = _splitCsvLine(lines[i]);
       // Pad
       while (cols.length <=
-          [latIdx, lonIdx, altIdx, accIdx, timeIdx, idIdx, surveyorIdx, notesIdx]
-              .where((e) => e >= 0)
-              .fold<int>(0, (a, b) => a > b ? a : b)) {
+          [
+            latIdx,
+            lonIdx,
+            altIdx,
+            accIdx,
+            timeIdx,
+            idIdx,
+            surveyorIdx,
+            notesIdx
+          ].where((e) => e >= 0).fold<int>(0, (a, b) => a > b ? a : b)) {
         cols.add('');
       }
       final latStr = latIdx < cols.length ? cols[latIdx].trim() : '';
@@ -72,9 +78,8 @@ class GpsCsvService {
       final surveyor = surveyorIdx >= 0 && surveyorIdx < cols.length
           ? cols[surveyorIdx].trim()
           : '';
-      final tsStr = timeIdx >= 0 && timeIdx < cols.length
-          ? cols[timeIdx].trim()
-          : '';
+      final tsStr =
+          timeIdx >= 0 && timeIdx < cols.length ? cols[timeIdx].trim() : '';
       final ts = DateTime.tryParse(tsStr) ?? DateTime.now();
       final alt = altIdx >= 0 && altIdx < cols.length
           ? double.tryParse(cols[altIdx].trim()) ?? 0
@@ -234,9 +239,8 @@ class GpsCsvService {
         readings[i].longitude,
       );
     }
-    final duration = readings.last.timestamp
-        .difference(readings.first.timestamp)
-        .inSeconds;
+    final duration =
+        readings.last.timestamp.difference(readings.first.timestamp).inSeconds;
     return {
       'count': readings.length,
       'distance_m': dist,
@@ -246,8 +250,7 @@ class GpsCsvService {
     };
   }
 
-  static double _haversine(
-      double lat1, double lon1, double lat2, double lon2) {
+  static double _haversine(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * math.pi / 180;
     final dLon = (lon2 - lon1) * math.pi / 180;
@@ -258,5 +261,4 @@ class GpsCsvService {
             math.sin(dLon / 2);
     return 2 * r * math.asin(math.min(1, math.sqrt(a)));
   }
-
 }

@@ -1,4 +1,4 @@
-# MapBanai manager workspace — v2.6.6
+# MapBanai manager workspace — v2.7.2
 
 Use one Google workbook, one Apps Script deployment and one private API key for each project. Questions and answers live in separate tabs. This folder contains the complete Code.gs, Map.html and Charts.html; the same files are copyable offline in app Help.
 
@@ -66,3 +66,10 @@ Validated with mocked Google services and browser fixtures; no live Google accou
 ## Study-area field workflow in v2.6.6
 
 Enumerators import a study map from the top toolbar or open a spatial file from Android. GeoJSON and WGS84 GeoPackage are supported; ZIP shapefile companions together for attributes. The plus button opens the questionnaire at a fresh GPS location. Edit feature requires a questionnaire for new/Updated features, while other statuses allow direct saving or an optional questionnaire. Categories & colors lets users explicitly choose a data column or Verification status for styling; the default is one color.
+
+
+## Update an existing deployment for deletion sync
+
+Back up the workbook and current Apps Script project. Replace Code.gs, Map.html and Charts.html with these release files, preserving your configured project ID and existing connection settings. Do not reset or replace the existing API key or Script properties. In Deploy → Manage deployments, edit the existing Web app deployment and choose New version, then deploy. Keep the same /exec URL and API key on phones.
+
+The connection test now reports deletionSupport and revisionSupport. Until an updated deployment acknowledges deletion support, the phone retains deletion events in its sync queue. Sync upserts the same feature row with deleted=true, status=Deleted, deleted_at and deleted_by. The revisions tab preserves prior versions; manager maps hide the deleted site and geometry from linked visits/collections. Sheets rows remain available for auditing. Local bulk history cleanup still leaves existing cloud copies unchanged.

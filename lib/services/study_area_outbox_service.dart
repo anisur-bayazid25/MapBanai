@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/study_area_store.dart';
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -88,6 +89,81 @@ class StudyAreaOutboxService {
             exclusionKey(projectId), jsonEncode(exclusions[projectId]));
       }
     });
+  }
+
+  Future<void> enqueueDeletion(StudyAreaDeletion deletion) async {
+    final site = deletion.site;
+    if (site.projectId == null || site.projectExternalId == null)
+      throw StateError('Study site has no project');
+    await db.transaction(() async {
+      final stableId = 'study:${site.projectExternalId}:${site.id}';
+      final old = await (db.select(db.surveySessions)
+            ..where((r) =>
+                r.projectId.equals(site.projectId!) &
+                r.externalId.equals(stableId)))
+          .getSingleOrNull();
+      if (old != null &&
+          (jsonDecode(old.responses) as Map)['deletion_id'] ==
+              deletion.operationId) return;
+      final type = site.currentGeometry['type'].toString();
+      final payload = jsonEncode({
+        'workflow': 'study_area_feature_v1',
+        'feature_type': type.contains('Polygon')
+            ? 'polygon'
+            : type.contains('Line')
+                ? 'line'
+                : 'point',
+        'site_id': site.id,
+        'feature_uuid': site.featureUuid,
+        'layer_id': site.layerId,
+        'site': site.toJson(),
+        'name': site.displayName,
+        'geometry': site.currentGeometry,
+        'latitude': site.latitude,
+        'longitude': site.longitude,
+        'attributes': site.attributes,
+        'user_name': deletion.deletedBy,
+        'deleted': true,
+        'operation': 'delete',
+        'deletion_id': deletion.operationId,
+        'deleted_at': deletion.deletedAt.toIso8601String(),
+        'deleted_by': deletion.deletedBy
+      });
+      if (old == null) {
+        await db.insertSurveySession(SurveySessionsCompanion(
+            projectId: Value(site.projectId!),
+            externalId: Value(stableId),
+            title: Value('${site.displayName} — Deleted'),
+            status: const Value('saved'),
+            responses: Value(payload)));
+      } else {
+        await db.updateSurveySession(old.id,
+            title: '${site.displayName} — Deleted',
+            responses: payload,
+            status: 'saved');
+      }
+    });
+  }
+
+  Future<void> deleteFeatureSession(int id) async {
+    final row = await db.getSurveySession(id);
+    if (row == null) return;
+    if (row.status == 'draft') {
+      await db.deleteSurveySession(id);
+      return;
+    }
+    final payload = Map<String, dynamic>.from(jsonDecode(row.responses));
+    if (payload['deleted'] == true) return;
+    payload.addAll({
+      'deleted': true,
+      'operation': 'delete',
+      'deleted_at': DateTime.now().toUtc().toIso8601String(),
+      'deleted_by': await db.getSetting('user_name') ?? 'Local fieldworker'
+    });
+    await db.updateSurveySession(id,
+        title: '${row.title} — Deleted',
+        status: 'saved',
+        responses: jsonEncode(payload));
   }
 
   Future<void> deleteSites(List<StudyAreaSite> sites) async {

@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/labeled_field.dart';
 import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:flutter/material.dart';
@@ -90,61 +91,63 @@ class ProjectWorkspaceBar extends StatelessWidget {
             ]),
             if (workspace != null)
               ResponsiveGrid(children: [
-                DropdownButtonFormField<String>(
-                    itemHeight: null,
-                    value: workspace!.layerId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                        labelText: ui(context, 'Study layer'), isDense: true),
-                    items: [
-                      ...workspace!.layers
-                          .map((layer) => DropdownMenuItem(
-                              value: layer.id,
-                              child: Text(
-                                  layer.id == 'default'
-                                      ? ui(context, 'Main study area')
-                                      : layer.name,
-                                  overflow: TextOverflow.ellipsis)))
-                          .toList(),
-                      DropdownMenuItem(
-                          value: '__add_layer__',
-                          child: Text(ui(context, 'Add new Layer'))),
-                    ],
-                    onChanged: !enabled
-                        ? null
-                        : (id) async {
-                            if (id == '__add_layer__') {
-                              await _addLayer(context);
-                              return;
-                            }
-                            if (id != null)
-                              await onChanged(
-                                  await ProjectWorkspaceService(database)
-                                      .select(workspace!.project.id,
-                                          layerId: id, workflow: workflow));
-                          }),
-                DropdownButtonFormField<int>(
-                    itemHeight: null,
-                    value: workspace!.form?.id,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                        labelText: ui(context, 'Survey form'), isDense: true),
-                    hint: Text(ui(context, 'Import a form')),
-                    items: workspace!.forms
-                        .map((form) => DropdownMenuItem(
-                            value: form.id,
-                            child: Text(form.name,
-                                overflow: TextOverflow.ellipsis)))
-                        .toList(),
-                    onChanged: !enabled
-                        ? null
-                        : (id) async {
-                            if (id != null)
-                              await onChanged(
-                                  await ProjectWorkspaceService(database)
-                                      .select(workspace!.project.id,
-                                          formId: id, workflow: workflow));
-                          }),
+                LabeledField(
+                    label: ui(context, 'Study layer'),
+                    child: DropdownButtonFormField<String>(
+                        itemHeight: null,
+                        value: workspace!.layerId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(isDense: true),
+                        items: [
+                          ...workspace!.layers
+                              .map((layer) => DropdownMenuItem(
+                                  value: layer.id,
+                                  child: Text(
+                                      layer.id == 'default'
+                                          ? ui(context, 'Main study area')
+                                          : layer.name,
+                                      overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          DropdownMenuItem(
+                              value: '__add_layer__',
+                              child: Text(ui(context, 'Add new Layer'))),
+                        ],
+                        onChanged: !enabled
+                            ? null
+                            : (id) async {
+                                if (id == '__add_layer__') {
+                                  await _addLayer(context);
+                                  return;
+                                }
+                                if (id != null)
+                                  await onChanged(
+                                      await ProjectWorkspaceService(database)
+                                          .select(workspace!.project.id,
+                                              layerId: id, workflow: workflow));
+                              })),
+                LabeledField(
+                    label: ui(context, 'Survey form'),
+                    child: DropdownButtonFormField<int>(
+                        itemHeight: null,
+                        value: workspace!.form?.id,
+                        isExpanded: true,
+                        decoration: const InputDecoration(isDense: true),
+                        hint: Text(ui(context, 'Import a form')),
+                        items: workspace!.forms
+                            .map((form) => DropdownMenuItem(
+                                value: form.id,
+                                child: Text(form.name,
+                                    overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged: !enabled
+                            ? null
+                            : (id) async {
+                                if (id != null)
+                                  await onChanged(
+                                      await ProjectWorkspaceService(database)
+                                          .select(workspace!.project.id,
+                                              formId: id, workflow: workflow));
+                              })),
               ]),
           ])));
 }

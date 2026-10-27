@@ -289,7 +289,9 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                 Text(
                   '${widget.projectName}  •  '
                   '${_formatDate(_session.createdAt)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 12),
                 Card(
@@ -383,7 +385,8 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     if (answers.isEmpty) {
       return [
         Text(ui(context, 'No answers recorded.'),
-            style: TextStyle(color: Colors.grey.shade600)),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ];
     }
     final entries = <Widget>[];
@@ -433,9 +436,9 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +449,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey.shade600,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),

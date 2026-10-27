@@ -118,6 +118,26 @@ assert.equal(studyFeature.properties.source,'study_area');
 assert.equal(studyFeature.properties.site_status,'verified');
 assert.equal(studyFeature.properties.answers.layer,'Water points');
 assert.equal(JSON.stringify(studyPayload),JSON.stringify(JSON.parse(JSON.stringify(studyPayload))));
+// Deletions are revisioned audit rows, excluded from every active geometry.
+assert.equal(call({action:'test_connection'}).deletionSupport,true);
+const deletedSite={feature_id:'study-deleted',site_id:'site-deleted',feature_uuid:'uuid-deleted',response_revision:1,geometry_type:'point',geojson:{type:'Point',coordinates:[90.4,23.8]}};
+assert.equal(call({action:'sync_data',features:[deletedSite],responses:[{response_id:'old-visit',site_id:'site-deleted',answers:{gps:'23.8,90.4'}}]}).ok,true);
+const tombstone={...deletedSite,response_revision:2,deleted:true,status:'Deleted',operation:'delete',deleted_at:'2026-10-28T00:00:00Z',deleted_by:'Fieldworker',deletion_id:'op-delete'};
+const reply=call({action:'sync_data',features:[tombstone],responses:[]});
+assert.equal(reply.deletionSupport,true);
+assert.equal(reply.ok,true);
+const historyAfterDelete=tabs.revisions.getLastRow();
+assert.equal(call({action:'sync_data',features:[tombstone],responses:[]}).ok,true);
+assert.equal(tabs.revisions.getLastRow(),historyAfterDelete);
+assert.equal(call({action:'sync_data',features:[deletedSite],responses:[]}).ok,false);
+const allData=context.getMapDataPayload('All collections');
+assert(!allData.featureCollection.features.some(f=>['study-deleted','old-visit'].includes(f.properties.id)));
+assert(allData.data.some(row=>row.feature_id==='study-deleted' && row.deleted===true));
+assert(!context.getMapDataPayload('responses').featureCollection.features.some(f=>f.properties.id==='old-visit'));
+const latestDeletedRow=tabs.features.rows.find(row=>row[tabs.features.rows[0].indexOf('record_id')]==='study-deleted');
+assert.equal(latestDeletedRow[tabs.features.rows[0].indexOf('status')],'Deleted');
+assert.equal(latestDeletedRow[tabs.features.rows[0].indexOf('deleted_by')],'Fieldworker');
+
 tabs.responses.rows[0][0]='incompatible';assert.equal(call(batch).ok,false);
 console.log('Manager backend contract checks passed: auth, project isolation, questionnaire, updates, chunking, expansion, validation, retries and photo deduplication.');
 

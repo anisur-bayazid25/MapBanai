@@ -20,7 +20,6 @@ import 'package:mapbanai/state/project_state.dart';
 import 'package:mapbanai/ui/common/confirm_dialog.dart';
 import 'package:mapbanai/ui/common/loading_indicator.dart';
 import 'package:mapbanai/ui/import_flow_dialogs.dart';
-import 'package:mapbanai/ui/project_qr_screen.dart';
 import 'package:mapbanai/ui/project_vector_layers_screen.dart';
 import 'package:mapbanai/ui/survey_form_builder_screen.dart';
 import 'package:mapbanai/ui/survey_form_detail_screen.dart';
@@ -219,19 +218,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     if (project == null || !mounted) return;
     final flow = ProjectSharingFlow(database: _database);
     await showExportProjectOptions(context, flow: flow, project: project);
-  }
-
-  void _showQr() {
-    final project = _project;
-    if (project == null || !mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProjectQrScreen(
-          project: project,
-          database: _database,
-        ),
-      ),
-    );
   }
 
   void _showSnack(String message) {
@@ -492,8 +478,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 switch (value) {
                   case 'export':
                     _showExportOptions();
-                  case 'qr':
-                    _showQr();
                 }
               },
               itemBuilder: (_) => [
@@ -503,14 +487,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.save_alt_rounded),
                     title: Text(ui(context, 'Export / Share project')),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'qr',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.qr_code_2_rounded),
-                    title: Text(ui(context, 'QR code')),
                   ),
                 ),
               ],

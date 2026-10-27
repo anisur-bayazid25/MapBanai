@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/study_area_outbox_service.dart';
 import 'package:mapbanai/ui/common/map_chrome.dart';
 import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
@@ -81,6 +82,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Timer? _ticker;
 
   LatLng? _currentLocation;
+  DateTime? _currentFixAt;
+  bool _centeredOnInitialLocation = false;
   double? _currentAccuracy;
   String _locationStatus = 'Checking permission...';
   bool _styleReady = false;
@@ -266,7 +269,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (!mounted) return;
     setState(() {
       _locationStatus =
-          granted ? 'GPS ready' : 'Location permission not granted';
+          granted ? 'Waiting for GPS fix…' : 'Location permission not granted';
     });
     if (!granted) return;
 
@@ -306,8 +309,11 @@ class _GisModeScreenState extends State<GisModeScreen> {
         final newLocation = LatLng(position.latitude, position.longitude);
         setState(() {
           _currentLocation = newLocation;
+          _currentFixAt = position.timestamp;
+          _locationStatus = 'GPS ready';
           _currentAccuracy = position.accuracy;
         });
+        _centerOnInitialLocation();
         if (_draftType == _DraftType.point &&
             _draftPoint == null &&
             _draftPointFix == null) {
@@ -352,15 +358,36 @@ class _GisModeScreenState extends State<GisModeScreen> {
     _controller = controller;
     controller.onFeatureTapped.add(_onFeatureTapped);
     controller.onFeatureDrag.add(_onFeatureDragged);
-    if (_currentLocation != null) {
-      controller.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentLocation!, 16),
-      );
-    }
+    _centerOnInitialLocation();
+  }
+
+  void _centerOnInitialLocation() {
+    final location = _currentLocation,
+        controller = _controller,
+        fixedAt = _currentFixAt;
+    if (_centeredOnInitialLocation ||
+        !_styleReady ||
+        controller == null ||
+        location == null ||
+        fixedAt == null) return;
+    if (!location.latitude.isFinite ||
+        !location.longitude.isFinite ||
+        location.latitude.abs() > 90 ||
+        location.longitude.abs() > 180 ||
+        DateTime.now().difference(fixedAt).abs() > const Duration(minutes: 2))
+      return;
+    _centeredOnInitialLocation = true;
+    unawaited(controller
+        .animateCamera(CameraUpdate.newLatLngZoom(location, 16))
+        .catchError((Object error) {
+      _centeredOnInitialLocation = false;
+      return false;
+    }));
   }
 
   void _onStyleLoaded() {
     _styleReady = true;
+    _centerOnInitialLocation();
     _addSurveyAnnotations();
     if (_draftActive) {
       _refreshDraftGeometry();
@@ -503,7 +530,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
       destructive: true,
     );
     if (!confirmed) return;
-    await _database.deleteSurveySession(info.sessionId);
+    await StudyAreaOutboxService(_database)
+        .deleteFeatureSession(info.sessionId);
     final controller = _controller;
     if (controller != null) {
       for (final circle in controller.circles.toList()) {
@@ -541,6 +569,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
         .where((s) => s.projectId == projectId)
         .toList();
 
+    final deletedSites = <String>{};
+    for (final session in sessions) {
+      try {
+        final raw = jsonDecode(session.responses);
+        if (raw is! Map) continue;
+        if (raw['deleted'] == true && raw['site_id'] != null)
+          deletedSites.add(raw['site_id'].toString());
+      } catch (_) {/* A malformed legacy record has no deletion identity. */}
+    }
     for (final session in sessions) {
       if (session.status == 'draft') continue;
       final data = <String, dynamic>{
@@ -549,6 +586,10 @@ class _GisModeScreenState extends State<GisModeScreen> {
       };
       try {
         final responses = jsonDecode(session.responses) as Map<String, dynamic>;
+        final siteId = responses['site_id'] ??
+            (responses['visit'] is Map ? responses['visit']['site_id'] : null);
+        if (responses['deleted'] == true || deletedSites.contains(siteId))
+          continue;
         if ((responses['layer_id'] ?? 'default') !=
             (_workspace?.layerId ?? 'default')) continue;
         data['feature_type'] = responses['feature_type'] ?? 'survey';
@@ -1512,8 +1553,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
           children: [
             MapLibreMap(
               initialCameraPosition: CameraPosition(
-                target: _currentLocation ?? const LatLng(23.8103, 90.4125),
-                zoom: 14,
+                target: _currentLocation ?? const LatLng(0, 0),
+                zoom: _currentLocation == null ? 2 : 16,
               ),
               onMapCreated: _onMapCreated,
               onStyleLoadedCallback: _onStyleLoaded,
@@ -1684,7 +1725,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
               Text(
                 ui(context, '{v0}  •  session #{v1}',
                     [info.featureType, info.sessionId]),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               if (info.featureType == 'point') ...[
                 const SizedBox(height: 6),
@@ -1727,7 +1770,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     return Card(
       elevation: 6,
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1801,13 +1844,17 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ? ui(context, 'Positioning…')
             : '${fix.lat.toStringAsFixed(6)}, ${fix.lon.toStringAsFixed(6)}'
                 '${fix.accuracy > 0 ? '  ±${fix.accuracy.toStringAsFixed(1)} m' : ''}',
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
     }
     if (points.length < 2) {
       return Text(
         ui(context, 'Walk along the boundary while recording'),
-        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
     }
     final metrics = <String>[
@@ -1822,7 +1869,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
     return Text(
       metrics.join('  •  '),
-      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+      style: TextStyle(
+          fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 
@@ -1917,7 +1965,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     return Card(
       elevation: 6,
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1950,7 +1998,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
               points.isEmpty
                   ? ui(context, 'Tap the map to add the first point')
                   : metrics.join('  •  '),
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 4),
             ResponsiveGrid(

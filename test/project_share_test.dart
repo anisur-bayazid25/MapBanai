@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -8,11 +7,9 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/models/survey_form.dart';
-import 'package:mapbanai/services/project_exporter.dart';
 import 'package:mapbanai/services/project_importer.dart';
 import 'package:mapbanai/services/project_links.dart';
 import 'package:mapbanai/services/project_package.dart';
-import 'package:mapbanai/services/project_qr.dart';
 import 'package:mapbanai/services/project_sharing_flow.dart';
 import 'package:mapbanai/services/project_transfer_provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -194,13 +191,15 @@ void main() {
 
     final archive = ZipDecoder().decodeBytes(bytes);
     final names = archive.map((e) => e.name).toSet();
-    expect(names, containsAll([
-      'manifest.json',
-      'project.json',
-      'settings.json',
-      'layers.json',
-      'metadata/version.json',
-    ]));
+    expect(
+        names,
+        containsAll([
+          'manifest.json',
+          'project.json',
+          'settings.json',
+          'layers.json',
+          'metadata/version.json',
+        ]));
     expect(names.where((n) => n.startsWith('form/')), hasLength(2));
   });
 
@@ -211,7 +210,7 @@ void main() {
     final manifest = jsonDecode(
       String.fromCharCodes(
         archive.singleWhere((e) => e.name == 'manifest.json').content
-                as List<int>,
+            as List<int>,
       ),
     ) as Map<String, dynamic>;
     expect(manifest['package_type'], 'mapbanai_project');
@@ -221,12 +220,14 @@ void main() {
     expect(manifest['project_name'], source.name);
     expect(manifest['project_version'], 1);
     expect(manifest['exported_at'], isNotEmpty);
-    expect(manifest['contents'], containsAll([
-      'project.json',
-      'settings.json',
-      'layers.json',
-      'metadata/version.json',
-    ]));
+    expect(
+        manifest['contents'],
+        containsAll([
+          'project.json',
+          'settings.json',
+          'layers.json',
+          'metadata/version.json',
+        ]));
     expect(manifest['checksums'], isA<Map>());
   });
 
@@ -243,7 +244,8 @@ void main() {
     expect(imported.isActive, isFalse);
 
     final fields = await db.getProjectFields(imported.id);
-    expect(fields.map((f) => f.name).toList(), ['area_code', 'sampling_method']);
+    expect(
+        fields.map((f) => f.name).toList(), ['area_code', 'sampling_method']);
 
     final forms = await db.getStoredFormsForProject(imported.id);
     expect(forms, hasLength(2));
@@ -277,22 +279,26 @@ void main() {
   test('import preserves project version', () async {
     await db.createProject('Versioned');
     final source = (await db.getProjectByName('Versioned'))!;
-    await db.updateProject(source.id, );
+    await db.updateProject(
+      source.id,
+    );
     final bytes = await exportBytes(source);
     // Force a project version in the payload.
     final archive = ZipDecoder().decodeBytes(bytes);
     final projectJson = jsonDecode(
       String.fromCharCodes(
-        archive.singleWhere((e) => e.name == 'project.json').content as List<int>,
+        archive.singleWhere((e) => e.name == 'project.json').content
+            as List<int>,
       ),
     ) as Map<String, dynamic>;
     projectJson['project_version'] = 13;
     final updatedProjectBytes =
         Uint8List.fromList(utf8.encode(jsonEncode(projectJson)));
-    final manifestEntry =
-        archive.singleWhere((e) => e.name == 'manifest.json').content as List<int>;
-    final manifest = jsonDecode(String.fromCharCodes(manifestEntry))
-        as Map<String, dynamic>;
+    final manifestEntry = archive
+        .singleWhere((e) => e.name == 'manifest.json')
+        .content as List<int>;
+    final manifest =
+        jsonDecode(String.fromCharCodes(manifestEntry)) as Map<String, dynamic>;
     final checksums =
         (manifest['checksums'] as Map<String, dynamic>?) ?? <String, dynamic>{};
     final updatedManifestBytes = Uint8List.fromList(utf8.encode(jsonEncode({
@@ -308,7 +314,8 @@ void main() {
     });
     final file = await writePackage(rebuilt, 'v.mbproj');
     final session = await flow.startFileImport(file.path);
-    final result = await flow.finishImport(session, decision: ImportDecision.newCopy);
+    final result =
+        await flow.finishImport(session, decision: ImportDecision.newCopy);
     final imported = (await db.getProjectById(result.projectId))!;
     expect(imported.projectVersion, 13);
   });
@@ -320,7 +327,8 @@ void main() {
     final bytes = await exportBytes(source);
     final archive = ZipDecoder().decodeBytes(bytes);
     final settings = jsonDecode(String.fromCharCodes(
-      archive.singleWhere((e) => e.name == 'settings.json').content as List<int>,
+      archive.singleWhere((e) => e.name == 'settings.json').content
+          as List<int>,
     )) as Map<String, dynamic>;
     expect(settings['gps_accuracy_threshold_m'], 10.0);
 
@@ -384,8 +392,8 @@ void main() {
     final file = await writePackage(bytes, 'bad.mbproj');
     await expectLater(
       flow.startFileImport(file.path),
-      throwsA(isA<ProjectImportException>()
-          .having((e) => e.error, 'error', error)),
+      throwsA(
+          isA<ProjectImportException>().having((e) => e.error, 'error', error)),
     );
   }
 
@@ -442,8 +450,7 @@ void main() {
     // Chop the end-of-central-directory record so the decoder rejects the
     // archive outright (entries are stored uncompressed, so flipping a
     // payload byte would surface as a checksum mismatch instead).
-    final corrupted =
-        Uint8List.fromList(bytes.sublist(0, bytes.length - 4));
+    final corrupted = Uint8List.fromList(bytes.sublist(0, bytes.length - 4));
     await expectImportError(
       corrupted,
       ProjectImportError.corruptedZip,
@@ -455,7 +462,8 @@ void main() {
     final bytes = await exportBytes(source);
     final archive = ZipDecoder().decodeBytes(bytes);
     final manifest = jsonDecode(String.fromCharCodes(
-      archive.singleWhere((e) => e.name == 'manifest.json').content as List<int>,
+      archive.singleWhere((e) => e.name == 'manifest.json').content
+          as List<int>,
     )) as Map<String, dynamic>;
     (manifest['checksums'] as Map)['project.json'] = 'deadbeef';
     final rebuilt = zipBytes({
@@ -504,10 +512,11 @@ void main() {
     final bytes = await exportBytes(source);
     final archive = ZipDecoder().decodeBytes(bytes);
     final invalidProject = Uint8List.fromList(utf8.encode('not json {{{'));
-    final manifestEntry =
-        archive.singleWhere((e) => e.name == 'manifest.json').content as List<int>;
-    final manifest = jsonDecode(String.fromCharCodes(manifestEntry))
-        as Map<String, dynamic>;
+    final manifestEntry = archive
+        .singleWhere((e) => e.name == 'manifest.json')
+        .content as List<int>;
+    final manifest =
+        jsonDecode(String.fromCharCodes(manifestEntry)) as Map<String, dynamic>;
     final checksums =
         (manifest['checksums'] as Map<String, dynamic>?) ?? <String, dynamic>{};
     final rebuilt = rebuildZip(archive, {
@@ -572,8 +581,8 @@ void main() {
     expect((await db.getProjects()), hasLength(2));
   });
 
-test('import as new copy creates a second project with new identity',
-    () async {
+  test('import as new copy creates a second project with new identity',
+      () async {
     final source = await createSimpleProject();
     final package = await writePackage(await exportBytes(source), 'a.mbproj');
     final session = await flow.startFileImport(package.path);
@@ -681,129 +690,6 @@ test('import as new copy creates a second project with new identity',
     expect(parsed.questions.single.label, bloat);
   });
 
-  // ── QR codes ────────────────────────────────────────────────────────
-
-  test('inline QR round trips and commits into the database', () async {
-    final source = await createSimpleProject();
-    final data = await ProjectExporter(db).buildData(source);
-    final payload = ProjectQr.encodeInline(data);
-
-    final parsed = ProjectQr.parse(payload);
-    expect(parsed, isNotNull);
-    expect(parsed!['mode'], 'inline');
-    final build = ProjectQr.inlineToData(parsed);
-    expect(build.meta.projectName, source.name);
-
-    final clean = AppDatabase.forTesting();
-    final flow2 = ProjectSharingFlow(database: clean, fileSink: _MemorySink());
-    final session = await flow2.startQrImport(payload);
-    await flow2.finishImport(session, decision: ImportDecision.newCopy);
-    expect(await clean.getProjectByName(source.name), isNotNull);
-    await clean.close();
-  });
-
-  test('bootstrap QR import surfaces a session-level instruction, not a '
-      'crash toward finishImport', () async {
-    final clean = AppDatabase.forTesting();
-    final flow2 = ProjectSharingFlow(database: clean, fileSink: _MemorySink());
-    final payload = ProjectQr.encodeBootstrap(
-      projectId: 'id-1',
-      projectName: 'Bootstrap Proj',
-      projectVersion: 4,
-      checksum: 'abc123',
-    );
-    final session = await flow2.startQrImport(payload);
-    // The import dialog branches on bootstrapMeta BEFORE finishImport, so
-    // the old "Nothing to import" path (which double-popped the navigator
-    // and black-screened the app) is unreachable for bootstrap codes.
-    expect(session.bootstrapMeta, isNotNull);
-    expect(session.isQr, isFalse);
-    await clean.close();
-  });
-
-  test('bootstrap QR carries identity + checksum and decodes', () {
-    final payload = ProjectQr.encodeBootstrap(
-      projectId: 'id-1',
-      projectName: 'Bootstrap Proj',
-      projectVersion: 4,
-      checksum: 'abc123',
-    );
-    final decoded = ProjectQr.parse(payload)!;
-    expect(decoded['mode'], 'bootstrap');
-    expect(decoded['project_id'], 'id-1');
-    expect(decoded['project_name'], 'Bootstrap Proj');
-    expect(decoded['checksum'], 'abc123');
-    expect(decoded['transfer'], 'mbproj');
-  });
-
-  test('QR decode is versioned and rejects unknown versions', () {
-    final good = ProjectQr.encodeBootstrap(
-      projectId: 'a',
-      projectName: 'A',
-      projectVersion: 1,
-    );
-    final decoded = jsonDecode(utf8.decode(zlib.decode(
-      base64Url.decode(good.substring('MAPBANAI-PROJECT-V1:'.length)),
-    ))) as Map<String, dynamic>;
-    decoded['v'] = 99;
-    final evil = 'MAPBANAI-PROJECT-V1:${base64Url.encode(zlib.encode(utf8.encode(jsonEncode(decoded))))}';
-    expect(ProjectQr.parse(evil), isNull);
-  });
-
-  test('QR parse rejects garbage, missing identity, and unencodable data',
-      () {
-    expect(ProjectQr.parse('not a code'), isNull);
-    expect(ProjectQr.parse(''), isNull);
-    expect(
-      ProjectQr.parse('MAPBANAI-PROJECT-V1:!!notbase64!!'),
-      isNull,
-    );
-  });
-
-  test('oversized project reports "too large for direct QR"', () async {
-    final payload = ProjectQr.encodeBootstrap(
-      projectId: 'x',
-      projectName: 'X',
-      projectVersion: 1,
-    );
-    expect(payload.length, lessThan(ProjectQr.maxInlinePayloadChars));
-  });
-
-  test('project-too-large guard rejects inline encoding beyond budget', () async {
-    await db.createProject('TooBig');
-    final project = (await db.getProjectByName('TooBig'))!;
-    // Random (incompressible) text so the payload cannot shrink under zlib.
-    final random = Random(42);
-    final label = String.fromCharCodes(
-      List<int>.generate(16 * 1024, (_) => 32 + random.nextInt(95)),
-    );
-    await db.insertStoredForm(
-      StoredFormsCompanion(
-        projectId: drift.Value(project.id),
-        name: drift.Value('Big'),
-        description: drift.Value(''),
-        json: drift.Value(jsonEncode(SurveyForm(
-          id: 'big',
-          name: 'Big',
-          description: '',
-          questions: [
-            Question(
-              name: 'q',
-              label: label,
-              type: QuestionType.text,
-            ),
-          ],
-        ).toJson())),
-        version: drift.Value(1),
-      ),
-    );
-    final data = await ProjectExporter(db).buildData(project);
-    expect(
-      () => ProjectQr.encodeInline(data),
-      throwsA(isA<ProjectTooLargeForQrException>()),
-    );
-  });
-
   // ── links ───────────────────────────────────────────────────────────
 
   test('mapbanai://project/import?file=... is parsed', () {
@@ -814,18 +700,9 @@ test('import as new copy creates a second project with new identity',
     expect(info!.fileUri, 'content://media/external/downloads/1');
   });
 
-  test('mapbanai://project/import?qr=... is parsed', () {
-    final payload = ProjectQr.encodeBootstrap(
-      projectId: 'p1',
-      projectName: 'P1',
-      projectVersion: 1,
-    );
-    final info = ProjectLinks.parse(
-      'mapbanai://project/import?qr=${Uri.encodeComponent(payload)}',
-    );
-    expect(info, isNotNull);
-    expect(info!.qrPayload, payload);
-    expect(info.hasImportWork, isTrue);
+  test('removed QR links cannot import a project', () {
+    expect(
+        ProjectLinks.parse('mapbanai://project/import?qr=legacy-code'), isNull);
   });
 
   test('https .mbproj URLs are recognized (future download)', () {

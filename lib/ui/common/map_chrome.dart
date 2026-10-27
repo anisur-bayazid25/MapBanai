@@ -23,45 +23,96 @@ class MapControlSurface extends StatelessWidget {
       );
 }
 
-/// A real draggable, scrollable site sheet rather than a fixed map overlay.
-/// Large fonts and landscape get more initial space; every action still scrolls.
-class MapSiteSheet extends StatelessWidget {
+/// Opens at the measured content height; longer panels remain draggable.
+class MapSiteSheet extends StatefulWidget {
   const MapSiteSheet({super.key, required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final large = MediaQuery.textScalerOf(context).scale(14) > 20;
-    final initial = large || size.width > size.height ? .46 : .32;
-    return DraggableScrollableSheet(
-      initialChildSize: initial,
-      minChildSize: .18,
-      maxChildSize: .86,
-      snap: true,
-      snapSizes: [initial, .65],
-      builder: (context, scroll) => Material(
-        color: Theme.of(context).colorScheme.surface,
-        elevation: 8,
-        shadowColor: Colors.black.withOpacity(.15),
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-        clipBehavior: Clip.antiAlias,
-        child: ListView(
-            controller: scroll,
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.paddingOf(context).bottom + 12),
-            children: [
-              Center(
-                  child: Container(
-                      margin: const EdgeInsets.only(top: 10, bottom: 2),
-                      height: 4,
-                      width: 36,
-                      decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.outlineVariant,
-                          borderRadius: BorderRadius.circular(4)))),
-              child,
-            ]),
-      ),
-    );
+  State<MapSiteSheet> createState() => _MapSiteSheetState();
+}
+
+class _MapSiteSheetState extends State<MapSiteSheet> {
+  final _controller = DraggableScrollableController();
+  final _contentKey = GlobalKey();
+  bool _userDragged = false;
+  double? _lastHeight;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+
+  void _fitContent(double availableHeight) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _userDragged || !_controller.isAttached) return;
+      final box = _contentKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final height = box.size.height;
+      if (_lastHeight == height &&
+          (_controller.size * availableHeight - height).abs() < 1) return;
+      _lastHeight = height;
+      final fraction = (height / availableHeight).clamp(.18, .86);
+      if ((_controller.size - fraction).abs() > .001) {
+        _controller.jumpTo(fraction);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          _fitContent(constraints.maxHeight);
+          return NotificationListener<ScrollStartNotification>(
+            onNotification: (event) {
+              if (event.dragDetails != null) _userDragged = true;
+              return false;
+            },
+            child: DraggableScrollableSheet(
+              controller: _controller,
+              initialChildSize: .32,
+              minChildSize: .18,
+              maxChildSize: .86,
+              builder: (context, scroll) => Material(
+                color: Theme.of(context).colorScheme.surface,
+                elevation: 8,
+                shadowColor: Colors.black.withOpacity(.15),
+                shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28))),
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  controller: scroll,
+                  child: NotificationListener<SizeChangedLayoutNotification>(
+                    onNotification: (_) {
+                      _fitContent(constraints.maxHeight);
+                      return false;
+                    },
+                    child: SizeChangedLayoutNotifier(
+                        child: Padding(
+                      key: _contentKey,
+                      padding: EdgeInsets.only(
+                          bottom: MediaQuery.paddingOf(context).bottom + 12),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Center(
+                            child: Container(
+                                margin:
+                                    const EdgeInsets.only(top: 10, bottom: 2),
+                                height: 4,
+                                width: 36,
+                                decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant,
+                                    borderRadius: BorderRadius.circular(4)))),
+                        widget.child,
+                      ]),
+                    )),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
 }

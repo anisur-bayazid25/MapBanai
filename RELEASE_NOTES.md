@@ -1,4 +1,14 @@
-# MapBanai v2.7.1 (build 35)
+# MapBanai v2.7.2 (build 36)
+
+- Fixed dark-mode contrast, clipped field captions, overlapping map controls and invisible Needs review markers. Visit and verification status actions have readable labels.
+- Study Area panels now open at the height of their content and remain draggable/scrollable. All three workflows have a + action to add a point at a fresh GPS location; line/polygon creation remains in GIS Mode. Fieldworker names come from the main Settings.
+- Bulk site/history cleanup shows affected counts, requires the project name and acknowledgement of unsynced-record loss, and keeps survey history by default when clearing a layer.
+- GIS Mode centers once on the first fresh device GPS fix. Folded-map basemap icons are consistent; Updated map uses a distinct export icon. Removed duplicate WebMap/CSV actions and project QR generation/import/dependencies; use .mbproj files to transfer projects.
+- Feature deletions now queue durable, revisioned deletion records for Google Sheets, with deletion time and fieldworker. Active maps hide deleted sites while Sheets and revision history retain audit records. Full project packages preserve deletion events.
+- Guided-visit photos are optional by default; explicit project-manager photo requirements still apply.
+
+**Deletion sync requires the updated manager Code.gs deployment.** Replace the script using the supplied manager workspace and update the existing Web app deployment to a new version, preserving its project ID, connection settings and API key. Until then, deletion records stay safely pending on the phone. Publishing this app does not change your Google deployment.
+
 
 - Fixed first-launch database locking that prevented project imports and Settings from loading. Screens now share one background SQL executor with independent, safely closed clients.
 - Fixed the name prompt's controller lifetime while its closing animation runs. Settings reports recoverable storage errors and offers Retry.

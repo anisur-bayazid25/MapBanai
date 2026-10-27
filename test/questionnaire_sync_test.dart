@@ -142,7 +142,7 @@ void main() {
       final package =
           await exporter.buildData(project, includeSyncConnection: true);
       final imported =
-          await ProjectImporter(other).commitQrData(package, newCopy: false);
+          await ProjectImporter(other).commitData(package, newCopy: false);
       expect((await other.getSyncConfig(imported.projectId))!.syncApiKey,
           'enum-key');
       expect((await other.getSyncConfig(imported.projectId))!.syncEndpointUrl,

@@ -933,9 +933,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get ui17cb282d8d29 => 'ফাইল বাছাইকারী খোলা যায়নি। আবার চেষ্টা করুন।';
 
   @override
-  String get uie5e1f203c3e2 => 'QR কোড পড়া যায়নি';
-
-  @override
   String get uibe443a8c429f => 'নির্বাচিত ফাইল পড়া যায়নি';
 
   @override
@@ -1237,9 +1234,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get ui649df08a448e => 'ইংরেজি';
-
-  @override
-  String get ui75320322f7f3 => 'MapBanai QR কোড বা লিংক দিন';
 
   @override
   String get ui7f84073ce3b4 => 'দশমিক সংখ্যা লিখুন';
@@ -2256,9 +2250,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get ui7a5cbb59b55f => 'সার্ভে খুলুন';
 
   @override
-  String get ui942b4ee5ed69 => 'প্রজেক্ট কোড স্ক্যান করতে ক্যামেরা খুলুন';
-
-  @override
   String get ui3f7389db6ed3 => 'বিকল্পের নাম ও লেবেল প্রয়োজন';
 
   @override
@@ -2271,15 +2262,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get ui5651e882f4a9 => 'উত্তরের অন্যান্য ফরম্যাট';
-
-  @override
-  String get ui55007921901d => 'পরিবর্তে পেস্ট করুন';
-
-  @override
-  String get uie5dc642cc6a3 => 'প্রজেক্ট কোড পেস্ট করুন';
-
-  @override
-  String get ui5c5260ab99c7 => 'MapBanai কোড এখানে পেস্ট করুন';
 
   @override
   String get ui781961bc81c2 => 'বিরতি';
@@ -2313,9 +2295,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get uic8b2e864eccb => 'ছবি';
-
-  @override
-  String get ui4cec4b3d3d96 => 'গ্যালারি থেকে QR ছবি বাছুন';
 
   @override
   String get uid3a2a512adb0 => 'ডিভাইস থেকে প্রজেক্ট প্যাকেজ বাছুন';
@@ -2379,9 +2358,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get uibd3091d453d7 => 'প্রজেক্ট অ্যাটলাস';
 
   @override
-  String get uib23aff4a7cbf => 'প্রজেক্টের QR কোড';
-
-  @override
   String get ui431c23dde814 => 'প্রজেক্ট ইতিমধ্যে আছে';
 
   @override
@@ -2403,10 +2379,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get ui5276d025220f => 'প্রজেক্ট সফলভাবে ইমপোর্ট হয়েছে।';
-
-  @override
-  String get ui379ec791fb77 =>
-      'সরাসরি QR স্থানান্তরের জন্য প্রজেক্টটি বেশি বড়।';
 
   @override
   String get ui9c8bf2326c83 => 'প্রজেক্টের লেয়ার';
@@ -2469,9 +2441,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String ui29bccf013ea5(String v0) {
     return 'প্রজেক্ট: $v0';
   }
-
-  @override
-  String get uiabba02fcdd8b => 'QR কোড';
 
   @override
   String get uif4c26c16fcc1 => 'প্রশ্নের লেবেল';
@@ -2801,12 +2770,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get uiae7e887517b0 => 'সংরক্ষণ হচ্ছে...';
-
-  @override
-  String get uie7d8c30678ab => 'QR কোড স্ক্যান করুন';
-
-  @override
-  String get uif64c3fbefbf2 => 'গ্যালারি থেকে QR স্ক্যান';
 
   @override
   String get ui555b8b1249e2 => 'নাম বা অবস্থান দিয়ে খুঁজুন';
@@ -3659,11 +3622,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String ui98df2bcb058d(String v0, String v1) {
-    return '“$v0” (সংস্করণ $v1)।\n\nএই কোডে শুধু প্রজেক্টের পরিচিতি আছে। ফোনে যোগ করতে প্রেরকের কাছে প্রজেক্ট ফাইল (.mbproj) বা ইমপোর্ট QR কোড চান।';
-  }
-
-  @override
   String get ui0c158c664316 =>
       'MapBanai-এর আগের ইনস্টলের ব্যাকআপ পাওয়া গেছে। সেটিংস ও সার্ভের উত্তর ফিরিয়ে আনবেন?';
 
@@ -3742,16 +3700,8 @@ class AppLocalizationsBn extends AppLocalizations {
       'একই প্রশ্নপত্র সার্ভে, জিআইএস ও স্টাডি এরিয়ার প্রশ্ন দেয়। ফর্ম তৈরি, সম্পাদনা বা XLSForm (.xlsx) ইমপোর্ট করতে পারেন।';
 
   @override
-  String get ui587e48c342b7 =>
-      'অনলাইন প্রজেক্ট লিংক এখনও সমর্থিত নয়। প্রেরকের কাছে .mbproj ফাইল বা প্রজেক্টের QR কোড চান।';
-
-  @override
   String get ui771de57db095 =>
       'ডিভাইস সেটিংসে “এই উৎস থেকে অনুমতি দিন” চালু করে আবার ডাউনলোড ও ইনস্টল চাপুন।';
-
-  @override
-  String get uif29d53eb9d2b =>
-      'MapBanai → ইমপোর্ট → প্রজেক্ট কোড পেস্ট-এ এই কোড দিন:';
 
   @override
   String uia490dc30efac(String v0, String v1, String v2) {
@@ -3772,20 +3722,12 @@ class AppLocalizationsBn extends AppLocalizations {
       'প্রজেক্টের আমন্ত্রণ এসেছে। ইমপোর্ট করতে MapBanai-এ .mbproj ফাইল খুলুন।';
 
   @override
-  String get uib8a8c7d48bb2 =>
-      'এই প্রজেক্ট ইমপোর্ট করতে অন্য ফোনে কোড স্ক্যান বা পেস্ট করুন।';
-
-  @override
   String get uie4fce3e26420 =>
       'আগে সেটিংসে ব্যবহারকারীর নাম দিন — তথ্য রিসেট নিশ্চিত করতে এটি প্রয়োজন।';
 
   @override
   String get ui2e3341bacb66 =>
       'উত্তরসহ সম্পূর্ণ প্রজেক্ট, উত্তর ছাড়া সেটআপ বা শুধু সংরক্ষিত উত্তর শেয়ার করুন। প্রজেক্ট প্যাকেজে সাধারণত জিআইএস ফাইল, ফর্ম, সেটিংস, ওয়েব URL ও API কী থাকে।';
-
-  @override
-  String get ui7a263d9455ed =>
-      'পরিবর্তে প্রজেক্ট ফাইল শেয়ার করুন; এই কোড দিয়ে প্রাপক সঠিক প্রজেক্ট পেয়েছেন কি না মিলিয়ে নিতে পারবেন।';
 
   @override
   String get ui33a5e91c7ff1 =>
@@ -4745,5 +4687,50 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String ui57d8a0369581(String v0, String v1) {
     return '$v0টি জরিপ · $v1টি মানচিত্র রেকর্ড';
+  }
+
+  @override
+  String get ui96f608c16cef => 'বাকি';
+
+  @override
+  String get uid1ecc7f909ab => 'অপরিবর্তিত / সম্পন্ন';
+
+  @override
+  String get ui9f94eae70b22 =>
+      'অনলাইন প্রজেক্ট লিংক এখনও সমর্থিত নয়। প্রেরকের কাছে প্রজেক্ট ফাইল (.mbproj) চান।';
+
+  @override
+  String uidc28bfa36b03(String v0) {
+    return 'স্থানটি মুছতে পারেনি: $v0';
+  }
+
+  @override
+  String get ui72dee98881cc => 'বর্তমান জিপিএস অবস্থানে পয়েন্ট যোগ করুন';
+
+  @override
+  String get ui28edaf4de42d =>
+      'এই কাজ ফিরিয়ে নেওয়া যাবে না। চালিয়ে যাওয়ার আগে ব্যাকআপ এক্সপোর্ট করুন।';
+
+  @override
+  String ui11753d7c0e00(String v0) {
+    return 'আমি বুঝেছি যে সিঙ্ক না হওয়া $v0টি রেকর্ড হারিয়ে যাবে।';
+  }
+
+  @override
+  String ui290774591872(String v0) {
+    return 'নিশ্চিত করতে প্রজেক্টের নাম লিখুন: $v0';
+  }
+
+  @override
+  String get uiaaaaecf77fe9 => 'ডিভাইস থেকে মুছুন';
+
+  @override
+  String ui44b817558a93(String v0, String v1, String v2) {
+    return '$v0: এই ডিভাইস থেকে $v1টি ম্যাপ পয়েন্ট ও $v2টি ইতিহাসের রেকর্ড মুছে যাবে। ক্লাউডের কপি অপরিবর্তিত থাকবে।';
+  }
+
+  @override
+  String ui3f3efb1d5de2(String v0, String v1) {
+    return 'এই ডিভাইস থেকে $v0টি ইতিহাসের রেকর্ড ও সংযুক্ত $v1টি ম্যাপ পয়েন্ট মুছে যাবে। ক্লাউডের কপি অপরিবর্তিত থাকবে।';
   }
 }

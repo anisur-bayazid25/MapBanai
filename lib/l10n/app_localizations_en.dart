@@ -938,9 +938,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not open the file picker. Please try again.';
 
   @override
-  String get uie5e1f203c3e2 => 'Could not read the QR code';
-
-  @override
   String get uibe443a8c429f => 'Could not read the selected file';
 
   @override
@@ -1244,9 +1241,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ui649df08a448e => 'English';
-
-  @override
-  String get ui75320322f7f3 => 'Enter a MapBanai QR code or link';
 
   @override
   String get ui7f84073ce3b4 => 'Enter decimal number';
@@ -2260,9 +2254,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ui7a5cbb59b55f => 'Open survey';
 
   @override
-  String get ui942b4ee5ed69 => 'Open the camera to scan a project code';
-
-  @override
   String get ui3f7389db6ed3 => 'Option name and label are required';
 
   @override
@@ -2275,15 +2266,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ui5651e882f4a9 => 'Other response formats';
-
-  @override
-  String get ui55007921901d => 'Paste instead';
-
-  @override
-  String get uie5dc642cc6a3 => 'Paste project code';
-
-  @override
-  String get ui5c5260ab99c7 => 'Paste the MapBanai code here';
 
   @override
   String get ui781961bc81c2 => 'Pause';
@@ -2317,9 +2299,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uic8b2e864eccb => 'Photos';
-
-  @override
-  String get ui4cec4b3d3d96 => 'Pick a QR image from your gallery';
 
   @override
   String get uid3a2a512adb0 => 'Pick a project package from your device';
@@ -2383,9 +2362,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get uibd3091d453d7 => 'Project Atlas';
 
   @override
-  String get uib23aff4a7cbf => 'Project QR code';
-
-  @override
   String get ui431c23dde814 => 'Project already exists';
 
   @override
@@ -2407,9 +2383,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ui5276d025220f => 'Project imported successfully.';
-
-  @override
-  String get ui379ec791fb77 => 'Project is too large for direct QR transfer.';
 
   @override
   String get ui9c8bf2326c83 => 'Project layers';
@@ -2472,9 +2445,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String ui29bccf013ea5(String v0) {
     return 'Project: $v0';
   }
-
-  @override
-  String get uiabba02fcdd8b => 'QR code';
 
   @override
   String get uif4c26c16fcc1 => 'Question label';
@@ -2805,12 +2775,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uiae7e887517b0 => 'Saving...';
-
-  @override
-  String get uie7d8c30678ab => 'Scan QR code';
-
-  @override
-  String get uif64c3fbefbf2 => 'Scan QR from gallery';
 
   @override
   String get ui555b8b1249e2 => 'Search by name or location';
@@ -3660,11 +3624,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String ui98df2bcb058d(String v0, String v1) {
-    return '\"$v0\" (version $v1).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.';
-  }
-
-  @override
   String get ui0c158c664316 =>
       'A backup from a previous MapBanai install was found. Restore settings and survey responses?';
 
@@ -3744,16 +3703,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file.';
 
   @override
-  String get ui587e48c342b7 =>
-      'Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.';
-
-  @override
   String get ui771de57db095 =>
       'Open the device settings and enable \"Allow from this source\", then tap Download & Install again.';
-
-  @override
-  String get uif29d53eb9d2b =>
-      'Paste this code into MapBanai → Import → Paste project code:';
 
   @override
   String uia490dc30efac(String v0, String v1, String v2) {
@@ -3774,20 +3725,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Project invite received. Open the .mbproj file in MapBanai to import it.';
 
   @override
-  String get uib8a8c7d48bb2 =>
-      'Scan or paste this code on another phone to import this project.';
-
-  @override
   String get uie4fce3e26420 =>
       'Set a user name in Settings first — it is required to confirm a data reset.';
 
   @override
   String get ui2e3341bacb66 =>
       'Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.';
-
-  @override
-  String get ui7a263d9455ed =>
-      'Share the project file instead; this code lets the receiving phone confirm it got the right project.';
 
   @override
   String get ui33a5e91c7ff1 =>
@@ -4746,5 +4689,50 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String ui57d8a0369581(String v0, String v1) {
     return '$v0 surveys · $v1 map records';
+  }
+
+  @override
+  String get ui96f608c16cef => 'Pending';
+
+  @override
+  String get uid1ecc7f909ab => 'Unchanged / Done';
+
+  @override
+  String get ui9f94eae70b22 =>
+      'Online project links are not supported yet. Ask the sender for the project file (.mbproj).';
+
+  @override
+  String uidc28bfa36b03(String v0) {
+    return 'Could not delete site: $v0';
+  }
+
+  @override
+  String get ui72dee98881cc => 'Add point at GPS';
+
+  @override
+  String get ui28edaf4de42d =>
+      'This cannot be undone. Export a backup before continuing.';
+
+  @override
+  String ui11753d7c0e00(String v0) {
+    return 'I understand that $v0 unsynced records will be lost.';
+  }
+
+  @override
+  String ui290774591872(String v0) {
+    return 'Type the project name to confirm: $v0';
+  }
+
+  @override
+  String get uiaaaaecf77fe9 => 'Delete from device';
+
+  @override
+  String ui44b817558a93(String v0, String v1, String v2) {
+    return '$v0: $v1 map points and $v2 history records will be removed from this device. Cloud copies remain unchanged.';
+  }
+
+  @override
+  String ui3f3efb1d5de2(String v0, String v1) {
+    return '$v0 history records and $v1 linked map points will be removed from this device. Cloud copies remain unchanged.';
   }
 }

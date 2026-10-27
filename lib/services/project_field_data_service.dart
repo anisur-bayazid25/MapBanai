@@ -21,6 +21,14 @@ class ProjectFieldDataService {
 
   Future<Map<String, dynamic>> export(Project project) async {
     final sessions = await db.getSurveySessionsByProject(project.id);
+    final deletionSeed =
+        await db.getSetting('project_study_deletions_${project.id}');
+    final deletions = [
+      ...await store.loadDeletions(),
+      if (deletionSeed != null)
+        ...(jsonDecode(deletionSeed) as List).map((raw) =>
+            StudyAreaDeletion.fromJson(Map<String, dynamic>.from(raw as Map)))
+    ];
     final pendingSeed = await db.getSetting('project_study_seed_${project.id}');
     final storedSites = pendingSeed == null
         ? await store.loadSites()
@@ -95,6 +103,10 @@ class ProjectFieldDataService {
           }
       ],
       'study_sites': sites.map((site) => site.toJson()).toList(),
+      'study_deletions': deletions
+          .where((d) => GuidedVisitService.belongsToProject(d.site, project))
+          .map((d) => d.toJson())
+          .toList(),
       'history_exclusions': exclusion == null ? {} : jsonDecode(exclusion),
       'initialized_layer_ids':
           initialized == null ? [] : jsonDecode(initialized),
@@ -152,7 +164,11 @@ class ProjectFieldDataService {
 
     final data = Map<String, dynamic>.from(restore(raw) as Map);
     final siteIds = <String, String>{
-      for (final site in data['study_sites'] as List)
+      for (final site in [
+        ...data['study_sites'] as List,
+        for (final deletion in data['study_deletions'] as List? ?? [])
+          (deletion as Map)['site']
+      ])
         if (site is Map && site['id'] is String)
           site['id']:
               newCopy ? '${project.externalId}:${site['id']}' : site['id']
@@ -178,7 +194,8 @@ class ProjectFieldDataService {
       if (response['site_id'] is String)
         response['site_id'] =
             siteIds[response['site_id']] ?? response['site_id'];
-      if (response['workflow'] == 'study_collection_v1') {
+      if (response['workflow'] == 'study_collection_v1' ||
+          response['workflow'] == 'study_area_feature_v1') {
         response['project_external_id'] = project.externalId;
         response['feature_uuid'] = const Uuid()
             .v5(Uuid.NAMESPACE_URL, 'mapbanai:feature:${response['site_id']}');
@@ -230,6 +247,15 @@ class ProjectFieldDataService {
     // SQLite import remains atomic. The map store consumes this durable seed
     // once when Study Area opens, then normal point deletion stays permanent.
     await db.setSetting('project_study_seed_${project.id}', jsonEncode(sites));
+    await db.setSetting(
+        'project_study_deletions_${project.id}',
+        jsonEncode([
+          for (final deletion in data['study_deletions'] as List? ?? [])
+            {
+              ...Map<String, dynamic>.from(deletion as Map),
+              'site': remapSite(deletion['site'] as Map)
+            }
+        ]));
     if (data['initialized_layer_ids'] is List)
       await db.setSetting('project_vector_initialized_${project.id}',
           jsonEncode(data['initialized_layer_ids']));

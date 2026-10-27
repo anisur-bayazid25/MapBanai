@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+import 'package:mapbanai/ui/common/app_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -69,6 +71,13 @@ class FakePermissionHandlerPlatform extends PermissionHandlerPlatform {
 
 class FakeMaplibrePlatform implements MapLibrePlatform {
   final Map<String, Map<String, dynamic>> sources = {};
+  final cameraUpdates = <CameraUpdate>[];
+  @override
+  Future<bool?> animateCamera(CameraUpdate update, {Duration? duration}) async {
+    cameraUpdates.add(update);
+    return true;
+  }
+
   int viewId = 1;
   int _viewsBuilt = 0;
 
@@ -181,11 +190,12 @@ Position testFix({
   double lon = 90.4125,
   double accuracy = 5.0,
   double altitude = 20.0,
+  DateTime? timestamp,
 }) {
   return Position(
     latitude: lat,
     longitude: lon,
-    timestamp: DateTime.utc(2026, 8, 17, 12, 0, 0),
+    timestamp: timestamp ?? DateTime.now(),
     accuracy: accuracy,
     altitude: altitude,
     altitudeAccuracy: 2,
@@ -280,6 +290,37 @@ void main() {
       tempDir.deleteSync(recursive: true);
     } catch (_) {}
   });
+
+  for (final fixBeforeStyle in [true, false]) {
+    testWidgets(
+        'GIS centers once on fresh GPS; fix before style: $fixBeforeStyle',
+        (tester) async {
+      await tester.pumpWidget(
+          const MaterialApp(home: GisModeScreen(projectName: 'Test Project')));
+      await pumpFrames(tester, 12);
+      if (fixBeforeStyle) {
+        geolocator.emit(testFix(lat: 22.5, lon: 89.5));
+        await pumpFrames(tester);
+        expect(fake.cameraUpdates, isEmpty);
+      }
+      fake.onMapStyleLoadedPlatform.call(null);
+      await pumpFrames(tester);
+      if (!fixBeforeStyle) {
+        geolocator.emit(testFix(lat: 22.5, lon: 89.5));
+        await pumpFrames(tester);
+      }
+      expect(fake.cameraUpdates.single.toJson(), [
+        'newLatLngZoom',
+        [22.5, 89.5],
+        16.0
+      ]);
+      geolocator.emit(testFix(lat: 22.6, lon: 89.6));
+      await pumpFrames(tester);
+      expect(fake.cameraUpdates, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpFrames(tester);
+    });
+  }
 
   testWidgets(
       'canceling resumed draft does not overwrite it with a new feature',
@@ -402,9 +443,12 @@ void main() {
   });
 
   Future<void> pumpMeasureSetup(WidgetTester tester,
-      FakeGeolocatorPlatform geolocator, FakeMaplibrePlatform fake) async {
+      FakeGeolocatorPlatform geolocator, FakeMaplibrePlatform fake,
+      {Brightness brightness = Brightness.light}) async {
     await tester.pumpWidget(
-      const MaterialApp(home: GisModeScreen(projectName: 'Test Project')),
+      MaterialApp(
+          theme: MapBanaiTheme.create(brightness),
+          home: const GisModeScreen(projectName: 'Test Project')),
     );
     await pumpFrames(tester);
     geolocator.emit(testFix());
@@ -492,4 +536,33 @@ void main() {
     await pumpFrames(tester);
     expect(find.text('Measure area — tap points on the map'), findsNothing);
   });
+
+  for (final tool in ['Measure Distance', 'Measure Area']) {
+    testWidgets('dark $tool banner has readable surfaces and metrics',
+        (tester) async {
+      await pumpMeasureSetup(tester, geolocator, fake,
+          brightness: Brightness.dark);
+      await tester.tap(find.byTooltip(tool));
+      await pumpFrames(tester);
+      callMapClick(fake, 23.8103, 90.4125);
+      callMapClick(fake, 23.8110, 90.4135);
+      await pumpFrames(tester, 12);
+      final title = find.text(tool == 'Measure Distance'
+          ? 'Measure distance — tap points on the map'
+          : 'Measure area — tap points on the map');
+      final card = tester.widget<Card>(
+          find.ancestor(of: title, matching: find.byType(Card)).first);
+      for (final finder in [title, find.textContaining('2 pts')]) {
+        final text = tester.widget<Text>(finder);
+        final foreground = text.style?.color ??
+            DefaultTextStyle.of(tester.element(finder)).style.color!;
+        final a = foreground.computeLuminance(),
+            b = card.color!.computeLuminance();
+        expect((math.max(a, b) + .05) / (math.min(a, b) + .05),
+            greaterThanOrEqualTo(4.5));
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 }

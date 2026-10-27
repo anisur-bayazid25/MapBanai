@@ -8,6 +8,8 @@ import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/site_timeline_screen.dart';
 
 class TimelineStore extends StudyAreaStore {
+  @override
+  Future<List<StudyAreaDeletion>> loadDeletions() async => [];
   final List<StudyAreaSite> sites;
   TimelineStore(this.sites);
   @override

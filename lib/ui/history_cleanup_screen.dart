@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/confirm_field_data_removal.dart';
 import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -92,44 +93,17 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
           await _service.preview(scope, removePoints: _removePoints);
       if (!mounted) return;
       if (preview.records.isEmpty) return;
-      final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-                title: Text(ui(context, 'Delete selected history?')),
-                content: SingleChildScrollView(
-                    child: Text(ui(
-                        context,
-                        '{v0}\n\n{v1} history records will be deleted, including {v2} waiting to sync.\n{v3}{v4}\nThis cannot be undone. Copies already uploaded to the cloud remain there.',
-                        [
-                      preview.project.name,
-                      preview.records.length,
-                      preview.pendingCount,
-                      preview.removePoints
-                          ? ui(
-                              context,
-                              '{v0} linked Study Area points will also be removed.\n',
-                              [
-                                  preview.points.length
-                                ])
-                          : ui(context,
-                              'Study Area points will stay on the map.\n'),
-                      preview.relatedCount > 0
-                          ? ui(
-                              context,
-                              '\nIncludes {v0} other records linked to the same removed points.\n',
-                              [preview.relatedCount])
-                          : ''
-                    ]))),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: Text(ui(context, 'Cancel'))),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: Text(ui(context, 'Delete {v0} records',
-                          [preview.records.length]))),
-                ],
-              ));
+      final confirmed = await confirmFieldDataRemoval(context,
+          title: ui(context, 'Delete selected history?'),
+          projectName: preview.project.name,
+          pendingCount: preview.pendingCount,
+          details: ui(
+              context,
+              '{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.',
+              [
+                preview.records.length,
+                preview.removePoints ? preview.points.length : 0
+              ]));
       if (confirmed != true) return;
       final removed = await _service.delete(preview);
       if (!mounted) return;

@@ -19,7 +19,6 @@ import 'package:mapbanai/services/photo_sync_service.dart';
 import 'package:mapbanai/services/project_links.dart';
 import 'package:mapbanai/services/project_importer.dart';
 import 'package:mapbanai/services/project_sharing_flow.dart';
-import 'package:mapbanai/services/qr_scanner.dart';
 import 'package:mapbanai/services/sync_orchestrator.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/services/webmap_data_service.dart';
@@ -177,10 +176,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (raw.startsWith('http') || raw.startsWith('mapbanai:')) {
       final info = ProjectLinks.parse(raw);
       if (info == null || !mounted) return;
-      if (info.qrPayload != null && info.qrPayload!.isNotEmpty) {
-        await _runProjectImport(qrPayload: info.qrPayload);
-        return;
-      }
       final file = info.fileUri;
       if (file != null &&
           !file.startsWith('content://') &&
@@ -190,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SnackBar(
             content: Text(
               ui(context,
-                  'Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.'),
+                  'Online project links are not supported yet. Ask the sender for the project file (.mbproj).'),
             ),
           ),
         );
@@ -220,13 +215,12 @@ class _HomeScreenState extends State<HomeScreen> {
     await _runProjectImport(filePath: path);
   }
 
-  Future<void> _runProjectImport({String? filePath, String? qrPayload}) async {
+  Future<void> _runProjectImport({String? filePath}) async {
     final flow = ProjectSharingFlow(database: _database);
     await runProjectImport(
       context,
       flow: flow,
-      filePath: filePath,
-      qrPayload: qrPayload,
+      filePath: filePath!,
       onImported: () {
         _loadProjects();
       },
@@ -235,164 +229,21 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
-  /// Home → Import Project: choose a .mbproj file, paste a project code or
-  /// scan a project QR code.
+  /// Import a project package directly from the device.
   Future<void> _startImportFlow() async {
-    final source = await showDialog<String>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(ui(context, 'Import project')),
-        children: [
-          ListTile(
-            leading: const Icon(Icons.folder_open_rounded),
-            title: Text(ui(context, 'Choose .mbproj file')),
-            subtitle:
-                Text(ui(context, 'Pick a project package from your device')),
-            onTap: () => Navigator.pop(context, 'file'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.qr_code_2_rounded),
-            title: Text(ui(context, 'Paste project code')),
-            subtitle: Text(ui(context, 'Enter a MapBanai QR code or link')),
-            onTap: () => Navigator.pop(context, 'paste'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.qr_code_scanner_rounded),
-            title: Text(ui(context, 'Scan QR code')),
-            subtitle:
-                Text(ui(context, 'Open the camera to scan a project code')),
-            onTap: () => Navigator.pop(context, 'scan'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: Text(ui(context, 'Scan QR from gallery')),
-            subtitle: Text(ui(context, 'Pick a QR image from your gallery')),
-            onTap: () => Navigator.pop(context, 'gallery'),
-          ),
-        ],
-      ),
-    );
-    if (source == null || !mounted) return;
-
-    if (source == 'file') {
-      try {
-        final path = await SafProjectFileSink().pickPackageFile();
-        if (path == null || !mounted) return; // user cancelled
-        await _runProjectImport(filePath: path);
-      } catch (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              error is ProjectImportException || error is FormatException
-                  ? friendlyImportMessage(error)
-                  : ui(context,
-                      'Could not open the file picker. Please try again.'),
-            ),
-          ),
-        );
-      }
-      return;
+    try {
+      final path = await SafProjectFileSink().pickPackageFile();
+      if (path == null || !mounted) return;
+      await _runProjectImport(filePath: path);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is ProjectImportException ||
+                error is FormatException
+            ? friendlyImportMessage(error)
+            : ui(context, 'Could not open the file picker. Please try again.')),
+      ));
     }
-
-    if (source == 'scan') {
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        final payload = await QrScanner.scanFromCamera();
-        if (!mounted || payload.trim().isEmpty) return;
-        await _runProjectImport(qrPayload: payload.trim());
-      } on QrScanException catch (error) {
-        if (!mounted) return;
-        final shown = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(ui(context, 'Could not read the QR code')),
-            content: Text(error.message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(ui(context, 'Close')),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final payload = await _promptPasteCode();
-                  if (!context.mounted) return;
-                  Navigator.pop(
-                      context, payload != null && payload.trim().isNotEmpty);
-                  if (payload != null && payload.trim().isNotEmpty) {
-                    await _runProjectImport(qrPayload: payload.trim());
-                  }
-                },
-                child: Text(ui(context, 'Paste instead')),
-              ),
-            ],
-          ),
-        );
-        if (shown ?? false) return; // pasted via the dialog
-        messenger.showSnackBar(
-          SnackBar(content: Text(error.message)),
-        );
-      } catch (error) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(content: Text(friendlyImportMessage(error))),
-        );
-      }
-      return;
-    }
-
-    if (source == 'gallery') {
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        final payload = await QrScanner.scanFromGallery();
-        if (!mounted || payload.trim().isEmpty) return;
-        await _runProjectImport(qrPayload: payload.trim());
-      } on QrScanException catch (error) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(content: Text(error.message)),
-        );
-      } catch (error) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(content: Text(friendlyImportMessage(error))),
-        );
-      }
-      return;
-    }
-
-    final payload = await _promptPasteCode();
-    if (payload == null || payload.trim().isEmpty || !mounted) return;
-    await _runProjectImport(qrPayload: payload.trim());
-  }
-
-  Future<String?> _promptPasteCode() {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(ui(context, 'Paste project code')),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 4,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: ui(context, 'Paste the MapBanai code here'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(ui(context, 'Cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(ui(context, 'Import')),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Non-intrusive background update check: never blocks startup, never

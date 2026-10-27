@@ -78,7 +78,7 @@ class ProjectImportException implements Exception {
   String toString() => 'ProjectImportException($error): $message';
 }
 
-/// Validates and imports .mbproj packages (and inline QR payloads through
+/// Validates and imports .mbproj packages and project definitions through
 /// [commitData]).
 ///
 /// Security rules:
@@ -472,9 +472,9 @@ class ProjectImporter {
     });
   }
 
-  /// Commits an inline-QR payload as the source (no zip, no temp dir).
+  /// Commits a validated project definition, including reusable templates.
   /// Same conflict rules as [commit].
-  Future<ImportCommitResult> commitQrData(
+  Future<ImportCommitResult> commitData(
     ProjectPackageData data, {
     required bool newCopy,
     int? replaceExistingId,

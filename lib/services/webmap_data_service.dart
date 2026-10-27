@@ -34,11 +34,28 @@ class WebMapDataService {
     }
     final sessions = await query.get();
 
+    final deletedSites = <String>{};
+    for (final session in sessions) {
+      try {
+        final raw = jsonDecode(session.responses);
+        if (raw is! Map) continue;
+        if (raw['deleted'] == true && raw['site_id'] != null)
+          deletedSites.add('${session.projectId}:${raw['site_id']}');
+      } catch (_) {/* A malformed legacy record has no deletion identity. */}
+    }
+    if (studyAreaStore != null) {
+      for (final deletion in await studyAreaStore!.loadDeletions())
+        deletedSites.add('${deletion.site.projectId}:${deletion.site.id}');
+    }
     final features = <Map<String, dynamic>>[];
     for (final s in sessions) {
       try {
-        if ((jsonDecode(s.responses) as Map)['workflow'] ==
-                'study_area_feature_v1' &&
+        final response = jsonDecode(s.responses) as Map;
+        final linkedSite = response['site_id'] ??
+            (response['visit'] is Map ? response['visit']['site_id'] : null);
+        if (response['deleted'] == true ||
+            deletedSites.contains('${s.projectId}:$linkedSite')) continue;
+        if (response['workflow'] == 'study_area_feature_v1' &&
             studyAreaStore != null) continue;
       } catch (_) {}
       final feature = await _sessionToFeature(s);
@@ -114,12 +131,25 @@ class WebMapDataService {
         });
       }
     }
+    final vectors = projectId == null
+        ? <Map<String, dynamic>>[]
+        : await ProjectVectorLayerService(db).load(projectId);
+    final project =
+        projectId == null ? null : await db.getProjectById(projectId);
+    for (final layer in vectors) {
+      final ids = layer['study_site_ids'] as List?;
+      final source = layer['features'] as List;
+      layer['features'] = [
+        for (var i = 0; i < source.length; i++)
+          if (!deletedSites.contains(
+              '$projectId:${ids != null && i < ids.length ? ids[i] : '${project?.externalId}:${layer['id']}:$i'}'))
+            source[i]
+      ];
+    }
     return {
       'type': 'FeatureCollection',
       'features': features,
-      'vector_layers': projectId == null
-          ? []
-          : await ProjectVectorLayerService(db).load(projectId),
+      'vector_layers': vectors,
       'project_name': projectId == null
           ? ''
           : (await db.getProjectById(projectId))?.name ?? '',
@@ -153,7 +183,7 @@ class WebMapDataService {
       return null;
     }
 
-    if (resp['record_kind'] == 'status') return null;
+    if (resp['deleted'] == true || resp['record_kind'] == 'status') return null;
 
     if (resp['geometry'] is Map) {
       return {

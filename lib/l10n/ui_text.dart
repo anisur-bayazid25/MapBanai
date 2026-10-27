@@ -175,7 +175,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Could not open link': return l10n.uiff2ce6da5800;
     case 'Could not open map: {v0}': return l10n.ui50a313090b94(value(0));
     case 'Could not open the file picker. Please try again.': return l10n.ui17cb282d8d29;
-    case 'Could not read the QR code': return l10n.uie5e1f203c3e2;
     case 'Could not read the selected file': return l10n.uibe443a8c429f;
     case 'Could not read this draft': return l10n.uid77db0286a5e;
     case 'Could not save acceptance: {v0}': return l10n.uif3267458c32e(value(0));
@@ -263,7 +262,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Edit — {v0}': return l10n.ui12faa0f2ccff(value(0));
     case 'Email': return l10n.ui84add5b29527;
     case 'English': return l10n.ui649df08a448e;
-    case 'Enter a MapBanai QR code or link': return l10n.ui75320322f7f3;
     case 'Enter decimal number': return l10n.ui7f84073ce3b4;
     case 'Enter long text': return l10n.ui02b5062f9c93;
     case 'Enter number': return l10n.uib616e9721b5f;
@@ -557,14 +555,10 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Open map': return l10n.uie56f29da2af3;
     case 'Open study-area map': return l10n.uicb29cc08fc8f;
     case 'Open survey': return l10n.ui7a5cbb59b55f;
-    case 'Open the camera to scan a project code': return l10n.ui942b4ee5ed69;
     case 'Option name and label are required': return l10n.ui3f7389db6ed3;
     case 'Options ({v0})': return l10n.ui7ef766113146(value(0));
     case 'Original imported data': return l10n.uia6aab53912af;
     case 'Other response formats': return l10n.ui5651e882f4a9;
-    case 'Paste instead': return l10n.ui55007921901d;
-    case 'Paste project code': return l10n.uie5dc642cc6a3;
-    case 'Paste the MapBanai code here': return l10n.ui5c5260ab99c7;
     case 'Pause': return l10n.ui781961bc81c2;
     case 'Pause GPS stream': return l10n.uie1f973e6e1a9;
     case 'Pending verification': return l10n.uif0ac0a5c9beb;
@@ -575,7 +569,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Photo gallery': return l10n.ui782facfeed05;
     case 'Photo: {v0}': return l10n.ui431dc8d2e072(value(0));
     case 'Photos': return l10n.uic8b2e864eccb;
-    case 'Pick a QR image from your gallery': return l10n.ui4cec4b3d3d96;
     case 'Pick a project package from your device': return l10n.uid3a2a512adb0;
     case 'Please add at least one question': return l10n.uia41391d44a4e;
     case 'Please enter a form name': return l10n.ui0e992c42efc9;
@@ -595,7 +588,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Project': return l10n.uif6f4da8d93e8;
     case 'Project "{v0}" deleted': return l10n.ui1e7149806327(value(0));
     case 'Project Atlas': return l10n.uibd3091d453d7;
-    case 'Project QR code': return l10n.uib23aff4a7cbf;
     case 'Project already exists': return l10n.ui431c23dde814;
     case 'Project archived': return l10n.ui225209bf7dec;
     case 'Project code': return l10n.uib23910158f74;
@@ -603,7 +595,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Project exported successfully.': return l10n.ui15626cd209c8;
     case 'Project files and map layers': return l10n.ui966c4d7db1ab;
     case 'Project imported successfully.': return l10n.ui5276d025220f;
-    case 'Project is too large for direct QR transfer.': return l10n.ui379ec791fb77;
     case 'Project layers': return l10n.ui9c8bf2326c83;
     case 'Project multiple logs on WebMap': return l10n.ui0a71e1dcd500;
     case 'Project multiple on WebMap': return l10n.uib046dc8ee258;
@@ -622,7 +613,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Project without responses (.mbproj)': return l10n.uia476649af65d;
     case 'Project {v0} logs': return l10n.ui343f53c678de(value(0));
     case 'Project: {v0}': return l10n.ui29bccf013ea5(value(0));
-    case 'QR code': return l10n.uiabba02fcdd8b;
     case 'Question label': return l10n.uif4c26c16fcc1;
     case 'Question names must be valid and unique: {v0}': return l10n.ui16b39146c10b(value(0));
     case 'Question type': return l10n.uia60d848de552;
@@ -723,8 +713,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Saved responses appear here; unfinished work is kept as drafts': return l10n.ui28bb6965aeec;
     case 'Saved visit': return l10n.uibf4522143a41;
     case 'Saving...': return l10n.uiae7e887517b0;
-    case 'Scan QR code': return l10n.uie7d8c30678ab;
-    case 'Scan QR from gallery': return l10n.uif64c3fbefbf2;
     case 'Search by name or location': return l10n.ui555b8b1249e2;
     case 'Select GeoJSON, GeoPackage, SHP/ZIP, CSV, Excel or KML/KMZ.': return l10n.ui5c562a19562f;
     case 'Select a project above to see its collected data.': return l10n.uif19de55e63d0;
@@ -970,7 +958,6 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case '{v0}: enter a valid {v1}': return l10n.uic7c34d515c8f(value(0), value(1));
     case '{v0}: {v1} vertices. Tap map to add vertices.': return l10n.uib0b6457093f6(value(0), value(1));
     case '"{v0}" (version {v1}) is already on this device.': return l10n.ui55cedac6145e(value(0), value(1));
-    case '"{v0}" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.': return l10n.ui98df2bcb058d(value(0), value(1));
     case 'A backup from a previous MapBanai install was found. Restore settings and survey responses?': return l10n.ui0c158c664316;
     case 'Archive "{v0}"? It will be hidden from project setup. Its data is kept and can be restored later.': return l10n.ui14aec94c06c0(value(0));
     case 'Choose an export option above — the file will be shared or saved where you want it.': return l10n.uid11a9f1a48ea;
@@ -989,17 +976,13 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'No projects yet — open Project Settings on Home to create one, or use Import Project to import a .mbproj file': return l10n.ui2b0631b176cd;
     case 'No projects yet — open Project Settings to create one, or use Import Project to import a .mbproj file': return l10n.uib9f28dea1644;
     case 'One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file.': return l10n.ui21e3b0114215;
-    case 'Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.': return l10n.ui587e48c342b7;
     case 'Open the device settings and enable "Allow from this source", then tap Download & Install again.': return l10n.ui771de57db095;
-    case 'Paste this code into MapBanai → Import → Paste project code:': return l10n.uif29d53eb9d2b;
     case 'Point\n{v0}, {v1}{v2}': return l10n.uia490dc30efac(value(0), value(1), value(2));
     case 'Point saves the current fix once with a note; continuous recording below drives line/track logging.': return l10n.uib3b06ed785b2;
     case 'Polygon  •  {v0} vertices\narea: {v1}  •  perimeter: {v2}': return l10n.ui2181a49983f5(value(0), value(1), value(2));
     case 'Project invite received. Open the .mbproj file in MapBanai to import it.': return l10n.ui793e65ec7509;
-    case 'Scan or paste this code on another phone to import this project.': return l10n.uib8a8c7d48bb2;
     case 'Set a user name in Settings first — it is required to confirm a data reset.': return l10n.uie4fce3e26420;
     case 'Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.': return l10n.ui2e3341bacb66;
-    case 'Share the project file instead; this code lets the receiving phone confirm it got the right project.': return l10n.ui7a263d9455ed;
     case 'Slow on mobile data? Open in browser to use your phone’s browser download, then open the downloaded APK to install.': return l10n.ui33a5e91c7ff1;
     case 'The matching DBF attribute file is not accessible. Choose the folder containing the SHP, DBF, SHX, PRJ and CPG files, or import geometry only. You can also select those files together.': return l10n.ui71529ccaf336;
     case 'This permanently deletes all projects, survey responses, stored forms and GPS logs. Type your user name exactly as shown to confirm:': return l10n.ui7e91262eef11;
@@ -1295,6 +1278,17 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Required questionnaires and photos for each workflow': return l10n.ui39854cbe2f78;
     case 'Could not load settings. Please try again.': return l10n.ui1c8464e927ab;
     case '{v0} surveys · {v1} map records': return l10n.ui57d8a0369581(value(0), value(1));
+    case 'Pending': return l10n.ui96f608c16cef;
+    case 'Unchanged / Done': return l10n.uid1ecc7f909ab;
+    case 'Online project links are not supported yet. Ask the sender for the project file (.mbproj).': return l10n.ui9f94eae70b22;
+    case 'Could not delete site: {v0}': return l10n.uidc28bfa36b03(value(0));
+    case 'Add point at GPS': return l10n.ui72dee98881cc;
+    case 'This cannot be undone. Export a backup before continuing.': return l10n.ui28edaf4de42d;
+    case 'I understand that {v0} unsynced records will be lost.': return l10n.ui11753d7c0e00(value(0));
+    case 'Type the project name to confirm: {v0}': return l10n.ui290774591872(value(0));
+    case 'Delete from device': return l10n.uiaaaaecf77fe9;
+    case '{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.': return l10n.ui44b817558a93(value(0), value(1), value(2));
+    case '{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.': return l10n.ui3f3efb1d5de2(value(0), value(1));
     default:
       for (final prefix in ['Bad state: ', 'FormatException: ']) {
         if (message.startsWith(prefix)) return ui(context, message.substring(prefix.length));

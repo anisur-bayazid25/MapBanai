@@ -980,10 +980,6 @@
   "@ui17cb282d8d29": {
     "description": "Could not open the file picker. Please try again."
   },
-  "uie5e1f203c3e2": "Could not read the QR code",
-  "@uie5e1f203c3e2": {
-    "description": "Could not read the QR code"
-  },
   "uibe443a8c429f": "Could not read the selected file",
   "@uibe443a8c429f": {
     "description": "Could not read the selected file"
@@ -1435,10 +1431,6 @@
   "ui649df08a448e": "English",
   "@ui649df08a448e": {
     "description": "English"
-  },
-  "ui75320322f7f3": "Enter a MapBanai QR code or link",
-  "@ui75320322f7f3": {
-    "description": "Enter a MapBanai QR code or link"
   },
   "ui7f84073ce3b4": "Enter decimal number",
   "@ui7f84073ce3b4": {
@@ -2919,10 +2911,6 @@
   "@ui7a5cbb59b55f": {
     "description": "Open survey"
   },
-  "ui942b4ee5ed69": "Open the camera to scan a project code",
-  "@ui942b4ee5ed69": {
-    "description": "Open the camera to scan a project code"
-  },
   "ui3f7389db6ed3": "Option name and label are required",
   "@ui3f7389db6ed3": {
     "description": "Option name and label are required"
@@ -2943,18 +2931,6 @@
   "ui5651e882f4a9": "Other response formats",
   "@ui5651e882f4a9": {
     "description": "Other response formats"
-  },
-  "ui55007921901d": "Paste instead",
-  "@ui55007921901d": {
-    "description": "Paste instead"
-  },
-  "uie5dc642cc6a3": "Paste project code",
-  "@uie5dc642cc6a3": {
-    "description": "Paste project code"
-  },
-  "ui5c5260ab99c7": "Paste the MapBanai code here",
-  "@ui5c5260ab99c7": {
-    "description": "Paste the MapBanai code here"
   },
   "ui781961bc81c2": "Pause",
   "@ui781961bc81c2": {
@@ -3000,10 +2976,6 @@
   "uic8b2e864eccb": "Photos",
   "@uic8b2e864eccb": {
     "description": "Photos"
-  },
-  "ui4cec4b3d3d96": "Pick a QR image from your gallery",
-  "@ui4cec4b3d3d96": {
-    "description": "Pick a QR image from your gallery"
   },
   "uid3a2a512adb0": "Pick a project package from your device",
   "@uid3a2a512adb0": {
@@ -3091,10 +3063,6 @@
   "@uibd3091d453d7": {
     "description": "Project Atlas"
   },
-  "uib23aff4a7cbf": "Project QR code",
-  "@uib23aff4a7cbf": {
-    "description": "Project QR code"
-  },
   "ui431c23dde814": "Project already exists",
   "@ui431c23dde814": {
     "description": "Project already exists"
@@ -3127,10 +3095,6 @@
   "ui5276d025220f": "Project imported successfully.",
   "@ui5276d025220f": {
     "description": "Project imported successfully."
-  },
-  "ui379ec791fb77": "Project is too large for direct QR transfer.",
-  "@ui379ec791fb77": {
-    "description": "Project is too large for direct QR transfer."
   },
   "ui9c8bf2326c83": "Project layers",
   "@ui9c8bf2326c83": {
@@ -3223,10 +3187,6 @@
         "type": "String"
       }
     }
-  },
-  "uiabba02fcdd8b": "QR code",
-  "@uiabba02fcdd8b": {
-    "description": "QR code"
   },
   "uif4c26c16fcc1": "Question label",
   "@uif4c26c16fcc1": {
@@ -3682,14 +3642,6 @@
   "uiae7e887517b0": "Saving...",
   "@uiae7e887517b0": {
     "description": "Saving..."
-  },
-  "uie7d8c30678ab": "Scan QR code",
-  "@uie7d8c30678ab": {
-    "description": "Scan QR code"
-  },
-  "uif64c3fbefbf2": "Scan QR from gallery",
-  "@uif64c3fbefbf2": {
-    "description": "Scan QR from gallery"
   },
   "ui555b8b1249e2": "Search by name or location",
   "@ui555b8b1249e2": {
@@ -4937,18 +4889,6 @@
       }
     }
   },
-  "ui98df2bcb058d": "\"{v0}\" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.",
-  "@ui98df2bcb058d": {
-    "description": "\"{v0}\" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.",
-    "placeholders": {
-      "v0": {
-        "type": "String"
-      },
-      "v1": {
-        "type": "String"
-      }
-    }
-  },
   "ui0c158c664316": "A backup from a previous MapBanai install was found. Restore settings and survey responses?",
   "@ui0c158c664316": {
     "description": "A backup from a previous MapBanai install was found. Restore settings and survey responses?"
@@ -5068,17 +5008,9 @@
   "@ui21e3b0114215": {
     "description": "One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file."
   },
-  "ui587e48c342b7": "Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.",
-  "@ui587e48c342b7": {
-    "description": "Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code."
-  },
   "ui771de57db095": "Open the device settings and enable \"Allow from this source\", then tap Download & Install again.",
   "@ui771de57db095": {
     "description": "Open the device settings and enable \"Allow from this source\", then tap Download & Install again."
-  },
-  "uif29d53eb9d2b": "Paste this code into MapBanai → Import → Paste project code:",
-  "@uif29d53eb9d2b": {
-    "description": "Paste this code into MapBanai → Import → Paste project code:"
   },
   "uia490dc30efac": "Point\n{v0}, {v1}{v2}",
   "@uia490dc30efac": {
@@ -5118,10 +5050,6 @@
   "@ui793e65ec7509": {
     "description": "Project invite received. Open the .mbproj file in MapBanai to import it."
   },
-  "uib8a8c7d48bb2": "Scan or paste this code on another phone to import this project.",
-  "@uib8a8c7d48bb2": {
-    "description": "Scan or paste this code on another phone to import this project."
-  },
   "uie4fce3e26420": "Set a user name in Settings first — it is required to confirm a data reset.",
   "@uie4fce3e26420": {
     "description": "Set a user name in Settings first — it is required to confirm a data reset."
@@ -5129,10 +5057,6 @@
   "ui2e3341bacb66": "Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.",
   "@ui2e3341bacb66": {
     "description": "Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default."
-  },
-  "ui7a263d9455ed": "Share the project file instead; this code lets the receiving phone confirm it got the right project.",
-  "@ui7a263d9455ed": {
-    "description": "Share the project file instead; this code lets the receiving phone confirm it got the right project."
   },
   "ui33a5e91c7ff1": "Slow on mobile data? Open in browser to use your phone’s browser download, then open the downloaded APK to install.",
   "@ui33a5e91c7ff1": {
@@ -6432,6 +6356,84 @@
   "ui57d8a0369581": "{v0} surveys · {v1} map records",
   "@ui57d8a0369581": {
     "description": "{v0} surveys · {v1} map records",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      },
+      "v1": {
+        "type": "String"
+      }
+    }
+  },
+  "ui96f608c16cef": "Pending",
+  "@ui96f608c16cef": {
+    "description": "Pending"
+  },
+  "uid1ecc7f909ab": "Unchanged / Done",
+  "@uid1ecc7f909ab": {
+    "description": "Unchanged / Done"
+  },
+  "ui9f94eae70b22": "Online project links are not supported yet. Ask the sender for the project file (.mbproj).",
+  "@ui9f94eae70b22": {
+    "description": "Online project links are not supported yet. Ask the sender for the project file (.mbproj)."
+  },
+  "uidc28bfa36b03": "Could not delete site: {v0}",
+  "@uidc28bfa36b03": {
+    "description": "Could not delete site: {v0}",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      }
+    }
+  },
+  "ui72dee98881cc": "Add point at GPS",
+  "@ui72dee98881cc": {
+    "description": "Add point at GPS"
+  },
+  "ui28edaf4de42d": "This cannot be undone. Export a backup before continuing.",
+  "@ui28edaf4de42d": {
+    "description": "This cannot be undone. Export a backup before continuing."
+  },
+  "ui11753d7c0e00": "I understand that {v0} unsynced records will be lost.",
+  "@ui11753d7c0e00": {
+    "description": "I understand that {v0} unsynced records will be lost.",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      }
+    }
+  },
+  "ui290774591872": "Type the project name to confirm: {v0}",
+  "@ui290774591872": {
+    "description": "Type the project name to confirm: {v0}",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      }
+    }
+  },
+  "uiaaaaecf77fe9": "Delete from device",
+  "@uiaaaaecf77fe9": {
+    "description": "Delete from device"
+  },
+  "ui44b817558a93": "{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.",
+  "@ui44b817558a93": {
+    "description": "{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      },
+      "v1": {
+        "type": "String"
+      },
+      "v2": {
+        "type": "String"
+      }
+    }
+  },
+  "ui3f3efb1d5de2": "{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.",
+  "@ui3f3efb1d5de2": {
+    "description": "{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.",
     "placeholders": {
       "v0": {
         "type": "String"

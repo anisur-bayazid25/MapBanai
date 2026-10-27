@@ -182,7 +182,7 @@ void main() {
           .ensureStudySites(restored, layerId, targetStore);
       expect((await targetStore.loadSites()).single.status,
           StudyAreaStatus.completed);
-      final copy = await importer.commitQrData(definition, newCopy: true);
+      final copy = await importer.commitData(definition, newCopy: true);
       expect(await target.getSurveySessionsByProject(copy.projectId), isEmpty);
       final copiedProject = (await target.getProjectById(copy.projectId))!;
       await ProjectVectorLayerService(target)
@@ -213,7 +213,7 @@ void main() {
     final target = AppDatabase.forTesting();
     addTearDown(target.close);
     final imported =
-        await ProjectImporter(target).commitQrData(definition, newCopy: false);
+        await ProjectImporter(target).commitData(definition, newCopy: false);
     final restoredProject = (await target.getProjectById(imported.projectId))!;
     final targetStore =
         StudyAreaStore(baseDir: Directory('${directory.path}/second-device'));

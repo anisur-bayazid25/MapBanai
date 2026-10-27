@@ -19,6 +19,22 @@ import 'package:permission_handler_platform_interface/permission_handler_platfor
 import 'gis_mode_save_test.dart' as fakes;
 
 class MemoryStudyAreaStore extends StudyAreaStore {
+  @override
+  Future<List<StudyAreaDeletion>> loadDeletions() async => List.of(deletions);
+  final List<StudyAreaDeletion> deletions = [];
+  @override
+  Future<StudyAreaDeletion> deleteSiteForSync(
+      StudyAreaSite site, String author) async {
+    final deletion = StudyAreaDeletion(
+        site: site,
+        operationId: 'delete-${site.id}',
+        deletedAt: DateTime.now(),
+        deletedBy: author);
+    sites.removeWhere((s) => s.id == site.id);
+    deletions.add(deletion);
+    return deletion;
+  }
+
   final List<StudyAreaSite> sites = [];
   @override
   Future<List<StudyAreaSite>> loadSites() async => List.from(sites);
@@ -181,7 +197,8 @@ void main() {
     expect(store.sites.single.formAnswers, {'previous': 'retain'});
   });
 
-  testWidgets('draw polygon, undo, save and expose map export choices',
+  testWidgets(
+      'GPS point creation saves location and exposes map export choices',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
@@ -191,6 +208,7 @@ void main() {
     addTearDown(db.close);
     final projectId = await db.insertProject(
         const ProjectsCompanion(name: drift.Value("Test project")));
+    await db.setSetting('user_name', 'Settings fieldworker');
     final survey = SurveyForm(
         id: 'field',
         name: 'Field questionnaire',
@@ -207,25 +225,15 @@ void main() {
     await fakes.pumpFrames(tester);
     await tester.tap(find.byType(PopupMenuButton<String>));
     await fakes.pumpFrames(tester);
-    await tester.tap(find.text('Add polygon (tap vertices)'));
+    expect(find.text('Add polygon (tap vertices)'), findsNothing);
+    expect(find.text('Add line (tap vertices)'), findsNothing);
+    expect(find.textContaining('Fieldworker:'), findsNothing);
+    expect(find.text('Assign previous unassigned sites'), findsNothing);
+    await tester.tapAt(const Offset(20, 700));
     await fakes.pumpFrames(tester);
-    for (final point in [
-      const LatLng(23, 90),
-      const LatLng(23, 91),
-      const LatLng(24, 91),
-      const LatLng(24, 90)
-    ]) {
-      map.onMapClickPlatform
-          .call({'point': const Point(1.0, 1.0), 'latLng': point});
-      await fakes.pumpFrames(tester, 2);
-    }
-    expect(find.text('Polygon: 4 vertices. Tap map to add vertices.'),
-        findsOneWidget);
-    await tester.tap(find.text('Undo'));
+    gps.emit(fakes.testFix(lat: 22.4, lon: 89.1));
     await fakes.pumpFrames(tester);
-    expect(find.text('Polygon: 3 vertices. Tap map to add vertices.'),
-        findsOneWidget);
-    await tester.tap(find.text('Save feature'));
+    await tester.tap(find.byTooltip('Add point at GPS'));
     await fakes.pumpFrames(tester);
     expect(
         find.byType(DropdownButtonFormField<StudyAreaStatus>), findsOneWidget);
@@ -237,15 +245,11 @@ void main() {
     final sites = await store.loadSites();
     expect(sites, hasLength(1));
     expect(sites.single.status, StudyAreaStatus.newFeature);
-    expect(sites.single.currentGeometry['type'], 'Polygon');
-    expect(sites.single.currentGeometry['coordinates'], [
-      [
-        [90.0, 23.0],
-        [91.0, 23.0],
-        [91.0, 24.0],
-        [90.0, 23.0]
-      ]
-    ]);
+    expect(sites.single.currentGeometry['type'], 'Point');
+    expect(sites.single.latitude, 22.4);
+    final saved = (await db.getSurveySessionsByProject(projectId)).single;
+    expect(jsonDecode(saved.responses)['user_name'], 'Settings fieldworker');
+    expect(sites.single.longitude, closeTo(89.1, 1e-8));
     await tester.tap(find.byTooltip('Export sites').first);
     await fakes.pumpFrames(tester);
     expect(find.text('Updated map (GeoJSON)'), findsOneWidget);

@@ -105,6 +105,17 @@ class ProjectVectorLayerService {
       await (db.delete(db.appSettings)..where((row) => row.key.equals(seedKey)))
           .go();
     }
+    final deletionKey = 'project_study_deletions_${project.id}';
+    final deletionSeed = await db.getSetting(deletionKey);
+    if (deletionSeed != null) {
+      await store.restoreDeletions((jsonDecode(deletionSeed) as List)
+          .map((raw) =>
+              StudyAreaDeletion.fromJson(Map<String, dynamic>.from(raw as Map)))
+          .toList());
+      await (db.delete(db.appSettings)
+            ..where((row) => row.key.equals(deletionKey)))
+          .go();
+    }
     final layers = await load(project.id);
     final matches = layers
         .where((layer) =>
@@ -118,7 +129,10 @@ class ProjectVectorLayerService {
         : (jsonDecode(raw) as List).map((id) => id.toString()).toSet();
     if (matches.every((layer) => initialized.contains(layer['id']))) return;
     final existing = await store.loadSites();
-    final ids = existing.map((site) => site.id).toSet();
+    final ids = {
+      ...existing.map((site) => site.id),
+      ...(await store.loadDeletions()).map((d) => d.site.id)
+    };
     var metadataChanged = false;
     for (final layer in matches) {
       final sourceId = layer['id'].toString();

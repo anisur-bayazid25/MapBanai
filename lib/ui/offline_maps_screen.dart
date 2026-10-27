@@ -298,11 +298,16 @@ class _DownloadMapDialogState extends State<_DownloadMapDialog> {
                         ui(context,
                             'I have permission to download this source for offline use.'),
                         style: TextStyle(fontSize: 13))),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12)),
                     onPressed: _gpsBusy ? null : _useGps,
                     icon: const Icon(Icons.my_location),
                     label:
                         Text(ui(context, 'Use area around my GPS location'))),
+                const SizedBox(height: 20),
                 Row(children: [
                   Expanded(
                       child: _input(_south, 'South latitude', numeric: true)),

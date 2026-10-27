@@ -660,7 +660,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           hasHeading
               ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} ${_sensorCompass ? '(magnetic north)' : '(GPS travel bearing)'}'
               : ui(context, 'No heading yet'),
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         initiallyExpanded: false,
         children: [
@@ -707,7 +709,10 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                                       : ui(context, 'travel direction'))
                                   : ui(context, 'Waiting…'),
                               style: TextStyle(
-                                  fontSize: 10, color: Colors.grey.shade600),
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
                             ),
                           ],
                         ),
@@ -727,7 +732,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                           : ui(context,
                               'GPS direction of travel; this does not show where a stationary phone faces.'))
                       : ui(context, 'Move with GPS to get a heading fix'),
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -886,7 +893,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           Text(
             ui(context,
                 'Point saves the current fix once with a note; continuous recording below drives line/track logging.'),
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
         ],
@@ -928,14 +937,16 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.teal.shade100),
       ),
       child: Column(
         children: [
           Text(label,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -986,9 +997,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -998,7 +1009,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           Text(
             ui(context,
                 'No logs yet. Create one to record coordinates, time, elevation and accuracy into a CSV file.'),
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1013,7 +1026,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade200),
+            side:
+                BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: ListTile(
             leading: Icon(
@@ -1342,7 +1356,9 @@ class _WaypointDialogState extends State<_WaypointDialog> {
           const SizedBox(height: 4),
           Text(
             '$date $h:$m  •  ±${widget.accuracy.toStringAsFixed(1)} m',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
           TextField(

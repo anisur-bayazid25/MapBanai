@@ -73,7 +73,7 @@ The later user request authorizes a local signed v2.7.0+34 APK build. Publishing
 
 ## Workflow requirements and nearest sites
 
-Open Project Settings > Workflow requirements. Each workflow has independent questionnaire and geotagged-photo switches. Defaults preserve earlier behavior: Field Verification requires both, Recurring Collection requires a questionnaire, Study Area Visits requires neither. Save settings and send the updated project package to the field team. They are project configuration, not a new authentication/role system.
+Open Project Settings > Workflow requirements. Each workflow has independent questionnaire and geotagged-photo switches. Defaults preserve earlier behavior: Field Verification and Recurring Collection require a questionnaire by default, while photos are optional. Study Area Visits requires neither by default. Explicit project requirements remain configurable. Save settings and send the updated project package to the field team. They are project configuration, not a new authentication/role system.
 
 Completion checks the current project policy; a valid questionnaire photo also satisfies the photo requirement. Photo-only observations support saved drafts and history/timeline reopening. Each saved record includes the applied requirements for quality review. Templates retain project requirements; new projects start without prior rounds/progress.
 
@@ -93,3 +93,10 @@ The initial release packaging exposed Kotlin 2.2 metadata diagnostics. Build rev
 
 
 Local signed APK v2.7.0+34 built and verified; see `BUILD_VERIFICATION_2.7.0.md` for certificate, checksum, tests and remaining Android-tooling diagnostics. No release was published.
+
+
+Feature deletion and Google Sheets sync: deleting a project site records a durable local deletion event. Sync updates the same stable feature row with `deleted=true`, `status=Deleted`, deletion time and fieldworker. The manager map excludes the deleted site and its linked historical geometry, while Sheets retains the audit row and response history. The updated `server/manager/Code.gs` (also bundled in Help) must be deployed before deletion sync is accepted; older deployments leave deletion events pending on the phone. Collected-data project packages include deletion events. History cleanup remains local and does not request cloud deletion.
+
+All three Study Area workflows open the bottom sheet at its measured content height, capped to available map space. Taller content scrolls and the sheet can still be dragged. The folded-map icon consistently selects basemaps; Updated map (GeoJSON) uses the file export icon. Project transfer uses `.mbproj` files; QR generation, scanning and code import have been removed.
+
+Study Area menus use the fieldworker name from the app's main Settings. The duplicate name editor and legacy assignment entry are hidden; existing unassigned records remain on disk. New line/polygon creation stays in GIS Mode. Each Study Area workflow has a visible + action that starts a new point at a GPS fix no older than 30 seconds, including accuracy and capture time. Long-press placement remains available for a chosen map position. Bulk local clearing keeps survey history by default. Clearing sites and history cleanup require a project-name confirmation, display affected counts, and require a separate acknowledgement before discarding unsynced records. Cancellation leaves data untouched.

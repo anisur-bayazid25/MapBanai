@@ -6,7 +6,6 @@ import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_exporter.dart';
 import 'package:mapbanai/services/project_importer.dart';
 import 'package:mapbanai/services/project_package.dart';
-import 'package:mapbanai/services/project_qr.dart';
 import 'package:mapbanai/services/project_transfer_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -85,7 +84,7 @@ enum ProjectExportStatus { saved, cancelled, failed }
 ///
 ///  * Export Project          → build .mbproj + SAF save
 ///  * Share Project           → build .mbproj + transfer provider(s)
-///  * Import (file or QR row) → validate → conflict check → commit
+///  * Import project file → validate → conflict check → commit
 ///
 /// Pure-Dart where the OS is not involved, so almost everything here is
 /// unit-testable with a real Drift in-memory database.
@@ -192,36 +191,6 @@ class ProjectSharingFlow {
     return ProjectImportSession._(validated, conflict);
   }
 
-  /// Validates an inline QR payload (throws [FormatException] / returns
-  /// session with data). Bootstrap codes (informational only: the project is
-  /// too large for a QR) are reported through
-  /// [ProjectImportSession.bootstrapMeta].
-  Future<ProjectImportSession> startQrImport(String payload) async {
-    final decoded = ProjectQr.parse(payload);
-    if (decoded == null) {
-      throw const FormatException('Not a MapBanai project code');
-    }
-    if (decoded['mode'] == 'bootstrap') {
-      final meta = ProjectPackageMeta.fromJson({
-        'project_id': decoded['project_id'],
-        'project_name': decoded['project_name'],
-        'project_version': decoded['project_version'],
-        'created_at': '',
-        'exported_at': decoded['exported_at'] ?? '',
-      });
-      return ProjectImportSession._(null, null, payload: payload)
-        ..bootstrapMeta = meta;
-    }
-    final data = ProjectQr.inlineToData(decoded);
-    final conflict = await _importer.checkConflict(data.meta);
-    return ProjectImportSession._(
-      null,
-      conflict,
-      qrData: data,
-      payload: payload,
-    );
-  }
-
   /// Commits a started import. [decision] resolves a conflict
   /// (newCopy / replace). On success the temp dir of a file import is
   /// removed automatically.
@@ -230,24 +199,8 @@ class ProjectSharingFlow {
     ImportDecision? decision,
   }) async {
     try {
-      if (session.qrData != null) {
-        return await _database.transaction(
-          () => _importer.commitQrData(
-            session.qrData!,
-            newCopy: decision == ImportDecision.newCopy,
-            replaceExistingId: decision == ImportDecision.replaceExisting
-                ? session.conflict?.id
-                : null,
-          ),
-        );
-      }
       final package = session.package;
-      if (package == null) {
-        throw const ProjectImportException(
-          ProjectImportError.internal,
-          'Nothing to import.',
-        );
-      }
+
       try {
         return await _importer.commit(
           package,
@@ -261,42 +214,17 @@ class ProjectSharingFlow {
       }
     } catch (e) {
       // Clean up a possibly-lingering extraction directory.
-      session.package?.discard();
+      session.package.discard();
       rethrow;
     }
   }
 }
 
 class ProjectImportSession {
-  ProjectImportSession._(
-    this.package,
-    this.conflict, {
-    this.qrData,
-    this.payload,
-  });
-
-  /// Set for file-based imports.
-  final ValidatedPackage? package;
-
-  /// The local project this package collides with, if any.
+  ProjectImportSession._(this.package, this.conflict);
+  final ValidatedPackage package;
   final Project? conflict;
-
-  /// Set for QR-based imports (inline mode).
-  final ProjectPackageData? qrData;
-
-  /// The original QR payload string (for bootstrap options).
-  final String? payload;
-
-  /// Set for bootstrap-QR payloads (no importable data — instructions only).
-  ProjectPackageMeta? bootstrapMeta;
-
   bool get isConflict => conflict != null;
-
-  bool get isQr => qrData != null;
-
-  ProjectPackageMeta get meta => qrData?.meta ?? package!.data.meta;
-
-  Future<void> discard() async {
-    await package?.discard();
-  }
+  ProjectPackageMeta get meta => package.data.meta;
+  Future<void> discard() => package.discard();
 }

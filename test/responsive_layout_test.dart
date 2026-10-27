@@ -1,3 +1,5 @@
+import 'package:mapbanai/ui/common/project_workspace_bar.dart';
+import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -381,4 +383,34 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Open in browser'), findsOneWidget);
   });
+
+  for (final size in [const Size(320, 640), const Size(640, 360)]) {
+    testWidgets('workspace captions stay above their selectors at $size',
+        (tester) async {
+      final workspace = await ProjectWorkspaceService(database).load(projectId);
+      await _pump(
+          tester,
+          Scaffold(
+              body: SingleChildScrollView(
+                  child: ProjectWorkspaceBar(
+                      database: database,
+                      workspace: workspace,
+                      onChanged: (_) async {}))),
+          size: size,
+          scale: 2);
+      for (final entry in [
+        (
+          find.text('Study layer'),
+          find.byType(DropdownButtonFormField<String>)
+        ),
+        (find.text('Survey form'), find.byType(DropdownButtonFormField<int>))
+      ]) {
+        final caption = tester.getRect(entry.$1),
+            field = tester.getRect(entry.$2);
+        expect(field.top - caption.bottom, greaterThanOrEqualTo(8));
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 }

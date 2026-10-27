@@ -16,6 +16,8 @@ import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:mapbanai/ui/study_area_hub_screen.dart';
 
 class _Sites extends StudyAreaStore {
+  @override
+  Future<List<StudyAreaDeletion>> loadDeletions() async => [];
   final records = <StudyAreaSite>[];
   @override
   Future<List<StudyAreaSite>> loadSites() async => List.from(records);
@@ -86,6 +88,7 @@ void main() {
         builder: (context) => Column(children: [
               Text(ui(context, 'Field Verification')),
               Text(ui(context, 'Collection round')),
+              Text(ui(context, 'Pending')),
               Text(ui(context, 'Bad state: Enter a collection round name.')),
               Text(ui(context, 'Form "{v0}" saved', ['Salinity 2027'])),
               Text(ui(context, 'e.g., \${width} * \${length}')),
@@ -94,6 +97,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('মাঠে যাচাই'), findsOneWidget);
     expect(find.text('সংগ্রহ পর্ব'), findsOneWidget);
+    expect(find.text('বাকি'), findsOneWidget);
     expect(find.text('সংগ্রহ পর্বের নাম লিখুন।'), findsOneWidget);
     expect(find.textContaining('Salinity 2027'), findsOneWidget);
     expect(find.text('যেমন \${width} * \${length}'), findsOneWidget);
@@ -173,6 +177,17 @@ void main() {
         studyAreaStore: store)));
     await tester.pumpAndSettle();
     expect(find.text('1. Verify Bow Bazar'), findsOneWidget);
+    final heading = tester.getRect(find.text('1. Verify Bow Bazar'));
+    final outcome =
+        tester.getRect(find.byType(DropdownButtonFormField<StudyAreaStatus>));
+    expect(outcome.top - heading.bottom, greaterThanOrEqualTo(16));
+    final collectHeading = find.text('2. Collect information');
+    await tester.ensureVisible(collectHeading);
+    await tester.pumpAndSettle();
+    final form = tester.getRect(find.byType(DropdownButtonFormField<int>).last);
+    expect(form.top - tester.getRect(collectHeading).bottom,
+        greaterThanOrEqualTo(16));
+
     expect((await db.getSurveySessionsByProject(projectId)), hasLength(1));
     await tester.pumpWidget(const SizedBox.shrink());
     await db.close();

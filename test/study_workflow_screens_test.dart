@@ -1,3 +1,5 @@
+import 'package:image/image.dart' as raster;
+import 'package:mapbanai/ui/common/app_theme.dart';
 import 'dart:typed_data';
 import 'package:mapbanai/ui/workflow_requirements_screen.dart';
 import 'package:mapbanai/models/workflow_requirements.dart';
@@ -27,13 +29,17 @@ import 'study_area_screen_test.dart' show MemoryStudyAreaStore;
 
 class WorkflowMapFake extends fakes.FakeMaplibrePlatform {
   final updates = <Map<String, dynamic>>[];
+  final images = <String, Uint8List>{};
   @override
   Future<bool?> animateCamera(CameraUpdate update,
           {Duration? duration}) async =>
       true;
   @override
   Future<void> addImage(String name, Uint8List bytes,
-      [bool sdf = false]) async {}
+      [bool sdf = false]) async {
+    images[name] = bytes;
+  }
+
   @override
   Future<void> removeLayer(String id) async {}
   @override
@@ -106,13 +112,15 @@ void main() {
   Future<void> pump(WidgetTester tester, Widget screen,
       {Size size = const Size(360, 800),
       double scale = 1,
-      String language = 'en'}) async {
+      String language = 'en',
+      Brightness brightness = Brightness.light}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
         locale: Locale(language),
+        theme: MapBanaiTheme.create(brightness),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
@@ -122,6 +130,65 @@ void main() {
         home: screen));
     await fakes.pumpFrames(tester, 20);
   }
+
+  for (final workflow in StudyWorkflow.values) {
+    testWidgets('${workflow.name} has GPS add point and a simplified menu',
+        (tester) async {
+      await pump(
+          tester,
+          StudyAreaModeScreen(
+              database: db,
+              store: store,
+              projectId: projectId,
+              workflow: workflow,
+              compactControls: true,
+              initialSelectedSiteId: site.id));
+      expect(find.byTooltip('Add point at GPS'), findsOneWidget);
+      await tester.tap(find.byTooltip('Add point at GPS'));
+      await fakes.pumpFrames(tester);
+      expect(
+          find.text('Wait for a fresh GPS location before recording a site.'),
+          findsOneWidget);
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await fakes.pumpFrames(tester);
+      expect(find.text('Assign previous unassigned sites'), findsNothing);
+      expect(find.textContaining('Fieldworker:'), findsNothing);
+      expect(find.text('Add line (tap vertices)'), findsNothing);
+      expect(find.text('Add polygon (tap vertices)'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+      'clearing a layer preserves history by default and requires project confirmation',
+      (tester) async {
+    await pump(
+        tester,
+        StudyAreaModeScreen(
+            database: db,
+            store: store,
+            projectId: projectId,
+            workflow: StudyWorkflow.recurring,
+            compactControls: true,
+            collectionRound: round));
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await fakes.pumpFrames(tester);
+    await tester.tap(find.text('Clear all sites'));
+    await fakes.pumpFrames(tester, 20);
+    expect(find.text('Clear study layer'), findsOneWidget);
+    expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+        false);
+    await tester.tap(find.text('Review deletion'));
+    await fakes.pumpFrames(tester);
+    final confirm = find.byKey(const ValueKey('confirm-field-data-removal'));
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    expect(store.sites, hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await fakes.pumpFrames(tester);
+    expect(store.sites, hasLength(1));
+    expect(find.byKey(const ValueKey('removal-project-name')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('Study Area opens a hub with all three workflows',
       (tester) async {
@@ -184,7 +251,7 @@ void main() {
           size: size,
           scale: 2);
       expect(find.byType(MapLibreMap), findsOneWidget);
-      expect(find.text('Not collected'), findsOneWidget);
+      expect(find.text('Not collected'), findsNWidgets(2));
       expect(find.byTooltip('Study workspace'), findsOneWidget);
       expect(find.byTooltip('Open in Google Maps'), findsOneWidget);
       expect(find.text('Study layer'), findsNothing);
@@ -293,7 +360,7 @@ void main() {
     final saved = await WorkflowRequirementsService(db).load(projectId);
     expect(saved[StudyWorkflow.recurring]!.questionnaire, false);
     expect(saved[StudyWorkflow.visits]!.photo, true);
-    expect(saved[StudyWorkflow.verification]!.photo, true);
+    expect(saved[StudyWorkflow.verification]!.photo, false);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -405,16 +472,190 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  for (final size in [const Size(320,568), const Size(640,360)]) {
-    testWidgets('empty map notice does not overlap header at $size', (tester) async {
+  for (final size in [const Size(320, 568), const Size(640, 360)]) {
+    testWidgets('empty map notice does not overlap header at $size',
+        (tester) async {
       store.sites.clear();
-      await pump(tester, StudyAreaModeScreen(database: db, projectId: projectId, store: store,
-        workflow: StudyWorkflow.recurring, collectionRound: round, compactControls: true), size: size, scale: 2);
-      final header = tester.getRect(find.byKey(const ValueKey('study-map-header')));
-      final notice = tester.getRect(find.byKey(const ValueKey('study-empty-notice')));
+      await pump(
+          tester,
+          StudyAreaModeScreen(
+              database: db,
+              projectId: projectId,
+              store: store,
+              workflow: StudyWorkflow.recurring,
+              collectionRound: round,
+              compactControls: true),
+          size: size,
+          scale: 2);
+      final header =
+          tester.getRect(find.byKey(const ValueKey('study-map-header')));
+      final notice =
+          tester.getRect(find.byKey(const ValueKey('study-empty-notice')));
       expect(notice.top, greaterThanOrEqualTo(header.bottom));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+        'visit status actions have clear labels and save with dark text scale $scale',
+        (tester) async {
+      final context = await service.addLayer(projectId, 'Visit sites',
+          workflow: StudyWorkflow.visits);
+      site.layerId = context.layerId;
+      await pump(
+          tester,
+          StudyAreaModeScreen(
+              database: db,
+              projectId: projectId,
+              store: store,
+              workflow: StudyWorkflow.visits,
+              initialSelectedSiteId: site.id,
+              compactControls: true),
+          size: const Size(320, 700),
+          scale: scale,
+          brightness: Brightness.dark);
+      for (final label in ['Done', 'Pending', 'Needs review']) {
+        expect(find.widgetWithText(OutlinedButton, label), findsOneWidget);
+      }
+      final done = find.widgetWithText(OutlinedButton, 'Done');
+      await tester.ensureVisible(done);
+      await tester.pumpAndSettle();
+      await tester.tap(done);
+      await fakes.pumpFrames(tester, 20);
+      expect(
+          (await StudyCollectionService(db).statuses(
+              projectId, site.layerId, StudyWorkflow.visits, null))[site.id],
+          StudyAreaStatus.completed);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final workflow in [StudyWorkflow.verification, StudyWorkflow.visits]) {
+    testWidgets(
+        'review markers remain visible when filtered in ${workflow.name}',
+        (tester) async {
+      final context =
+          await service.addLayer(projectId, 'Review sites', workflow: workflow);
+      site.layerId = context.layerId;
+      if (workflow == StudyWorkflow.verification) {
+        site.status = StudyAreaStatus.needsReview;
+      } else {
+        await StudyCollectionService(db).save(
+            projectId: projectId,
+            site: site,
+            workflow: workflow,
+            outcome: StudyAreaStatus.needsReview,
+            statusOnly: true);
+      }
+      store.sites.add(StudyAreaSite(
+          id: 'pending-site',
+          projectId: projectId,
+          projectExternalId: context.project.externalId,
+          layerId: context.layerId,
+          latitude: site.latitude + .01,
+          longitude: site.longitude,
+          attributes: {'name': 'Pending site'}));
+      await pump(
+          tester,
+          StudyAreaModeScreen(
+              database: db,
+              projectId: projectId,
+              store: store,
+              workflow: workflow,
+              compactControls: true));
+      map.onMapStyleLoadedPlatform.call(null);
+      await fakes.pumpFrames(tester, 30);
+      final review = find.byTooltip('Needs review');
+      await tester.ensureVisible(review);
+      await tester.pumpAndSettle();
+      await tester.tap(review);
+      await fakes.pumpFrames(tester, 30);
+      expect(
+          tester
+              .widget<ChoiceChip>(find.descendant(
+                  of: review, matching: find.byType(ChoiceChip)))
+              .selected,
+          true);
+      expect(
+          map.sources.values.fold<int>(0,
+              (count, source) => count + (source['features'] as List).length),
+          1);
+      final bytes = map.images.entries
+          .firstWhere((entry) => entry.key.contains('needsReview'))
+          .value;
+      final marker = raster.decodePng(bytes)!;
+      expect(marker.getPixel(22, 22).a, greaterThan(0));
+      expect(marker.where((pixel) => pixel.a > 0).length, greaterThan(400));
+      expect(
+          map.sources.values
+              .any((source) => (source['features'] as List).isNotEmpty),
+          true);
+      final view = tester.widget<MapLibreMap>(find.byType(MapLibreMap));
+      expect(view.compassViewPosition, CompassViewPosition.bottomRight);
+      expect(view.compassViewMargins!.y, greaterThan(108));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('verification has labeled actions and saves pending status',
+      (tester) async {
+    final context = await service.addLayer(projectId, 'Verification sites',
+        workflow: StudyWorkflow.verification);
+    site.layerId = context.layerId;
+    await pump(
+        tester,
+        StudyAreaModeScreen(
+            database: db,
+            projectId: projectId,
+            store: store,
+            workflow: StudyWorkflow.verification,
+            compactControls: true,
+            initialSelectedSiteId: site.id));
+    for (final label in [
+      'Unchanged / Done',
+      'Pending',
+      'Needs review',
+      'Location changed',
+      'Edit feature',
+      'Delete'
+    ]) {
+      expect(find.widgetWithText(OutlinedButton, label), findsOneWidget);
+    }
+    final pending = find.widgetWithText(OutlinedButton, 'Pending');
+    await tester.ensureVisible(pending);
+    await tester.pumpAndSettle();
+    await tester.tap(pending);
+    await fakes.pumpFrames(tester, 30);
+    expect(store.sites.single.status, StudyAreaStatus.pending);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('category selector caption is visible outside the filled field',
+      (tester) async {
+    await pump(
+        tester,
+        StudyAreaModeScreen(
+            database: db,
+            projectId: projectId,
+            store: store,
+            workflow: StudyWorkflow.recurring,
+            collectionRound: round,
+            compactControls: true));
+    await tester.tap(find.byTooltip('Filter status'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Categories & colors'));
+    await tester.pumpAndSettle();
+    final caption = tester.getRect(find.text('Color by column'));
+    final field = tester.getRect(find.byType(DropdownButtonFormField<String>));
+    expect(
+        caption.top, greaterThan(tester.getRect(find.byType(AlertDialog)).top));
+    expect(field.top - caption.bottom, greaterThanOrEqualTo(8));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

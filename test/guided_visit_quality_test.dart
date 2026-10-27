@@ -213,6 +213,10 @@ void main() {
   test(
       'missing survey answer or photo blocks commit and preserves resumable draft',
       () async {
+    await WorkflowRequirementsService(db).save(projectId, {
+      StudyWorkflow.verification:
+          const WorkflowRequirements(questionnaire: true, photo: true),
+    });
     var draft = await service.start(projectId: projectId, site: baseline);
     draft = await service.saveDraft(
         session: draft, storedForm: stored, formValidated: true, answers: {});
@@ -414,5 +418,30 @@ void main() {
         sites: [],
         accuracyThresholdM: 30);
     expect(issues.where((issue) => issue.code == 'photo'), isEmpty);
+  });
+
+  test(
+      'guided verification photo is optional by default with a valid questionnaire',
+      () async {
+    final draft = await service.start(projectId: projectId, site: baseline);
+    final edited = baseline.revised(
+        latitude: baseline.latitude,
+        longitude: baseline.longitude,
+        attributes: baseline.attributes,
+        status: StudyAreaStatus.verified);
+    final ready = await service.saveDraft(
+        session: draft,
+        revisedSite: edited,
+        storedForm: stored,
+        answers: {'condition': 'Good'},
+        formValidated: true);
+    final result = await service.finalize(ready);
+    expect(result.session.status, 'saved');
+    expect(result.mapApplied, true);
+    expect(GuidedVisitService.decode(result.session)['photo'], isNull);
+    expect(
+        GuidedVisitService.decode(result.session)['workflow_requirements']
+            ['require_photo'],
+        false);
   });
 }

@@ -168,12 +168,6 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
       appBar: AppBar(
         title: Text(ui(context, 'GPS CSV Viewer')),
         actions: [
-          if (_logs.length > 1)
-            IconButton(
-              tooltip: ui(context, 'Project multiple on WebMap'),
-              icon: const Icon(Icons.layers_outlined),
-              onPressed: _projectMultipleOnWebMap,
-            ),
           IconButton(
             tooltip: ui(context, 'Refresh'),
             icon: const Icon(Icons.refresh),
@@ -203,7 +197,10 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                               'Record GPS tracks in GPS Mode. They will appear here for viewing and WebMap overlay.'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600),
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -221,7 +218,9 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade200),
+                        side: BorderSide(
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
@@ -241,7 +240,10 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                                 : ' • ${log.surveyor}'
                           ]),
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey.shade600),
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                         ),
                         trailing: PopupMenuButton<String>(
                           onSelected: (v) {
@@ -455,16 +457,6 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
         title: Text(widget.log.name),
         actions: [
           IconButton(
-            tooltip: ui(context, 'Project on WebMap'),
-            icon: const Icon(Icons.public_outlined),
-            onPressed: _readings.isEmpty ? null : _projectOnWebMap,
-          ),
-          IconButton(
-            tooltip: ui(context, 'Share CSV'),
-            icon: const Icon(Icons.ios_share_outlined),
-            onPressed: _share,
-          ),
-          IconButton(
             tooltip: ui(context, 'Refresh'),
             icon: const Icon(Icons.refresh),
             onPressed: _load,
@@ -508,8 +500,10 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
                       child: _readings.isEmpty
                           ? Center(
                               child: Text(ui(context, 'No readings yet'),
-                                  style:
-                                      TextStyle(color: Colors.grey.shade600)),
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
                             )
                           : SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -595,7 +589,7 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.teal.shade100),
       ),

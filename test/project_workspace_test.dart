@@ -119,7 +119,7 @@ void main() {
           await ProjectExporter(db).buildData((await db.getProjectById(id))!);
       expect(package.meta.projectId, workspace.project.externalId);
       final replaced = await ProjectImporter(db)
-          .commitQrData(package, newCopy: false, replaceExistingId: id);
+          .commitData(package, newCopy: false, replaceExistingId: id);
       expect((await db.getSyncConfig(replaced.projectId))!.syncApiKey,
           'private-key');
       expect(
@@ -129,7 +129,7 @@ void main() {
               .name,
           'Salinity round 2');
       final copy =
-          await ProjectImporter(db).commitQrData(package, newCopy: true);
+          await ProjectImporter(db).commitData(package, newCopy: true);
       expect(await db.getSyncConfig(copy.projectId), isNull);
     } finally {
       await db.close();

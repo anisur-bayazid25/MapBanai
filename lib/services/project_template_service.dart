@@ -108,7 +108,7 @@ class ProjectTemplateService {
           (template['forms'] as List)
               .map((form) => Map<String, dynamic>.from(form as Map))
               .toList());
-      return (await ProjectImporter(db).commitQrData(data, newCopy: false))
+      return (await ProjectImporter(db).commitData(data, newCopy: false))
           .projectId;
     });
   }

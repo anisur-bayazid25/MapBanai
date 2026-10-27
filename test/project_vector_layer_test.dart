@@ -128,7 +128,7 @@ void main() {
     expect(data['project_name'], 'A');
     final package =
         await ProjectExporter(db).buildData((await db.getProjectById(a))!);
-    final copy = await ProjectImporter(db).commitQrData(package, newCopy: true);
+    final copy = await ProjectImporter(db).commitData(package, newCopy: true);
     expect((await service.load(copy.projectId)).single['color'], '#123456');
     final templates = ProjectTemplateService(db);
     await templates.save(a, 'Project style');

@@ -1,3 +1,5 @@
+import 'package:mapbanai/ui/common/confirm_field_data_removal.dart';
+import 'package:mapbanai/ui/common/labeled_field.dart';
 import 'package:mapbanai/models/workflow_requirements.dart';
 import 'package:mapbanai/services/workflow_requirements_service.dart';
 import 'package:mapbanai/services/site_priority_service.dart';
@@ -113,6 +115,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   String _selectedBasemapId = 'osm';
   MapStyleChoice? _offlineBasemap;
   String _fieldworker = 'Local fieldworker';
+  bool _addingPoint = false;
   List<StudyAreaSite> _sites = [];
   StudyAreaSite? _selectedSite;
   final Map<String, Circle> _circles = {};
@@ -376,13 +379,73 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         StudyAreaStatus.needsReview => 'Needs review',
         _ => widget.workflow == StudyWorkflow.recurring
             ? 'Not collected'
-            : 'Undone',
+            : 'Pending',
       });
-  Color _statusColor(StudyAreaStatus status) => switch (status) {
-        StudyAreaStatus.completed => Colors.green.shade700,
-        StudyAreaStatus.needsReview => Colors.amber.shade800,
-        _ => Colors.red.shade700,
-      };
+  Color _statusColor(StudyAreaStatus status) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return switch (status) {
+      StudyAreaStatus.completed =>
+        dark ? Colors.green.shade300 : Colors.green.shade800,
+      StudyAreaStatus.needsReview =>
+        dark ? Colors.amber.shade300 : Colors.amber.shade900,
+      _ => dark ? Colors.red.shade300 : Colors.red.shade800,
+    };
+  }
+
+  Widget _collectionStatusAction(StudyAreaSite site, StudyAreaStatus target,
+          IconData icon, String label, String tooltip) =>
+      Tooltip(
+          message: ui(context, tooltip),
+          child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: _statusColor(target),
+                  backgroundColor: _status(site) == target
+                      ? _statusColor(target).withOpacity(.12)
+                      : null,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10)),
+              onPressed:
+                  _statusBusy ? null : () => _setCollectionStatus(site, target),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: 20),
+                const SizedBox(height: 4),
+                Text(ui(context, label), textAlign: TextAlign.center),
+              ])));
+
+  Widget _verificationAction(
+          String label, IconData icon, FutureOr<void> Function() action) =>
+      OutlinedButton(
+          onPressed: _statusBusy
+              ? null
+              : () async {
+                  setState(() => _statusBusy = true);
+                  try {
+                    await action();
+                  } finally {
+                    if (mounted) setState(() => _statusBusy = false);
+                  }
+                },
+          style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10)),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 20),
+            const SizedBox(height: 4),
+            Text(ui(context, label), textAlign: TextAlign.center),
+          ]));
+
+  Future<void> _setVerificationStatus(
+      StudyAreaSite site, StudyAreaStatus status) async {
+    final updated = site.revised(
+        latitude: site.latitude,
+        longitude: site.longitude,
+        attributes: Map.from(site.attributes),
+        status: status,
+        changeNote: status == StudyAreaStatus.pending
+            ? 'Pending verification'
+            : 'Needs review');
+    await _saveVerificationUpdate(updated,
+        successMessage: ui(context, status.label));
+  }
 
   Widget _compactSelectedPanel() {
     final site = _selectedSite!;
@@ -472,190 +535,83 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                             CameraUpdate.newLatLng(
                                 LatLng(site.latitude, site.longitude))),
                         icon: const Icon(Icons.center_focus_strong_rounded)),
-                    if (_collection) ...[
-                      if (widget.workflow == StudyWorkflow.visits ||
-                          !_requirements.questionnaire)
-                        IconButton.filledTonal(
-                            tooltip: ui(context, 'Mark done'),
-                            style: IconButton.styleFrom(
-                                foregroundColor: Colors.green.shade700),
-                            onPressed: _statusBusy
-                                ? null
-                                : () => _setCollectionStatus(
-                                    site, StudyAreaStatus.completed),
-                            icon: const Icon(Icons.check_circle_outline)),
-                      IconButton.filledTonal(
-                          tooltip: ui(
-                              context,
-                              widget.workflow == StudyWorkflow.recurring
-                                  ? 'Mark not collected'
-                                  : 'Mark undone'),
-                          style: IconButton.styleFrom(
-                              foregroundColor: Colors.red.shade700),
-                          onPressed: _statusBusy
-                              ? null
-                              : () => _setCollectionStatus(
-                                  site, StudyAreaStatus.pending),
-                          icon: const Icon(Icons.radio_button_unchecked)),
-                      IconButton.filledTonal(
-                          tooltip: ui(context, 'Needs review'),
-                          style: IconButton.styleFrom(
-                              foregroundColor: Colors.amber.shade800),
-                          onPressed: _statusBusy
-                              ? null
-                              : () => _setCollectionStatus(
-                                  site, StudyAreaStatus.needsReview),
-                          icon: const Icon(Icons.flag_outlined)),
-                    ] else
-                      PopupMenuButton<String>(
-                          tooltip: ui(context, 'More actions'),
-                          icon: const Icon(Icons.more_horiz),
-                          onSelected: (action) {
-                            if (action == 'unchanged') _markUnchanged(site);
-                            if (action == 'move') _beginMove(site);
-                            if (action == 'edit') _editSite(site);
-                            if (action == 'remove') _deleteSite(site);
-                          },
-                          itemBuilder: (_) => [
-                                PopupMenuItem(
-                                    value: 'unchanged',
-                                    child: Text(ui(context, 'Unchanged'))),
-                                PopupMenuItem(
-                                    value: 'move',
-                                    child:
-                                        Text(ui(context, 'Location changed'))),
-                                PopupMenuItem(
-                                    value: 'edit',
-                                    child: Text(ui(context, 'Edit feature'))),
-                                PopupMenuItem(
-                                    value: 'remove',
-                                    child:
-                                        Text(ui(context, 'Location removed'))),
-                              ])
+                    if (_collection)
+                      SizedBox(
+                          width: double.infinity,
+                          child: ResponsiveGrid(
+                              minChildWidth: 100,
+                              maxColumns: 3,
+                              children: [
+                                if (widget.workflow == StudyWorkflow.visits ||
+                                    !_requirements.questionnaire)
+                                  _collectionStatusAction(
+                                      site,
+                                      StudyAreaStatus.completed,
+                                      Icons.check_circle_outline,
+                                      'Done',
+                                      'Mark done'),
+                                _collectionStatusAction(
+                                    site,
+                                    StudyAreaStatus.pending,
+                                    Icons.radio_button_unchecked,
+                                    widget.workflow == StudyWorkflow.recurring
+                                        ? 'Not collected'
+                                        : 'Pending',
+                                    widget.workflow == StudyWorkflow.recurring
+                                        ? 'Mark not collected'
+                                        : 'Mark undone'),
+                                _collectionStatusAction(
+                                    site,
+                                    StudyAreaStatus.needsReview,
+                                    Icons.flag_outlined,
+                                    'Needs review',
+                                    'Needs review'),
+                              ]))
+                    else
+                      SizedBox(
+                          width: double.infinity,
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            ResponsiveGrid(
+                                minChildWidth: 100,
+                                maxColumns: 3,
+                                children: [
+                                  _verificationAction(
+                                      'Unchanged / Done',
+                                      Icons.check_circle_outline,
+                                      () => _markUnchanged(site)),
+                                  _verificationAction(
+                                      'Pending',
+                                      Icons.radio_button_unchecked,
+                                      () => _setVerificationStatus(
+                                          site, StudyAreaStatus.pending)),
+                                  _verificationAction(
+                                      'Needs review',
+                                      Icons.flag_outlined,
+                                      () => _setVerificationStatus(
+                                          site, StudyAreaStatus.needsReview)),
+                                ]),
+                            const SizedBox(height: 8),
+                            ResponsiveGrid(
+                                minChildWidth: 100,
+                                maxColumns: 3,
+                                children: [
+                                  _verificationAction(
+                                      'Location changed',
+                                      Icons.edit_location_alt_outlined,
+                                      () => _beginMove(site)),
+                                  _verificationAction(
+                                      'Edit feature',
+                                      Icons.edit_outlined,
+                                      () => _editSite(site)),
+                                  _verificationAction(
+                                      'Delete',
+                                      Icons.delete_outline,
+                                      () => _deleteSite(site)),
+                                ]),
+                          ]))
                   ]),
             ]));
-  }
-
-  Future<void> _claimLegacy() async {
-    final workspace = _workspace;
-    if (workspace == null) {
-      _showSnack(ui(context, 'Select a project first'));
-      return;
-    }
-    final sites = (await _store.loadSites())
-        .where((s) => s.projectId == null && s.projectExternalId == null)
-        .toList();
-    if (!mounted || sites.isEmpty) {
-      _showSnack(ui(context, 'No unassigned sites'));
-      return;
-    }
-    final selected = <String>{};
-    final action = await showDialog<String>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-            builder: (context, update) => AlertDialog(
-                    title: Text(ui(
-                        context, '{v0} unassigned map sites', [sites.length])),
-                    content: SizedBox(
-                        width: 520,
-                        height: 360,
-                        child: Column(children: [
-                          Text(ui(context,
-                              'These are stored map sites without a project assignment. Review their details before assigning or deleting them. They are separate from survey responses.')),
-                          CheckboxListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(ui(
-                                  context,
-                                  'Select all ({v0} selected)',
-                                  [selected.length])),
-                              value: selected.length == sites.length,
-                              onChanged: (value) => update(() {
-                                    selected.clear();
-                                    if (value == true)
-                                      selected
-                                          .addAll(sites.map((site) => site.id));
-                                  })),
-                          Expanded(
-                              child: ListView.builder(
-                                  itemCount: sites.length,
-                                  itemBuilder: (context, index) {
-                                    final site = sites[index];
-                                    final source = site.importFileName ??
-                                        site.attributes['layer'] ??
-                                        'Source not recorded';
-                                    final date =
-                                        site.history.firstOrNull?.timestamp ??
-                                            site.updatedAt;
-                                    return CheckboxListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(site.displayName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis),
-                                        subtitle: Text(ui(
-                                            context, 'ID: {v0}\n{v1}{v2}', [
-                                          site.id,
-                                          source,
-                                          date == null
-                                              ? ''
-                                              : '\n${date.toLocal()}'
-                                        ])),
-                                        value: selected.contains(site.id),
-                                        onChanged: (value) => update(() {
-                                              if (value == true) {
-                                                selected.add(site.id);
-                                              } else {
-                                                selected.remove(site.id);
-                                              }
-                                            }));
-                                  })),
-                        ])),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(ui(context, 'Cancel'))),
-                      TextButton(
-                          onPressed: selected.isEmpty
-                              ? null
-                              : () => Navigator.pop(context, 'delete'),
-                          child: Text(ui(context, 'Delete selected'))),
-                      FilledButton(
-                          onPressed: selected.isEmpty
-                              ? null
-                              : () => Navigator.pop(context, 'assign'),
-                          child: Text(ui(context, 'Assign selected')))
-                    ])));
-    if (action == null || !mounted) return;
-    if (action == 'delete') {
-      final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-                  title: Text(ui(context, 'Delete unassigned sites?')),
-                  content: Text(ui(
-                      context,
-                      'Remove {v0} selected map sites and their local histories? This cannot be undone.',
-                      [selected.length])),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: Text(ui(context, 'Cancel'))),
-                    FilledButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: Text(ui(context, 'Delete')))
-                  ]));
-      if (confirmed == true)
-        await _store.deleteSites(selected, expectedTokens: {
-          for (final site in sites.where((site) => selected.contains(site.id)))
-            site.id: site.revisionToken
-        });
-      if (mounted) await _loadSites();
-      return;
-    }
-    await _store.assignUnclaimedSites(
-        projectId: workspace.project.id,
-        projectExternalId: workspace.project.externalId!,
-        layerId: workspace.layerId,
-        ids: selected);
-    await _loadSites();
   }
 
   Future<void> _loadSites() async {
@@ -740,33 +696,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   }
 
   Future<void> _loadOperator() async {
-    final name = await _store.getOperatorName();
-    if (mounted) setState(() => _fieldworker = name);
-  }
-
-  Future<void> _editOperator() async {
-    final controller = TextEditingController(text: _fieldworker);
-    final name = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-                title: Text(ui(context, 'Fieldworker name')),
-                content: TextField(
-                    controller: controller,
-                    decoration: InputDecoration(
-                        labelText: ui(context, 'Name used in change history'))),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(ui(context, 'Cancel'))),
-                  FilledButton(
-                      onPressed: () =>
-                          Navigator.pop(context, controller.text.trim()),
-                      child: Text(ui(context, 'Save')))
-                ]));
-    // Dispose after the dialog route animation has finished using its field.
-    if (name == null || name.isEmpty) return;
-    await _store.setOperatorName(name);
-    if (mounted) setState(() => _fieldworker = name);
+    final name = (await _database.getSetting('user_name'))?.trim();
+    if (mounted)
+      setState(() => _fieldworker =
+          name == null || name.isEmpty ? 'Local fieldworker' : name);
   }
 
   void _showHistory(StudyAreaSite site) {
@@ -875,9 +808,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           return x >= 5 && x <= 39 && y >= 5 && y <= 39;
         case StudyAreaStatus.needsReview:
           final a = (22.0, 3.0), b = (41.0, 39.0), c = (3.0, 39.0);
-          final d1 = (x - b.$1) * (a.$2 - b.$2) + (a.$1 - b.$1) * (y - b.$2);
-          final d2 = (x - c.$1) * (b.$2 - c.$2) + (b.$1 - c.$1) * (y - c.$2);
-          final d3 = (x - a.$1) * (c.$2 - a.$2) + (c.$1 - a.$1) * (y - a.$2);
+          final d1 = (x - b.$1) * (a.$2 - b.$2) - (a.$1 - b.$1) * (y - b.$2);
+          final d2 = (x - c.$1) * (b.$2 - c.$2) - (b.$1 - c.$1) * (y - c.$2);
+          final d3 = (x - a.$1) * (c.$2 - a.$2) - (c.$1 - a.$1) * (y - a.$2);
           return !((d1 < 0 || d2 < 0 || d3 < 0) &&
               (d1 > 0 || d2 > 0 || d3 > 0));
         default:
@@ -1244,9 +1177,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 }
               : _categoryStyle.color(site);
           final imageName = 'mapbanai_${status.name}_${colorHex.substring(1)}';
-          if (_markerImages.add(imageName)) {
+          if (!_markerImages.contains(imageName)) {
             await controller.addImage(
                 imageName, _markerImage(status, colorHex));
+            _markerImages.add(imageName);
           }
           symbolOptions.add(SymbolOptions(
             geometry: LatLng(lat, lon),
@@ -1310,7 +1244,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final moving = _movingCoordinates;
     if (_movingSite != null && moving != null) {
       final imageName = 'mapbanai_moving_marker';
-      if (_markerImages.add(imageName)) {
+      if (!_markerImages.contains(imageName)) {
         await controller.addImage(
             imageName, _markerImage(StudyAreaStatus.completed, '#1565C0'));
       }
@@ -1904,6 +1838,34 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     }
   }
 
+  Future<void> _addPointAtGps() async {
+    if (_addingPoint || widget.viewOnly) return;
+    if (_workspace == null) {
+      _showSnack(ui(context, 'Select a project first'));
+      return;
+    }
+    final gps = _currentPos;
+    if (gps == null ||
+        DateTime.now().difference(gps.timestamp).abs() >
+            const Duration(seconds: 30) ||
+        !gps.latitude.isFinite ||
+        !gps.longitude.isFinite ||
+        gps.latitude.abs() > 90 ||
+        gps.longitude.abs() > 180) {
+      _showSnack(ui(
+          context, 'Wait for a fresh GPS location before recording a site.'));
+      return;
+    }
+    setState(() => _addingPoint = true);
+    try {
+      await _loadOperator();
+      if (!mounted) return;
+      await _addSite(LatLng(gps.latitude, gps.longitude), gps: gps);
+    } finally {
+      if (mounted) setState(() => _addingPoint = false);
+    }
+  }
+
   Future<void> _addSite(LatLng coordinates, {Position? gps}) async {
     if (_workspace == null) {
       _showSnack(ui(context, 'Select a project first'));
@@ -1946,7 +1908,20 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       ),
     );
     if (confirmed != true) return;
-    await _store.deleteSite(site.id);
+    try {
+      final deletion = await _store.deleteSiteForSync(site, _fieldworker);
+      try {
+        await StudyAreaOutboxService(_database).enqueueDeletion(deletion);
+      } catch (error) {
+        // The durable journal is retried by Sync even if SQLite is unavailable.
+        debugPrint('Deletion saved locally; outbox retry needed: $error');
+      }
+    } catch (error) {
+      if (mounted)
+        _showSnack(ui(context, 'Could not delete site: {v0}', [error]));
+      return;
+    }
+    if (!mounted) return;
     setState(() => _selectedSite = null);
     await _loadSites();
     _showSnack(ui(context, 'Site deleted'));
@@ -1974,7 +1949,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           SimpleDialogOption(
               onPressed: () => Navigator.pop(context, 'geojson'),
               child: ListTile(
-                  leading: Icon(Icons.map_outlined),
+                  leading: Icon(Icons.file_upload_outlined),
                   title: Text(ui(context, 'Updated map (GeoJSON)')),
                   subtitle: Text(ui(context,
                       'Full geometry, attributes and revision baseline')))),
@@ -2055,13 +2030,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           ui(context, 'This layer has no points or survey history to clear.'));
       return;
     }
-    var clearHistory = true;
+    var clearHistory = false;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
                 title: Text(ui(context, 'Clear study layer')),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                content: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Text(ui(
                       context,
                       '{v0} / {v1}\n\nRemove all {v2} map points? This cannot be undone.',
@@ -2084,7 +2060,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       value: clearHistory,
                       onChanged: (value) =>
                           setDialogState(() => clearHistory = value!)),
-                ]),
+                ])),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
@@ -2092,12 +2068,25 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   ),
                   FilledButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: Text(ui(context, 'Clear')),
+                    child: Text(ui(context, 'Review deletion')),
                   ),
                 ],
               )),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
+    final confirmed = await confirmFieldDataRemoval(context,
+        title: ui(context, 'Clear study layer'),
+        projectName: workspace.project.name,
+        details: ui(
+            context,
+            '{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.',
+            [
+              workspace.layer.name,
+              preview.points.length,
+              clearHistory ? preview.records.length : 0
+            ]),
+        pendingCount: clearHistory ? preview.pendingCount : 0);
+    if (!confirmed || !mounted) return;
     try {
       if (clearHistory) {
         await cleanup.delete(preview);
@@ -2184,6 +2173,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         myLocationEnabled: true,
         myLocationRenderMode: MyLocationRenderMode.normal,
         compassEnabled: true,
+        compassViewPosition: CompassViewPosition.bottomRight,
+        compassViewMargins: const math.Point(12, 128),
         annotationConsumeTapEvents: const [
           AnnotationType.circle,
           AnnotationType.symbol,
@@ -2218,12 +2209,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 tooltip: ui(context, 'Open in Google Maps'),
                 onPressed: () => _openGoogleMaps(_selectedSite),
                 icon: const Icon(Icons.open_in_new_rounded)),
-          if (widget.compactControls && !widget.viewOnly)
-            IconButton(
-                tooltip: ui(context, 'Study workspace'),
-                onPressed: _configureWorkflow,
-                icon: const Icon(Icons.tune)),
-          if (ScreenLayout.isWide(context))
+          if (ScreenLayout.isWide(context) && !widget.compactControls)
             IconButton(
               tooltip: ui(context, 'Import sites'),
               icon: const Icon(Icons.file_download_outlined,
@@ -2241,6 +2227,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   color: Color(0xFF2E7D32)),
               onPressed: _exportSites,
             ),
+          if (!widget.viewOnly)
+            IconButton(
+                tooltip: ui(context, 'Add point at GPS'),
+                icon: const Icon(Icons.add),
+                onPressed: _addingPoint ? null : _addPointAtGps),
           IconButton(
             tooltip: ui(context, 'Basemap'),
             icon: const Icon(Icons.map_outlined),
@@ -2262,44 +2253,28 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   _importSites();
               }
               if (v == 'export') _exportSites();
-              if (v == 'claim') _claimLegacy();
-              if (v == 'operator') _editOperator();
               if (v == 'layers') _manageProjectLayers();
-              if (v == 'line') _startDrawing('LineString');
-              if (v == 'polygon') _startDrawing('Polygon');
               if (v == 'clear') _clearAll();
               if (v == 'history_cleanup') _cleanupHistory();
               if (v == 'fit') _fitBounds();
             },
             itemBuilder: (context) => [
               if (!ScreenLayout.isWide(context)) ...[
-                if (!widget.viewOnly)
+                if (!widget.viewOnly && !widget.compactControls)
                   PopupMenuItem(
                       value: 'import',
                       child: Text(ui(context, 'Import sites'))),
                 PopupMenuItem(
                     value: 'export', child: Text(ui(context, 'Export sites'))),
               ],
-              PopupMenuItem(
-                  value: 'operator',
-                  child:
-                      Text(ui(context, 'Fieldworker: {v0}', [_fieldworker]))),
-              PopupMenuItem(
-                  value: 'claim',
-                  child: Text(ui(context, 'Assign previous unassigned sites'))),
-              if (!widget.viewOnly)
+              if (!widget.viewOnly && !ScreenLayout.isWide(context))
                 PopupMenuItem(
                     value: 'layers',
                     child: Text(
                         ui(context, 'Manage project files and road layers'))),
-              PopupMenuItem(
-                  value: 'line',
-                  child: Text(ui(context, 'Add line (tap vertices)'))),
-              PopupMenuItem(
-                  value: 'polygon',
-                  child: Text(ui(context, 'Add polygon (tap vertices)'))),
-              PopupMenuItem(
-                  value: 'fit', child: Text(ui(context, 'Fit all sites'))),
+              if (widget.compactControls && _selectedSite != null)
+                PopupMenuItem(
+                    value: 'fit', child: Text(ui(context, 'Fit all sites'))),
               PopupMenuItem(
                   value: 'clear', child: Text(ui(context, 'Clear all sites'))),
               if (!widget.viewOnly)
@@ -2424,7 +2399,9 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                             ]),
                           ])))),
             if (_selectedSite != null && widget.compactControls)
-              MapSiteSheet(child: _compactSelectedPanel()),
+              MapSiteSheet(
+                  key: ValueKey(_selectedSite!.id),
+                  child: _compactSelectedPanel()),
             if (_selectedSite != null && !widget.compactControls)
               Positioned(
                   left: 12,
@@ -2488,30 +2465,31 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       child: SingleChildScrollView(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
-                        DropdownButtonFormField<String>(
-                            itemHeight: null,
-                            value: style.column,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                                labelText: ui(context, 'Color by column')),
-                            hint: Text(ui(context, 'Single color')),
-                            items: [
-                              DropdownMenuItem(
-                                  value: null,
-                                  child: Text(ui(context, 'Single color'))),
-                              DropdownMenuItem(
-                                  value: '__verification_status__',
-                                  child:
-                                      Text(ui(context, 'Verification status'))),
-                              for (final column in columns)
-                                DropdownMenuItem(
-                                    value: column, child: Text(column))
-                            ],
-                            onChanged: (value) => update(() {
-                                  style.column = value;
-                                  style.colors.clear();
-                                  style.hidden.clear();
-                                })),
+                        LabeledField(
+                            label: ui(context, 'Color by column'),
+                            child: DropdownButtonFormField<String>(
+                                itemHeight: null,
+                                value: style.column,
+                                isExpanded: true,
+                                decoration: const InputDecoration(),
+                                hint: Text(ui(context, 'Single color')),
+                                items: [
+                                  DropdownMenuItem(
+                                      value: null,
+                                      child: Text(ui(context, 'Single color'))),
+                                  DropdownMenuItem(
+                                      value: '__verification_status__',
+                                      child: Text(
+                                          ui(context, 'Verification status'))),
+                                  for (final column in columns)
+                                    DropdownMenuItem(
+                                        value: column, child: Text(column))
+                                ],
+                                onChanged: (value) => update(() {
+                                      style.column = value;
+                                      style.colors.clear();
+                                      style.hidden.clear();
+                                    }))),
                         Text(ui(context, 'Point size: {v0}',
                             [style.radius.round()])),
                         Slider(
@@ -2752,33 +2730,40 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           children: [
             Row(children: [
               Expanded(
-                  child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: _workspace == null || _statusBusy
-                          ? null
-                          : _configureWorkflow,
-                      child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 8),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                    _workspace?.layer.name ??
-                                        ui(context, 'Study area'),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600)),
-                                if (_round != null)
-                                  Text(_round!.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall),
-                              ])))),
+                  child: Tooltip(
+                      message: ui(context, 'Study workspace'),
+                      child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: _workspace == null || _statusBusy
+                              ? null
+                              : _configureWorkflow,
+                          child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 8),
+                              child: Row(children: [
+                                Expanded(
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                      Text(
+                                          _workspace?.layer.name ??
+                                              ui(context, 'Study area'),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600)),
+                                      if (_round != null)
+                                        Text(_round!.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall),
+                                    ])),
+                                const Icon(Icons.expand_more, size: 18)
+                              ]))))),
               if (_selectedSite == null)
                 IconButton(
                     tooltip: ui(context, 'Open in Google Maps'),

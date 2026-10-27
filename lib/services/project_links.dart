@@ -3,8 +3,7 @@
 /// Recognized forms (v1):
 ///
 ///   mapbanai://project/import?file=<content-uri>&name=<hint>
-///   mapbanai://project/import?qr=<url-encoded MAPBANAI-PROJECT-V1:...>
-///   mapbanai://project/<external-project-id>
+///    mapbanai://project/<external-project-id>
 ///   https://<host>/<path>.mbproj            (future server-hosted file)
 ///
 /// The custom scheme is an INSTRUCTION mechanism only: it never hosts or
@@ -14,13 +13,12 @@
 /// reported so a future build can add download support without changing
 /// the format.
 class ProjectLinkInfo {
-  const ProjectLinkInfo({this.fileUri, this.qrPayload, this.projectId});
+  const ProjectLinkInfo({this.fileUri, this.projectId});
 
   final String? fileUri;
-  final String? qrPayload;
   final String? projectId;
 
-  bool get hasImportWork => fileUri != null || qrPayload != null;
+  bool get hasImportWork => fileUri != null;
 }
 
 class ProjectLinks {
@@ -38,10 +36,7 @@ class ProjectLinks {
       if (uri.scheme == scheme && uri.host == 'project') {
         final segments = uri.pathSegments;
         if (segments.isNotEmpty && segments.first == 'import') {
-          final qr = uri.queryParameters['qr'];
-          if (qr != null && qr.isNotEmpty) {
-            return ProjectLinkInfo(qrPayload: qr);
-          }
+          if (uri.queryParameters.containsKey('qr')) return null;
           final file = uri.queryParameters['file'];
           if (file != null && file.isNotEmpty) {
             return ProjectLinkInfo(fileUri: file);

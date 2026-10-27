@@ -91,7 +91,7 @@ function reply_(value) {
   );
 }
 function doGet() {
-  return reply_({ ok: true, service: 'MapBanai', revisionSupport: true });
+  return reply_({ ok: true, service: 'MapBanai', revisionSupport: true, deletionSupport: true });
 }
 function doPost(e) {
   let lock;
@@ -112,7 +112,7 @@ function doPost(e) {
       return reply_({
         ok: true,
         connectionVerified: true,
-        revisionSupport: true,
+        revisionSupport: true, deletionSupport: true,
       });
     }
     if (body.action === 'get_questionnaire') return questionnaire_();
@@ -142,7 +142,7 @@ function doPost(e) {
       ok: true,
       responses: responsePlan.rows.length,
       features: featurePlan.rows.length,
-      revisionSupport: true,
+      revisionSupport: true, deletionSupport: true,
     });
   } catch (err) {
     return reply_({
@@ -397,6 +397,7 @@ function upsert_(sheet, rows) {
     'form_version',
     'study_workflow',
     'record_kind',
+    'feature_uuid', 'status', 'deleted', 'operation', 'deleted_at', 'deleted_by', 'deletion_id',
     'site_id',
     'round_id',
     'collection_round',
@@ -616,7 +617,22 @@ function getMapDataPayload(sheetName) {
       });
   });
   const features = [];
+  const isDeleted = (row) => row.deleted === true || row.deleted === 'true';
+  const siteKey = (row) => row.site_id || (parseJSON_(row.study_site, {}) || {}).id ||
+    (parseJSON_(row.visit, {}) || {}).site_id;
+  // A Responses-only map still respects feature deletions kept in Features.
+  const deletionRows = rows.slice();
+  if (!names.some((name) => /^features$/i.test(name))) {
+    const featureSheet = book.getSheetByName('features') || book.getSheetByName('Features');
+    if (featureSheet && featureSheet.getLastRow() > 1) {
+      const headers = featureSheet.getRange(1, 1, 1, featureSheet.getLastColumn()).getValues()[0];
+      featureSheet.getRange(2, 1, featureSheet.getLastRow() - 1, headers.length).getValues()
+        .forEach((cells) => deletionRows.push(fromCells_(headers, cells, 'feature')));
+    }
+  }
+  const deletedSites = new Set(deletionRows.filter(isDeleted).map(siteKey).filter(Boolean));
   rows.forEach((row) => {
+    if (isDeleted(row) || deletedSites.has(siteKey(row))) return;
     const answers = parseJSON_(row.answers_json, {}),
       g = parseJSON_(row.geojson, null),
       point = point_(row),

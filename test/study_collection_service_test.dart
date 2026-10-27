@@ -326,7 +326,7 @@ void main() {
         (await workspace.load(projectId)).project,
         includeResponses: true);
     final result =
-        await ProjectImporter(db).commitQrData(payload, newCopy: true);
+        await ProjectImporter(db).commitData(payload, newCopy: true);
     final copy = await workspace.load(result.projectId,
         workflow: StudyWorkflow.recurring);
     expect(copy.form!.id, isNot(form.id));
@@ -386,7 +386,7 @@ void main() {
       () async {
     final settings = WorkflowRequirementsService(db);
     final defaults = await settings.load(projectId);
-    expect(defaults[StudyWorkflow.verification]!.photo, true);
+    expect(defaults[StudyWorkflow.verification]!.photo, false);
     expect(defaults[StudyWorkflow.recurring]!.questionnaire, true);
     expect(defaults[StudyWorkflow.visits]!.questionnaire, false);
     final other =
@@ -535,7 +535,7 @@ void main() {
         statusOnly: true);
     final payload = await ProjectExporter(db, studyAreaStore: store)
         .buildData((await workspace.load(projectId)).project);
-    final copy = await ProjectImporter(db).commitQrData(payload, newCopy: true);
+    final copy = await ProjectImporter(db).commitData(payload, newCopy: true);
     expect(
         (await settings.get(copy.projectId, StudyWorkflow.recurring))
             .questionnaire,

@@ -7,6 +7,32 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+class StudyAreaDeletion {
+  final StudyAreaSite site;
+  final String operationId;
+  final DateTime deletedAt;
+  final String deletedBy;
+  StudyAreaDeletion(
+      {required this.site,
+      required this.operationId,
+      required this.deletedAt,
+      required this.deletedBy});
+  Map<String, dynamic> toJson() => {
+        'site': site.toJson(),
+        'operation_id': operationId,
+        'deleted_at': deletedAt.toIso8601String(),
+        'deleted_by': deletedBy
+      };
+  factory StudyAreaDeletion.fromJson(
+          Map<String, dynamic> raw) =>
+      StudyAreaDeletion(
+          site: StudyAreaSite.fromJson(
+              Map<String, dynamic>.from(raw['site'] as Map)),
+          operationId: raw['operation_id'] as String,
+          deletedAt: DateTime.parse(raw['deleted_at'] as String),
+          deletedBy: raw['deleted_by'] as String);
+}
+
 class StudyAreaConflict implements Exception {
   final StudyAreaSite current;
   final StudyAreaSite incoming;
@@ -78,6 +104,63 @@ class StudyAreaStore {
         : _decodeSites(text);
   }
 
+  Future<List<StudyAreaDeletion>> loadDeletions() async {
+    final file = await _file();
+    if (!await file.exists()) {
+      final backup = File('${file.path}.bak');
+      if (await backup.exists()) {
+        await backup.copy(file.path);
+      } else {
+        return [];
+      }
+    }
+    final raw = jsonDecode(await file.readAsString());
+    if (raw is! Map || raw['deletions'] == null) return [];
+    return (raw['deletions'] as List)
+        .map((item) =>
+            StudyAreaDeletion.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<StudyAreaDeletion> deleteSiteForSync(
+      StudyAreaSite expected, String author) async {
+    late StudyAreaDeletion deletion;
+    await _serialize(() async {
+      final sites = await loadSites();
+      final current = sites.where((s) => s.id == expected.id).firstOrNull;
+      final deletions = await loadDeletions();
+      if (current == null) {
+        deletion = deletions.firstWhere((d) => d.site.id == expected.id);
+        return;
+      }
+      if (current.revisionToken != expected.revisionToken)
+        throw StudyAreaConflict(current, expected);
+      deletion = StudyAreaDeletion(
+          site: StudyAreaSite.fromJson(current.toJson()),
+          operationId: const Uuid().v4(),
+          deletedAt: DateTime.now().toUtc(),
+          deletedBy: author);
+      deletions.removeWhere((d) => d.site.id == current.id);
+      deletions.add(deletion);
+      await _write(sites.where((s) => s.id != current.id).toList(),
+          deletions: deletions);
+    });
+    return deletion;
+  }
+
+  Future<void> restoreDeletions(List<StudyAreaDeletion> incoming) =>
+      _serialize(() async {
+        final current = await loadDeletions();
+        final ids = current.map((d) => d.operationId).toSet();
+        current.addAll(incoming.where((d) => ids.add(d.operationId)));
+        final deletedIds = current.map((d) => d.site.id).toSet();
+        await _write(
+            (await loadSites())
+                .where((s) => !deletedIds.contains(s.id))
+                .toList(),
+            deletions: current);
+      });
+
   static List<StudyAreaSite> _decodeSites(String text) {
     if (text.trim().isEmpty) {
       throw const FormatException(
@@ -108,7 +191,8 @@ class StudyAreaStore {
     return next;
   }
 
-  Future<void> _write(List<StudyAreaSite> sites) async {
+  Future<void> _write(List<StudyAreaSite> sites,
+      {List<StudyAreaDeletion>? deletions}) async {
     final ids = <String>{};
     for (final site in sites) {
       if (site.id.trim().isEmpty || !ids.add(site.id)) {
@@ -118,7 +202,14 @@ class StudyAreaStore {
     final file = await _file();
     final temporary = File('${file.path}.tmp');
     final backup = File('${file.path}.bak');
-    final rows = sites.map((site) => site.toJson()).toList();
+    final deleted = deletions ?? await loadDeletions();
+    final active = sites.map((site) => site.toJson()).toList();
+    final Object rows = deleted.isEmpty
+        ? active
+        : {
+            'sites': active,
+            'deletions': deleted.map((d) => d.toJson()).toList()
+          };
     final encoded = sites.length > 200
         ? await Isolate.run(() => jsonEncode(rows))
         : jsonEncode(rows);

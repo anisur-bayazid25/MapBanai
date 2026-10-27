@@ -1760,12 +1760,6 @@ abstract class AppLocalizations {
   /// **'Could not open the file picker. Please try again.'**
   String get ui17cb282d8d29;
 
-  /// Could not read the QR code
-  ///
-  /// In en, this message translates to:
-  /// **'Could not read the QR code'**
-  String get uie5e1f203c3e2;
-
   /// Could not read the selected file
   ///
   /// In en, this message translates to:
@@ -2293,12 +2287,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'English'**
   String get ui649df08a448e;
-
-  /// Enter a MapBanai QR code or link
-  ///
-  /// In en, this message translates to:
-  /// **'Enter a MapBanai QR code or link'**
-  String get ui75320322f7f3;
 
   /// Enter decimal number
   ///
@@ -4062,12 +4050,6 @@ abstract class AppLocalizations {
   /// **'Open survey'**
   String get ui7a5cbb59b55f;
 
-  /// Open the camera to scan a project code
-  ///
-  /// In en, this message translates to:
-  /// **'Open the camera to scan a project code'**
-  String get ui942b4ee5ed69;
-
   /// Option name and label are required
   ///
   /// In en, this message translates to:
@@ -4091,24 +4073,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Other response formats'**
   String get ui5651e882f4a9;
-
-  /// Paste instead
-  ///
-  /// In en, this message translates to:
-  /// **'Paste instead'**
-  String get ui55007921901d;
-
-  /// Paste project code
-  ///
-  /// In en, this message translates to:
-  /// **'Paste project code'**
-  String get uie5dc642cc6a3;
-
-  /// Paste the MapBanai code here
-  ///
-  /// In en, this message translates to:
-  /// **'Paste the MapBanai code here'**
-  String get ui5c5260ab99c7;
 
   /// Pause
   ///
@@ -4169,12 +4133,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Photos'**
   String get uic8b2e864eccb;
-
-  /// Pick a QR image from your gallery
-  ///
-  /// In en, this message translates to:
-  /// **'Pick a QR image from your gallery'**
-  String get ui4cec4b3d3d96;
 
   /// Pick a project package from your device
   ///
@@ -4290,12 +4248,6 @@ abstract class AppLocalizations {
   /// **'Project Atlas'**
   String get uibd3091d453d7;
 
-  /// Project QR code
-  ///
-  /// In en, this message translates to:
-  /// **'Project QR code'**
-  String get uib23aff4a7cbf;
-
   /// Project already exists
   ///
   /// In en, this message translates to:
@@ -4337,12 +4289,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Project imported successfully.'**
   String get ui5276d025220f;
-
-  /// Project is too large for direct QR transfer.
-  ///
-  /// In en, this message translates to:
-  /// **'Project is too large for direct QR transfer.'**
-  String get ui379ec791fb77;
 
   /// Project layers
   ///
@@ -4451,12 +4397,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Project: {v0}'**
   String ui29bccf013ea5(String v0);
-
-  /// QR code
-  ///
-  /// In en, this message translates to:
-  /// **'QR code'**
-  String get uiabba02fcdd8b;
 
   /// Question label
   ///
@@ -5057,18 +4997,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saving...'**
   String get uiae7e887517b0;
-
-  /// Scan QR code
-  ///
-  /// In en, this message translates to:
-  /// **'Scan QR code'**
-  String get uie7d8c30678ab;
-
-  /// Scan QR from gallery
-  ///
-  /// In en, this message translates to:
-  /// **'Scan QR from gallery'**
-  String get uif64c3fbefbf2;
 
   /// Search by name or location
   ///
@@ -6543,14 +6471,6 @@ abstract class AppLocalizations {
   /// **'\"{v0}\" (version {v1}) is already on this device.'**
   String ui55cedac6145e(String v0, String v1);
 
-  /// "{v0}" (version {v1}).
-  ///
-  /// This code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.
-  ///
-  /// In en, this message translates to:
-  /// **'\"{v0}\" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.'**
-  String ui98df2bcb058d(String v0, String v1);
-
   /// A backup from a previous MapBanai install was found. Restore settings and survey responses?
   ///
   /// In en, this message translates to:
@@ -6659,23 +6579,11 @@ abstract class AppLocalizations {
   /// **'One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file.'**
   String get ui21e3b0114215;
 
-  /// Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.
-  ///
-  /// In en, this message translates to:
-  /// **'Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.'**
-  String get ui587e48c342b7;
-
   /// Open the device settings and enable "Allow from this source", then tap Download & Install again.
   ///
   /// In en, this message translates to:
   /// **'Open the device settings and enable \"Allow from this source\", then tap Download & Install again.'**
   String get ui771de57db095;
-
-  /// Paste this code into MapBanai → Import → Paste project code:
-  ///
-  /// In en, this message translates to:
-  /// **'Paste this code into MapBanai → Import → Paste project code:'**
-  String get uif29d53eb9d2b;
 
   /// Point
   /// {v0}, {v1}{v2}
@@ -6703,12 +6611,6 @@ abstract class AppLocalizations {
   /// **'Project invite received. Open the .mbproj file in MapBanai to import it.'**
   String get ui793e65ec7509;
 
-  /// Scan or paste this code on another phone to import this project.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan or paste this code on another phone to import this project.'**
-  String get uib8a8c7d48bb2;
-
   /// Set a user name in Settings first — it is required to confirm a data reset.
   ///
   /// In en, this message translates to:
@@ -6720,12 +6622,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.'**
   String get ui2e3341bacb66;
-
-  /// Share the project file instead; this code lets the receiving phone confirm it got the right project.
-  ///
-  /// In en, this message translates to:
-  /// **'Share the project file instead; this code lets the receiving phone confirm it got the right project.'**
-  String get ui7a263d9455ed;
 
   /// Slow on mobile data? Open in browser to use your phone’s browser download, then open the downloaded APK to install.
   ///
@@ -8550,6 +8446,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{v0} surveys · {v1} map records'**
   String ui57d8a0369581(String v0, String v1);
+
+  /// Pending
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get ui96f608c16cef;
+
+  /// Unchanged / Done
+  ///
+  /// In en, this message translates to:
+  /// **'Unchanged / Done'**
+  String get uid1ecc7f909ab;
+
+  /// Online project links are not supported yet. Ask the sender for the project file (.mbproj).
+  ///
+  /// In en, this message translates to:
+  /// **'Online project links are not supported yet. Ask the sender for the project file (.mbproj).'**
+  String get ui9f94eae70b22;
+
+  /// Could not delete site: {v0}
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete site: {v0}'**
+  String uidc28bfa36b03(String v0);
+
+  /// Add point at GPS
+  ///
+  /// In en, this message translates to:
+  /// **'Add point at GPS'**
+  String get ui72dee98881cc;
+
+  /// This cannot be undone. Export a backup before continuing.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone. Export a backup before continuing.'**
+  String get ui28edaf4de42d;
+
+  /// I understand that {v0} unsynced records will be lost.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand that {v0} unsynced records will be lost.'**
+  String ui11753d7c0e00(String v0);
+
+  /// Type the project name to confirm: {v0}
+  ///
+  /// In en, this message translates to:
+  /// **'Type the project name to confirm: {v0}'**
+  String ui290774591872(String v0);
+
+  /// Delete from device
+  ///
+  /// In en, this message translates to:
+  /// **'Delete from device'**
+  String get uiaaaaecf77fe9;
+
+  /// {v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.'**
+  String ui44b817558a93(String v0, String v1, String v2);
+
+  /// {v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.'**
+  String ui3f3efb1d5de2(String v0, String v1);
 }
 
 class _AppLocalizationsDelegate

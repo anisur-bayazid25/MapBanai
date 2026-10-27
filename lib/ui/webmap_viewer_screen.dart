@@ -267,8 +267,8 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-            _projectName.isEmpty ? ui(context, 'Project Atlas') : _projectName),
+        title:
+            Text(_projectName.isEmpty ? ui(context, 'WebMap') : _projectName),
         actions: [
           if (widget.database != null)
             IconButton(
@@ -290,12 +290,6 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
                     onPressed: _loading ? null : _openStudio,
                     icon: const Icon(Icons.download_outlined),
                     label: Text(ui(context, 'Download Map'))),
-                if (widget.database != null && _projectId != null) ...[
-                  OutlinedButton.icon(
-                      onPressed: _loading ? null : _manageLayers,
-                      icon: const Icon(Icons.layers_outlined),
-                      label: Text(ui(context, 'Layers'))),
-                ],
               ]))),
       body: Stack(
         children: [

@@ -12,6 +12,8 @@ import 'package:mapbanai/ui/field_quality_screen.dart';
 import 'package:mapbanai/ui/guided_visit_screen.dart';
 
 class VisitMemoryStore extends StudyAreaStore {
+  @override
+  Future<List<StudyAreaDeletion>> loadDeletions() async => [];
   final List<StudyAreaSite> records;
   VisitMemoryStore(this.records);
   @override
