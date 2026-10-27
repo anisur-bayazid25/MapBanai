@@ -8538,6 +8538,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Required questionnaires and photos for each workflow'**
   String get ui39854cbe2f78;
+
+  /// Could not load settings. Please try again.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load settings. Please try again.'**
+  String get ui1c8464e927ab;
+
+  /// {v0} surveys · {v1} map records
+  ///
+  /// In en, this message translates to:
+  /// **'{v0} surveys · {v1} map records'**
+  String ui57d8a0369581(String v0, String v1);
 }
 
 class _AppLocalizationsDelegate

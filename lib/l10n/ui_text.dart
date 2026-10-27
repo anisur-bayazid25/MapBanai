@@ -1293,6 +1293,8 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Complete the required questionnaire and photo before marking this site done.': return l10n.ui0ded61d14817;
     case 'Invalid workflow requirements.': return l10n.uif8e4834eedd0;
     case 'Required questionnaires and photos for each workflow': return l10n.ui39854cbe2f78;
+    case 'Could not load settings. Please try again.': return l10n.ui1c8464e927ab;
+    case '{v0} surveys · {v1} map records': return l10n.ui57d8a0369581(value(0), value(1));
     default:
       for (final prefix in ['Bad state: ', 'FormatException: ']) {
         if (message.startsWith(prefix)) return ui(context, message.substring(prefix.length));

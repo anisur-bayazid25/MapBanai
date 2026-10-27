@@ -404,4 +404,17 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  for (final size in [const Size(320,568), const Size(640,360)]) {
+    testWidgets('empty map notice does not overlap header at $size', (tester) async {
+      store.sites.clear();
+      await pump(tester, StudyAreaModeScreen(database: db, projectId: projectId, store: store,
+        workflow: StudyWorkflow.recurring, collectionRound: round, compactControls: true), size: size, scale: 2);
+      final header = tester.getRect(find.byKey(const ValueKey('study-map-header')));
+      final notice = tester.getRect(find.byKey(const ValueKey('study-empty-notice')));
+      expect(notice.top, greaterThanOrEqualTo(header.bottom));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 }

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:mapbanai/data/shared_database.dart';
 
 part 'app_database.g.dart';
 
@@ -109,16 +110,41 @@ class AppDatabase extends _$AppDatabase {
   /// constructed in tests can share the on-disk database only with this on.
   static bool useInProcessFileForTesting = false;
 
-  AppDatabase()
-      : super(useInProcessFileForTesting
-            ? _openInProcessConnection()
-            : _openConnection());
+  factory AppDatabase() => useInProcessFileForTesting
+      ? AppDatabase._fileForTesting()
+      : AppDatabase._shared(SharedDatabaseLease.acquire());
+
+  final SharedDatabaseLease? _lease;
+  Future<void>? _closing;
+
+  AppDatabase._shared(SharedDatabaseLease lease)
+      : _lease = lease,
+        super(DatabaseConnection.delayed(lease.connection));
+
+  AppDatabase._fileForTesting()
+      : _lease = null,
+        super(_openInProcessConnection());
 
   @visibleForTesting
-  AppDatabase.forTesting() : super(NativeDatabase.memory());
+  AppDatabase.forTesting()
+      : _lease = null,
+        super(NativeDatabase.memory());
 
   @visibleForTesting
-  AppDatabase.testWithExecutor(QueryExecutor executor) : super(executor);
+  AppDatabase.testWithExecutor(QueryExecutor executor)
+      : _lease = null,
+        super(executor);
+
+  @override
+  Future<void> close() => _closing ??= _closeHandle();
+
+  Future<void> _closeHandle() async {
+    try {
+      await super.close();
+    } finally {
+      await _lease?.release();
+    }
+  }
 
   @override
   int get schemaVersion => 10;
@@ -662,14 +688,6 @@ class AppDatabase extends _$AppDatabase {
     await delete(gpsLogs).go();
     await delete(projectFields).go();
   }
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'mapbanai.db'));
-    return NativeDatabase.createInBackground(file, logStatements: false);
-  });
 }
 
 LazyDatabase _openInProcessConnection() {

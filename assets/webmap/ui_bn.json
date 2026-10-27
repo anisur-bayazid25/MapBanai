@@ -1063,5 +1063,6 @@
   "A geotagged photo is required.": "অবস্থানযুক্ত ছবি প্রয়োজন।",
   "Complete the required questionnaire and photo before marking this site done.": "স্থানটি সম্পন্ন হিসেবে চিহ্নিত করার আগে আবশ্যক প্রশ্নমালা ও ছবির ধাপ শেষ করুন।",
   "Invalid workflow requirements.": "কর্মপ্রবাহের আবশ্যক ধাপের সেটিংস সঠিক নয়।",
-  "Required questionnaires and photos for each workflow": "প্রতিটি কর্মপ্রবাহের জন্য আবশ্যক প্রশ্নমালা ও ছবি"
+  "Required questionnaires and photos for each workflow": "প্রতিটি কর্মপ্রবাহের জন্য আবশ্যক প্রশ্নমালা ও ছবি",
+  "Could not load settings. Please try again.": "সেটিংস লোড করা যায়নি। আবার চেষ্টা করুন।"
 }

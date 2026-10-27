@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -9,30 +10,36 @@ import 'package:mapbanai/data/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late Directory directory;
   setUp(() {
+    AppDatabase.useInProcessFileForTesting = true;
+    directory = Directory.systemTemp.createTempSync('mapbanai-widget-');
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       channel,
       (call) async {
         if (call.method == 'getApplicationDocumentsDirectory') {
-          return Directory.systemTemp.path;
+          return directory.path;
         }
         if (call.method == 'getTemporaryDirectory') {
-          return Directory.systemTemp.path;
+          return directory.path;
         }
         return null;
       },
     );
   });
 
-  tearDown(() {
+  tearDown(() async {
+    AppDatabase.useInProcessFileForTesting = false;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       channel,
       null,
     );
+    directory.deleteSync(recursive: true);
   });
 
   testWidgets('MapBanai home screen shows mode options and project actions',
@@ -52,6 +59,7 @@ void main() {
     expect(find.text('GIS Mode'), findsOneWidget);
     // "Open" was renamed to "Project Settings" in v2.4.1.
     expect(find.text('Project settings'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('survey session save persists a project relationship', () async {

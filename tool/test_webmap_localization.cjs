@@ -43,3 +43,13 @@ const english = {documentElement: {lang: 'en'}};
 vm.runInNewContext(script('en'), {document: english});
 assert.equal(english.documentElement.lang, 'en');
 console.log('WebMap localization: controls, dynamic observer and data preservation passed.');
+
+const atlas = fs.readFileSync('assets/webmap/atlas.html', 'utf8');
+const nativeControls = atlas.match(/<script id="native-viewer-controls">([\s\S]*?)<\/script>/)[1];
+for (const native of [true, false]) {
+  const download = {style: {}};
+  vm.runInNewContext(nativeControls, {window: native ? {MapBanaiExport: {}} : {},
+    document: {getElementById: id => {assert.equal(id, 'open-studio'); return download;}}});
+  assert.equal(download.style.display, native ? 'none' : undefined);
+}
+console.log('WebMap native viewer keeps only its bottom download control; standalone maps retain their header action.');

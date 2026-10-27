@@ -6424,5 +6424,21 @@
   "ui39854cbe2f78": "Required questionnaires and photos for each workflow",
   "@ui39854cbe2f78": {
     "description": "Required questionnaires and photos for each workflow"
+  },
+  "ui1c8464e927ab": "Could not load settings. Please try again.",
+  "@ui1c8464e927ab": {
+    "description": "Could not load settings. Please try again."
+  },
+  "ui57d8a0369581": "{v0} surveys · {v1} map records",
+  "@ui57d8a0369581": {
+    "description": "{v0} surveys · {v1} map records",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      },
+      "v1": {
+        "type": "String"
+      }
+    }
   }
 }

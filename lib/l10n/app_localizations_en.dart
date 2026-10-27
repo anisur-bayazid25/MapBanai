@@ -4739,4 +4739,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ui39854cbe2f78 =>
       'Required questionnaires and photos for each workflow';
+
+  @override
+  String get ui1c8464e927ab => 'Could not load settings. Please try again.';
+
+  @override
+  String ui57d8a0369581(String v0, String v1) {
+    return '$v0 surveys · $v1 map records';
+  }
 }

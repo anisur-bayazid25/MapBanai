@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.7.1 — 2026-10-27
+
+- Correct the Settings Save action and pending-setting state; reuse the original MapBanai logo M for the launcher icon.
+
+- Share the background SQLite executor between screen-owned clients to prevent concurrent schema initialization and locked project/settings access. Release the file when its last client closes, preserving backup restore behavior.
+- Keep the name prompt controller alive through the dialog's closing animation. Add a retry state for Settings loading failures.
+- Stack empty-site notices below map controls, retain only the bottom in-app atlas download action, and use theme surface/text colors for editable project cards and notices.
+- Use USB phone previews and optional low-resolution, 30 fps scrcpy mirroring on E:.
+- The v2.7.0 workflow was cancelled before publication after phone testing exposed these issues. v2.7.1 includes its Study Area, localization, responsive layout, update download and icon improvements.
+
 ## v2.7.0 — 2026-10-27
 
 - Study Area opens Field Verification, Recurring Collection and Study Area Visits. Project layers and questionnaires are assigned per workflow; Collection rounds preserve separate salinity/heat measurements and progress.

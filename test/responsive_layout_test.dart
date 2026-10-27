@@ -111,6 +111,7 @@ void main() {
   });
 
   setUp(() async {
+    AppDatabase.useInProcessFileForTesting = true;
     directory = Directory.systemTemp.createTempSync('mapbanai-layout-');
     originalPaths = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _Paths(directory.path);
@@ -120,6 +121,7 @@ void main() {
     await database.setSetting('user_name', 'Layout tester');
   });
   tearDown(() async {
+    AppDatabase.useInProcessFileForTesting = false;
     await database.close();
     PathProviderPlatform.instance = originalPaths;
     directory.deleteSync(recursive: true);

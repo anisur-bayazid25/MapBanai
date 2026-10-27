@@ -4738,4 +4738,12 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get ui39854cbe2f78 =>
       'প্রতিটি কর্মপ্রবাহের জন্য আবশ্যক প্রশ্নমালা ও ছবি';
+
+  @override
+  String get ui1c8464e927ab => 'সেটিংস লোড করা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String ui57d8a0369581(String v0, String v1) {
+    return '$v0টি জরিপ · $v1টি মানচিত্র রেকর্ড';
+  }
 }

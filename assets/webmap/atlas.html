@@ -11,6 +11,12 @@ header,#sidebar,#legend,#table-panel,button,input,select,.leaflet-popup-content-
 dialog{width:min(520px,calc(100% - 20px));max-height:85vh;overflow:auto;border:1px solid var(--line);border-radius:18px;padding:20px;background:var(--paper);color:var(--ink)}dialog::backdrop{background:#102c3866}dialog input[type=color]{padding:3px;height:42px}dialog .actions button{flex:1} @media(max-width:420px){header .project{display:none}header button{font-size:12px}}
 </style></head><body>
 <header><div><div class="brand">MapBanai</div><div class="subtitle">Easy Geospatial Data Collection</div></div><div class="project" id="project-name">Project Atlas</div><button class="mobile-only primary" id="toggle-panel" aria-expanded="false">Explore</button><button id="open-studio" class="primary" aria-controls="download-dialog">Download Map</button><button id="table-toggle">Table</button></header>
+<script id="native-viewer-controls">
+// The app supplies its own full-width download action below the map.
+if (window.MapBanaiExport) {
+  document.getElementById('open-studio').style.display = 'none';
+}
+</script>
 <div id="map" role="region" aria-label="Project map"></div>
 <aside id="sidebar" aria-label="Map filters"><h2>Explore your field data</h2><div class="stats"><div class="stat"><strong id="filter-count">0</strong>Visible features</div><div class="stat"><strong id="site-count">0</strong>Study sites</div><div class="stat"><strong id="visit-count">0</strong>Collections</div></div>
 <label for="searchBox">Find a site or answer</label><input id="searchBox" type="search" placeholder="Name, ID, salinity…">

@@ -1,22 +1,16 @@
-"""Generate MapBanai's vector mark, adaptive Android resources and legacy icons.
+"""Generate adaptive and legacy icons from MapBanai's existing Broadway M.
 
-Run with Pillow installed. This draws the new vector design; no external art or
-font is required, and the existing horizontal wordmark is kept separately.
+Run with Pillow installed. The embedded outline preserves the M from the existing SVG wordmark. No font file is required or redistributed.
 """
 import json
 from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-BG = '#115969'
-PAPER = '#F5FCFA'
-CORAL = '#F48150'
-PANELS = [
-    ('#D3EEE8', [(29,45),(43,40),(43,69),(29,74)]),
-    (PAPER, [(43,40),(65,45),(65,74),(43,69)]),
-    ('#A8D8D1', [(65,45),(79,40),(79,69),(65,74)]),
-]
-PIN = 'M54,24 C44,24 38,31 38,40 C38,50 54,62 54,62 C54,62 70,50 70,40 C70,31 64,24 54,24 Z'
+BG = '#FFF8F0'
+# Original MapBanai_logo.svg: Broadway M, fill #C04F15.
+# Outline extracted from the same Broadway glyph; no font is redistributed.
+PANELS = [('#C04F15', [(69.667, 32.889), (76.099, 54.87), (79.02, 64.607), (81.646, 73.429), (82.0, 74.55), (64.061, 74.55), (58.396, 53.69), (46.211, 72.013), (33.701, 54.605), (33.588, 55.006), (33.474, 55.413), (33.36, 55.825), (33.246, 56.243), (33.13, 56.667), (33.014, 57.096), (32.898, 57.531), (32.781, 57.972), (32.663, 58.418), (32.544, 58.87), (32.425, 59.328), (32.305, 59.791), (32.185, 60.26), (32.064, 60.735), (31.942, 61.215), (31.82, 61.701), (31.697, 62.192), (31.573, 62.689), (31.449, 63.192), (31.324, 63.701), (31.199, 64.215), (31.073, 64.734), (30.946, 65.26), (30.818, 65.791), (30.69, 66.328), (30.562, 66.87), (30.433, 67.418), (30.303, 67.971), (30.172, 68.531), (30.041, 69.096), (29.909, 69.666), (29.777, 70.242), (29.729, 70.461), (29.682, 70.674), (29.637, 70.881), (29.592, 71.083), (29.547, 71.279), (29.504, 71.469), (29.461, 71.654), (29.42, 71.833), (29.379, 72.006), (29.339, 72.174), (29.3, 72.337), (29.261, 72.493), (29.224, 72.644), (29.187, 72.79), (29.151, 72.93), (29.116, 73.064), (29.082, 73.192), (29.049, 73.315), (29.016, 73.433), (28.985, 73.544), (28.954, 73.65), (28.924, 73.751), (28.895, 73.846), (28.867, 73.935), (28.839, 74.019), (28.812, 74.097), (28.787, 74.169), (28.762, 74.236), (28.738, 74.297), (28.714, 74.353), (28.692, 74.402), (28.67, 74.447), (28.648, 74.488), (28.625, 74.527), (28.6, 74.565), (28.575, 74.602), (28.547, 74.638), (28.519, 74.672), (28.489, 74.705), (28.457, 74.737), (28.424, 74.768), (28.39, 74.797), (28.355, 74.825), (28.318, 74.851), (28.28, 74.877), (28.241, 74.901), (28.2, 74.923), (28.158, 74.945), (28.114, 74.965), (28.069, 74.984), (28.023, 75.001), (27.975, 75.017), (27.926, 75.032), (27.876, 75.046), (27.824, 75.058), (27.771, 75.069), (27.717, 75.079), (27.661, 75.087), (27.604, 75.094), (27.546, 75.1), (27.486, 75.105), (27.425, 75.108), (27.362, 75.11), (27.298, 75.111), (27.218, 75.11), (27.141, 75.107), (27.066, 75.103), (26.994, 75.097), (26.924, 75.089), (26.857, 75.08), (26.792, 75.068), (26.73, 75.055), (26.671, 75.041), (26.614, 75.024), (26.559, 75.006), (26.507, 74.986), (26.458, 74.965), (26.411, 74.941), (26.366, 74.916), (26.325, 74.889), (26.285, 74.861), (26.248, 74.831), (26.214, 74.799), (26.183, 74.765), (26.153, 74.729), (26.127, 74.692), (26.103, 74.653), (26.081, 74.613), (26.062, 74.57), (26.046, 74.526), (26.032, 74.48), (26.02, 74.433), (26.011, 74.384), (26.005, 74.333), (26.001, 74.28), (26.0, 74.226), (26.001, 74.207), (26.003, 74.183), (26.007, 74.154), (26.013, 74.121), (26.02, 74.083), (26.029, 74.04), (26.04, 73.992), (26.052, 73.94), (26.065, 73.882), (26.081, 73.82), (26.098, 73.754), (26.116, 73.682), (26.136, 73.606), (26.158, 73.524), (26.182, 73.438), (26.207, 73.348), (26.233, 73.252), (26.261, 73.152), (26.291, 73.047), (26.323, 72.937), (26.356, 72.822), (26.39, 72.703), (26.427, 72.579), (26.465, 72.45), (26.504, 72.316), (26.545, 72.177), (26.588, 72.034), (26.633, 71.886), (26.678, 71.733), (26.726, 71.575), (26.775, 71.413), (26.826, 71.246), (28.655, 64.961), (31.842, 54.103), (38.067, 32.889), (54.236, 56.287)])]
 
 
 def put(path, text):
@@ -37,14 +31,6 @@ def render(size, *, square=False, round_icon=False):
     draw.rounded_rectangle((0,0,size*4-1,size*4-1),radius=0 if square else (54 if round_icon else 24)*scale,fill=BG)
     for color, points in PANELS:
         draw.polygon([(x*scale,y*scale) for x,y in points],fill=color)
-    for a,b in [((43,40),(43,69)),((65,45),(65,74))]:
-        draw.line([(a[0]*scale,a[1]*scale),(b[0]*scale,b[1]*scale)],fill=BG,width=max(1,round(1.8*scale)))
-    p=(54,24);points=[p]
-    for a,b,end in [((44,24),(38,31),(38,40)),((38,50),(54,62),(54,62)),
-                    ((54,62),(70,50),(70,40)),((70,31),(64,24),(54,24))]:
-        points.extend(bezier(p,a,b,end));p=end
-    draw.polygon([(x*scale,y*scale) for x,y in points],fill=CORAL)
-    draw.ellipse((48.5*scale,33.5*scale,59.5*scale,44.5*scale),fill=PAPER)
     return im.resize((size,size),Image.Resampling.LANCZOS)
 
 
@@ -59,18 +45,11 @@ def main():
     for color,data in paths:
         vector+=f'    <path android:fillColor="{color}" android:pathData="{data}"/>\n'
         svg+=f'<path fill="{color}" d="{data}"/>'
-    folds='M43,40 L43,69 M65,45 L65,74'
-    vector+=f'    <path android:fillColor="#00000000" android:strokeColor="{BG}" android:strokeWidth="1.8" android:pathData="{folds}"/>\n'
-    vector+=f'    <path android:fillColor="{CORAL}" android:pathData="{PIN}"/>\n'
-    vector+=f'    <path android:fillColor="{PAPER}" android:pathData="M54,33.5 A5.5,5.5 0,1 0,54,44.5 A5.5,5.5 0,1 0,54,33.5 Z"/>\n</vector>\n'
-    svg+=f'<path fill="none" stroke="{BG}" stroke-width="1.8" d="{folds}"/><path fill="{CORAL}" d="{PIN}"/><circle cx="54" cy="39" r="5.5" fill="{PAPER}"/></svg>\n'
+    vector+='</vector>\n'
+    svg+='</svg>\n'
     put('assets/logo/app_icon.svg',svg)
     put('android/app/src/main/res/drawable/ic_launcher_foreground.xml',vector)
-    mono='''<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="3" android:strokeLineJoin="round" android:pathData="M30,48 L43,44 L65,49 L78,44 L78,70 L65,75 L43,70 L30,75 Z M43,64 L43,70 M65,65 L65,75"/>
-    <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="'''+PIN+''' M54,33.5 A5.5,5.5 0,1 0,54,44.5 A5.5,5.5 0,1 0,54,33.5 Z"/>
-</vector>
-'''
+    mono=vector.replace('#C04F15','#FFFFFF')
     put('android/app/src/main/res/drawable/ic_launcher_monochrome.xml',mono)
     put('android/app/src/main/res/values/icon_colors.xml',f'<resources><color name="icon_background">{BG}</color></resources>\n')
     for version in (26,33):
@@ -102,7 +81,7 @@ def main():
     for x,size in [(32,256),(335,144),(535,96),(685,48),(800,24)]:
         icon=render(size);preview.paste(icon,(x,(360-size)//2),icon)
     preview.save(ROOT/'assets/logo/app_icon_preview.png')
-    print('Generated adaptive, themed, legacy and platform icons from the new vector mark.')
+    print('Generated adaptive, themed, legacy and platform icons from the existing MapBanai logo M.')
 
 
 if __name__=='__main__':main()

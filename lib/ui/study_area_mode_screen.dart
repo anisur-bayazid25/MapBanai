@@ -2328,43 +2328,38 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 left: 8,
                 bottom: 8,
                 child: OfflineBasemapNotice(choice: _offlineBasemap)),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (_sites.isEmpty)
-              Positioned(
-                left: 16,
-                right: 16,
-                top: 16,
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.location_off_outlined,
-                            size: 36, color: Colors.grey),
-                        const SizedBox(height: 8),
-                        Text(
-                          ui(context, 'No sites yet'),
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          ui(context,
-                              'Use the top Import button for GeoJSON, GeoPackage, zipped shapefiles, CSV, Excel or KML/KMZ.'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            if (_isLoading) const Center(child: CircularProgressIndicator()),
             Positioned(
               top: 12,
               left: 12,
               right: 12,
-              child: ScreenLayout.mapPanel(context, _buildHeaderCard()),
+              child: ScreenLayout.mapPanel(
+                  context,
+                  Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        KeyedSubtree(
+                            key: const ValueKey('study-map-header'),
+                            child: _buildHeaderCard()),
+                        if (!_isLoading && _sites.isEmpty)
+                          Padding(
+                              key: const ValueKey('study-empty-notice'),
+                              padding: const EdgeInsets.only(top: 8),
+                              child: MapControlSurface(
+                                  child: Row(children: [
+                                const Icon(Icons.location_off_outlined),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                    child: Text(ui(context, 'No sites yet'))),
+                                if (!widget.viewOnly)
+                                  IconButton(
+                                      tooltip: ui(context, 'Import sites'),
+                                      icon: const Icon(
+                                          Icons.add_location_alt_outlined),
+                                      onPressed: _manageProjectLayers),
+                              ]))),
+                      ])),
             ),
             if (_movingSite != null)
               Positioned(

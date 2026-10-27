@@ -1,11 +1,16 @@
-# MapBanai v2.7.0 (build 34)
+# MapBanai v2.7.1 (build 35)
 
+- Fixed first-launch database locking that prevented project imports and Settings from loading. Screens now share one background SQL executor with independent, safely closed clients.
+- Fixed the name prompt's controller lifetime while its closing animation runs. Settings reports recoverable storage errors and offers Retry.
+- Fixed overlapping empty-study-area banners, removed the duplicate in-app atlas download action, and corrected dark-theme contrast on project cards.
+- Corrected the Settings Save action and preserved pending language/theme choices while editing. The launcher reuses the existing logo M rather than a new symbol.
+- Added phone-only live preview and a lightweight scrcpy mirroring helper; emulator use has been removed.
 - Study Area opens Field Verification, Recurring Collection and Study Area Visits. Project layers and questionnaires are assigned per workflow; Collection rounds preserve separate salinity/heat measurements and progress.
 - Visit sites use readable names, searchable selection, resumable drafts and green/red/yellow status markers. Create recurring point layers from selected numeric survey measurements without altering original responses.
 - Nearest unvisited sites sort by straight-line GPS distance. Without a recent location they sort by name; refresh GPS from the list. Completion and review status is specific to the selected collection round.
 - Project Settings > Workflow requirements configures required questionnaires and geotagged photos separately for each workflow. Requirements are checked before completion and carried in project packages; share an updated package after changing them. Questionnaire photos can satisfy the photo requirement.
 - Compact Google Maps shortcuts open the selected site or current map area externally. Draggable site sheets, shared map controls, a refreshed theme and incremental status updates make the map interface easier to use.
-- Responsive home/internal layouts, broader Bangla UI translations, and a new adaptive map-pin launcher icon, monochrome icon and matching Android splash screen.
+- Responsive home/internal layouts, broader Bangla UI translations, and an adaptive launcher icon using the original orange M from the MapBanai logo, a matching monochrome icon and Android splash screen.
 - In-app update downloads stream with backpressure, check resumed ranges/source URLs and provide a browser fallback. Mobile-carrier throughput still needs a real-network comparison; APK size and carrier/CDN routing can also affect download time.
 
 Install app-release.apk over the existing app to retain data. This release includes the updated manager workspace as downloadable files; deploying the manager server remains a separate manager action.

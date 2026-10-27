@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/user_name_dialog.dart';
 import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/services/spatial_file_import.dart';
 import 'package:mapbanai/ui/open_spatial_file.dart';
@@ -639,29 +640,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _editMyName() async {
     final saved = await _database.getSetting('user_name') ?? '';
     if (!mounted) return;
-    final input = TextEditingController(text: saved);
     final name = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-                title: Text(ui(context, 'My enumerator name')),
-                content: TextField(
-                    controller: input,
-                    autofocus: true,
-                    maxLength: 100,
-                    decoration: InputDecoration(
-                        labelText: ui(context, 'Your name'),
-                        helperText:
-                            ui(context, 'Attached to each new submission.'))),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(ui(context, 'Cancel'))),
-                  FilledButton(
-                      onPressed: () =>
-                          Navigator.pop(context, input.text.trim()),
-                      child: Text(ui(context, 'Save')))
-                ]));
-    input.dispose();
+        context: context, builder: (_) => UserNameDialog(initialName: saved));
     if (name == null || !mounted) return;
     if (name.isEmpty) {
       _showSnack(ui(context, 'Enter your name so submissions identify you.'));
@@ -690,50 +670,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (stored != null && stored.trim().isNotEmpty) return;
     if (!mounted) return;
 
-    final controller = TextEditingController();
     final result = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(ui(context, 'Welcome to MapBanai')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              ui(context,
-                  'Enter your name — it will be attached to every survey response, GPS log entry and export. You can change it later in the three-bar menu → My name.'),
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: ui(context, 'User name'),
-                hintText: ui(context, 'e.g., John Doe'),
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(ui(context, 'Skip')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(ui(context, 'Save')),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const UserNameDialog(welcome: true));
 
     final name = result?.trim();
-    if (name != null && name.isNotEmpty) {
+    if (name != null && name.isNotEmpty && mounted) {
       await _database.setSetting('user_name', name);
     }
   }

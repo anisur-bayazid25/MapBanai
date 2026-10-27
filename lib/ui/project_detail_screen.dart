@@ -453,6 +453,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final project = _project;
 
     return Scaffold(
@@ -532,17 +533,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
+                      color: colors.tertiaryContainer,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.orange.shade200),
+                      border: Border.all(color: colors.tertiary),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.archive_outlined, color: Colors.orange),
+                        Icon(Icons.archive_outlined,
+                            color: colors.onTertiaryContainer),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(ui(context, 'Archived project'),
-                              style: TextStyle(fontWeight: FontWeight.w600)),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: colors.onTertiaryContainer)),
                         ),
                       ],
                     ),
@@ -552,7 +556,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   icon: Icons.description_outlined,
                   label: ui(context, 'Description'),
                   value: project.description.isEmpty
-                      ? 'No description'
+                      ? ui(context, 'No description')
                       : project.description,
                   onTap: _editDescription,
                 ),
@@ -572,7 +576,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 _infoTile(
                   icon: Icons.inbox_outlined,
                   label: ui(context, 'Survey and map history'),
-                  value: '$_surveyCount surveys · $_featureCount map records',
+                  value: ui(context, '{v0} surveys · {v1} map records',
+                      [_surveyCount, _featureCount]),
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -594,7 +599,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   ui(context,
                       'Default max acceptable accuracy used when recording points in this project.'),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style:
+                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                 ),
                 const SizedBox(height: 12),
                 ResponsiveChoice<double>(
@@ -626,7 +632,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   ui(context,
                       'Add study-area, facility and road layers. Source files travel with project exports.'),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style:
+                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -653,21 +660,23 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   ui(context,
                       'One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file.'),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style:
+                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
                 if (_forms.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
+                      color: colors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: colors.outlineVariant),
                     ),
                     child: Text(
                       ui(context,
                           'No forms yet. Add one or import an XLSForm file.'),
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(
+                          fontSize: 12, color: colors.onSurfaceVariant),
                     ),
                   )
                 else
@@ -685,7 +694,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey.shade600,
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
                       trailing: Row(
@@ -738,7 +747,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text(
                   ui(context,
                       'Connect this project to a Google Apps Script Web App for background sync.'),
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style:
+                      TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                 ),
                 if (project.externalId != null)
                   SelectableText('Project ID: ${project.externalId}',
@@ -780,7 +790,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   const SizedBox(height: 8),
                   Text(
                     ui(context, 'Last synced: {v0}', [_syncConfig!.lastSyncAt]),
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style:
+                        TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -827,7 +838,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   title: Text(ui(context, 'Archive project')),
                   subtitle: Text(
                     ui(context, 'Hide from project setup; data is kept'),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style:
+                        TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _toggleArchived,
@@ -843,19 +855,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     required String value,
     required VoidCallback onTap,
   }) {
+    final colors = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: colors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.teal.shade700, size: 22),
+            Icon(icon, color: colors.primary, size: 22),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -863,17 +876,19 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style:
+                        TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     value,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, color: colors.onSurface),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
+            Icon(Icons.edit_outlined, size: 16, color: colors.onSurfaceVariant),
           ],
         ),
       ),
