@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:mapbanai/ui/common/form_attribute_editor.dart';
 import 'dart:convert';
@@ -97,7 +98,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: Text('Edit — ${form.name}')),
+          appBar: AppBar(title: Text(ui(context, 'Edit — {v0}', [form.name]))),
           body: SurveyFormRenderer(
             form: form,
             initialUsername: username,
@@ -139,7 +140,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Answers updated — ready to sync')),
+      SnackBar(content: Text(ui(context, 'Answers updated — ready to sync'))),
     );
   }
 
@@ -214,7 +215,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
     await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Feature updated — ready to sync')),
+      SnackBar(content: Text(ui(context, 'Feature updated — ready to sync'))),
     );
   }
 
@@ -234,9 +235,13 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   Future<void> _deleteSession() async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete response',
-      message: 'Delete "${_session.title}"? This cannot be undone.'
-          '${_responses?['workflow'] == 'guided_visit_v1' ? ' Study Area revision history will remain.' : ''}',
+      title: ui(context, 'Delete response'),
+      message: ui(context, 'Delete "{v0}"? This cannot be undone.{v1}', [
+        _session.title,
+        _responses?['workflow'] == 'guided_visit_v1'
+            ? ' Study Area revision history will remain.'
+            : ''
+      ]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -260,10 +265,10 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Response'),
+        title: Text(ui(context, 'Response')),
         actions: [
           IconButton(
-            tooltip: 'Delete response',
+            tooltip: ui(context, 'Delete response'),
             icon: const Icon(Icons.delete_outline, color: Colors.red),
             onPressed: _deleteSession,
           ),
@@ -292,11 +297,13 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                         leading: Icon(_session.syncedAt == null
                             ? Icons.cloud_upload_outlined
                             : Icons.cloud_done_outlined),
-                        title: Text(
-                            'Response revision ${_responses?['response_revision'] ?? 1}'),
+                        title: Text(ui(context, 'Response revision {v0}',
+                            [_responses?['response_revision'] ?? 1])),
                         subtitle: Text(_session.syncedAt == null
-                            ? 'Saved on this phone · waiting to sync'
-                            : 'Synced · edit to send a new revision'))),
+                            ? ui(context,
+                                'Saved on this phone · waiting to sync')
+                            : ui(context,
+                                'Synced · edit to send a new revision')))),
                 if (_responses?['workflow'] == 'guided_visit_v1' &&
                     _responses?['visit'] is Map) ...[
                   _kvTile(
@@ -316,7 +323,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                       if (mounted) await _load();
                     },
                     icon: const Icon(Icons.fact_check_outlined),
-                    label: const Text('Review visit / retry map update'),
+                    label: Text(ui(context, 'Review visit / retry map update')),
                   ),
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -327,7 +334,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                       if (mounted) await _load();
                     },
                     icon: const Icon(Icons.add),
-                    label: const Text('Start another visit'),
+                    label: Text(ui(context, 'Start another visit')),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -337,13 +344,13 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                     FilledButton.icon(
                       onPressed: _editAnswers,
                       icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit answers'),
+                      label: Text(ui(context, 'Edit answers')),
                     ),
                   const SizedBox(height: 16),
                 ],
                 if (_responses?['feature_type'] != null) ...[
-                  const Text(
-                    'GIS feature',
+                  Text(
+                    ui(context, 'GIS feature'),
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
@@ -353,13 +360,13 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
                     FilledButton.icon(
                       onPressed: _editFeature,
                       icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit feature'),
+                      label: Text(ui(context, 'Edit feature')),
                     ),
                   const SizedBox(height: 16),
                 ],
                 if ((_responses?['answers'] as Map?) != null) ...[
-                  const Text(
-                    'Saved answers',
+                  Text(
+                    ui(context, 'Saved answers'),
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
@@ -375,7 +382,7 @@ class _SurveySessionDetailScreenState extends State<SurveySessionDetailScreen> {
         (_responses?['answers'] as Map?)?.cast<String, dynamic>() ?? {};
     if (answers.isEmpty) {
       return [
-        Text('No answers recorded.',
+        Text(ui(context, 'No answers recorded.'),
             style: TextStyle(color: Colors.grey.shade600)),
       ];
     }

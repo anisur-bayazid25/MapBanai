@@ -5,7 +5,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mapbanai/services/webmap_generator.dart';
 
 void main() {
-  test('generated HTML contains feature count, valid GeoJSON and filter options', () async {
+  test('Bangla webmap embeds UI translations without changing feature content',
+      () async {
+    final features = {
+      'type': 'FeatureCollection',
+      'features': [
+        {
+          'type': 'Feature',
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [90.4, 23.8]
+          },
+          'properties': {
+            'project_name': 'Download Map',
+            'name': 'Point',
+            'answers': {'condition': 'Needs review'}
+          }
+        }
+      ]
+    };
+    final html = await WebMapGenerator().generateHtml(
+        featureCollection: features,
+        languageCode: 'bn',
+        leafletCss: '',
+        leafletJs: '');
+    expect(html, contains('const language = "bn"'));
+    expect(html, contains('মানচিত্র ডাউনলোড'));
+    expect(html, contains(jsonEncode(features)));
+    expect(html, contains('#table-content'));
+    expect(html, isNot(contains('__MAPBANAI_UI_MESSAGES__')));
+    expect(html, isNot(contains('__MAPBANAI_LANGUAGE__')));
+  });
+
+  test(
+      'generated HTML contains feature count, valid GeoJSON and filter options',
+      () async {
     final featureCollection = {
       'type': 'FeatureCollection',
       'features': [
@@ -79,14 +113,17 @@ void main() {
     );
 
     // Banner and inlined assets
-    expect(html, contains('Map tiles require internet; your data works offline'));
+    expect(
+        html, contains('Map tiles require internet; your data works offline'));
     expect(html, contains('/* leaflet css */'));
     expect(html, contains('// leaflet js'));
 
     // Embedded GeoJSON is valid JSON and has correct feature count
-    final geoJsonMatch = RegExp(r'const geojsonData = (\{.*?\});', dotAll: true).firstMatch(html);
+    final geoJsonMatch = RegExp(r'const geojsonData = (\{.*?\});', dotAll: true)
+        .firstMatch(html);
     expect(geoJsonMatch, isNotNull);
-    final embedded = jsonDecode(geoJsonMatch!.group(1)!) as Map<String, dynamic>;
+    final embedded =
+        jsonDecode(geoJsonMatch!.group(1)!) as Map<String, dynamic>;
     expect(embedded['type'], 'FeatureCollection');
     expect((embedded['features'] as List), hasLength(3));
     // Also check that the HTML contains the count somewhere (legend or filter)

@@ -24,6 +24,7 @@ class WebMapGenerator {
   /// via [WebMapDataService] (requires [db] or [dataService]).
   /// [leafletCss] and [leafletJs] can be injected for tests to avoid asset loading.
   Future<String> generateHtml({
+    String languageCode = 'en',
     Map<String, dynamic>? featureCollection,
     int? projectId,
     String? leafletCss,
@@ -86,6 +87,13 @@ class WebMapGenerator {
 
     final symbols = await asset('assets/webmap/map_symbols.js');
     final fonts = await asset('assets/webmap/fonts.css');
+    final language = languageCode == 'bn' ? 'bn' : 'en';
+    final messages =
+        language == 'bn' ? await asset('assets/webmap/ui_bn.json') : '{}';
+    final localization = (await asset('assets/webmap/localization.js'))
+        .replaceAll('__MAPBANAI_LANGUAGE__', jsonEncode(language))
+        .replaceAll(
+            '__MAPBANAI_UI_MESSAGES__', messages.replaceAll('<', r'\u003c'));
     return template
         .replaceAll('__MAP_SYMBOLS_JS__', symbols)
         .replaceAll('__MAP_FONT_CSS__', fonts)
@@ -94,7 +102,8 @@ class WebMapGenerator {
         .replaceAll('__LEAFLET_JS__', js)
         .replaceAll('__FORM_OPTIONS__', formOptions)
         .replaceAll('__SURVEYOR_OPTIONS__', surveyorOptions)
-        .replaceAll('__GEOJSON__', geoJsonStr.replaceAll('<', r'\u003c'));
+        .replaceAll('__GEOJSON__', geoJsonStr.replaceAll('<', r'\u003c'))
+        .replaceAll('</body>', '<script>$localization</script></body>');
   }
 
   Future<String> _loadLeafletCss() async {

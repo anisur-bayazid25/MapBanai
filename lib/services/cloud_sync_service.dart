@@ -475,6 +475,21 @@ class CloudSyncService {
           'visit': resp['visit'],
           'photo': resp['photo'],
         },
+        if (resp['workflow'] == 'study_collection_v1') ...{
+          'workflow': resp['workflow'],
+          'study_workflow': resp['study_workflow'],
+          'record_kind': resp['record_kind'],
+          'site_id': resp['site_id'],
+          'feature_uuid': resp['feature_uuid'],
+          'site_name': resp['site_name'],
+          'round_id': resp['round_id'],
+          'collection_round': resp['collection_round'],
+          'outcome': resp['outcome'],
+          'observed_at': resp['observed_at'],
+          'geometry': resp['geometry'],
+          'form_snapshot': resp['form_snapshot'],
+          'note': resp['note'],
+        },
       });
     }
     return list;

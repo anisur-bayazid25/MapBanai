@@ -1,3 +1,5 @@
+import 'package:mapbanai/services/workflow_requirements_service.dart';
+import 'package:mapbanai/models/study_workflow.dart';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' as drift;
@@ -153,16 +155,30 @@ class GuidedVisitService {
       throw StateError('Draft changed. Reload it before finishing.');
     final response = decode(current);
     final metadata = visit(current);
-    if (metadata['form_validated'] != true || response['form_snapshot'] is! Map)
+    final requirements = await WorkflowRequirementsService(database)
+        .get(current.projectId, StudyWorkflow.verification);
+    final hasForm = response['form_snapshot'] is Map;
+    if ((requirements.questionnaire || hasForm) &&
+        (metadata['form_validated'] != true || !hasForm)) {
       throw StateError('Complete and save the selected survey first.');
-    final form = SurveyForm.fromJson(
-        Map<String, dynamic>.from(response['form_snapshot']));
-    final errors = await FieldQualityService.validateAnswersInWorker(
-        form, Map<String, dynamic>.from(response['answers'] as Map));
-    if (errors.isNotEmpty) throw StateError(errors.first);
-    final photoError = await FieldQualityService.validatePhoto(
-        FieldQualityService.photo(response['photo']));
-    if (photoError != null) throw StateError(photoError);
+    }
+    if (hasForm) {
+      final form = SurveyForm.fromJson(
+          Map<String, dynamic>.from(response['form_snapshot']));
+      final errors = await FieldQualityService.validateAnswersInWorker(
+          form, Map<String, dynamic>.from(response['answers'] as Map));
+      if (errors.isNotEmpty) throw StateError(errors.first);
+      final mediaErrors = await FieldQualityService.validateMedia(
+          form, Map<String, dynamic>.from(response['answers'] as Map));
+      if (mediaErrors.isNotEmpty) throw StateError(mediaErrors.first);
+    }
+    final evidence = FieldQualityService.photo(response['photo']);
+    if (requirements.photo || evidence != null) {
+      final error = await WorkflowRequirementsService.photoError(
+          Map<String, dynamic>.from(response['answers'] as Map), evidence);
+      if (error != null) throw StateError(error);
+    }
+    response['workflow_requirements'] = requirements.toJson();
     final site = StudyAreaSite.fromJson(
         Map<String, dynamic>.from(metadata['site_after'] as Map));
     if (site.status == StudyAreaStatus.pending ||
@@ -173,8 +189,10 @@ class GuidedVisitService {
         site.changeNote.trim().isEmpty)
       throw StateError('Add a change or review note for this visit outcome.');
     final geometry = site.currentGeometry;
-    site.formAnswers = Map<String, dynamic>.from(response['answers'] as Map);
-    site.formSnapshot = Map<String, dynamic>.from(response['form_snapshot']);
+    if (hasForm) {
+      site.formAnswers = Map<String, dynamic>.from(response['answers'] as Map);
+      site.formSnapshot = Map<String, dynamic>.from(response['form_snapshot']);
+    }
     metadata['site_after'] = site.toJson();
     if (!FieldQualityService.validGeometry(geometry))
       throw StateError('Feature geometry is missing or invalid.');

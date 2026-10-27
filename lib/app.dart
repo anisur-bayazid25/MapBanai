@@ -1,3 +1,4 @@
+import 'package:mapbanai/ui/common/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/l10n/app_localizations.dart';
 import 'package:mapbanai/state/app_settings_provider.dart';
@@ -20,21 +21,8 @@ class MapBanaiApp extends StatelessWidget {
           return MaterialApp(
             title: 'MapBanai',
             debugShowCheckedModeBanner: false,
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF1E88E5),
-                brightness: Brightness.light,
-              ),
-              useMaterial3: true,
-              scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-            ),
-            darkTheme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF1E88E5),
-                brightness: Brightness.dark,
-              ),
-              useMaterial3: true,
-            ),
+            theme: MapBanaiTheme.create(Brightness.light),
+            darkTheme: MapBanaiTheme.create(Brightness.dark),
             themeMode: settings.themeMode,
             locale: settings.locale,
             localizationsDelegates: AppLocalizations.localizationsDelegates,

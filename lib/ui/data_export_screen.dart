@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -67,7 +68,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
 
   Future<void> _exportProjects({required bool withResponses}) async {
     if (_selectedIds.isEmpty) {
-      _showSnack('Select at least one project');
+      _showSnack(ui(context, 'Select at least one project'));
       return;
     }
     setState(() => _isLoading = true);
@@ -88,14 +89,14 @@ class _DataExportScreenState extends State<DataExportScreen> {
 
   Future<void> _exportResponsesJson() async {
     if (_selectedIds.isEmpty) {
-      _showSnack('Select at least one project');
+      _showSnack(ui(context, 'Select at least one project'));
       return;
     }
     setState(() => _isLoading = true);
     try {
       final sessions = await _sessionsForSelection();
       if (sessions.isEmpty) {
-        _showSnack('No saved responses to export');
+        _showSnack(ui(context, 'No saved responses to export'));
         return;
       }
       final names = await _projectNameMap();
@@ -117,7 +118,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
         setState(() => _lastExport =
             '${sessions.length} saved records exported without project settings.');
     } catch (error) {
-      _showSnack('Export failed: $error');
+      _showSnack(ui(context, 'Export failed: {v0}', [error]));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -137,7 +138,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
 
   Future<void> _exportSurveyCSV() async {
     if (_selectedIds.isEmpty) {
-      _showSnack('Select at least one project');
+      _showSnack(ui(context, 'Select at least one project'));
       return;
     }
     setState(() => _isLoading = true);
@@ -155,6 +156,8 @@ class _DataExportScreenState extends State<DataExportScreen> {
           continue;
         }
         if (responses['feature_type'] != null) continue; // GIS data only
+        if (responses['workflow'] == 'study_collection_v1' &&
+            responses['record_kind'] == 'status') continue;
         final answers = responses['answers'];
         if (answers is! Map) continue; // form responses only
         final flat = <String, dynamic>{
@@ -190,10 +193,33 @@ class _DataExportScreenState extends State<DataExportScreen> {
             if (!visitKeys.contains(column)) visitKeys.add(column);
           });
         }
+        if (responses['workflow'] == 'study_collection_v1') {
+          final round = responses['collection_round'] as Map? ?? {};
+          final metadata = {
+            'mapbanai_workflow': responses['study_workflow'],
+            'mapbanai_site_id': responses['site_id'],
+            'mapbanai_layer_id': responses['layer_id'],
+            'mapbanai_round_id': responses['round_id'],
+            'mapbanai_collection_round': round['name'],
+            'mapbanai_period': round['period'],
+            'mapbanai_round_date': round['date'],
+            'mapbanai_outcome': responses['outcome'],
+            'mapbanai_observed_at': responses['observed_at']
+          };
+          for (final entry in metadata.entries) {
+            var column = entry.key;
+            while (flat.containsKey(column)) {
+              column = '${column}_meta';
+            }
+            flat[column] = entry.value;
+            if (!visitKeys.contains(column)) visitKeys.add(column);
+          }
+        }
         rows.add(flat);
       }
       if (rows.isEmpty) {
-        _showSnack('No survey responses found for the selected project(s)');
+        _showSnack(ui(
+            context, 'No survey responses found for the selected project(s)'));
         return;
       }
       final headers = [
@@ -218,7 +244,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
             'responses • ${file.path.split(Platform.pathSeparator).last}');
       }
     } catch (e) {
-      _showSnack('Export failed: $e');
+      _showSnack(ui(context, 'Export failed: {v0}', [e]));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -226,7 +252,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
 
   Future<void> _exportSpatialAnswers() async {
     if (_selectedIds.isEmpty) {
-      _showSnack('Select at least one project');
+      _showSnack(ui(context, 'Select at least one project'));
       return;
     }
     setState(() => _isLoading = true);
@@ -238,7 +264,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
         features.addAll(collection['features'] as List);
       }
       if (features.isEmpty) {
-        _showSnack('No saved map data in the selected projects');
+        _showSnack(ui(context, 'No saved map data in the selected projects'));
         return;
       }
       final file = await _writeTempFile('field_map_${_timestamp()}.geojson',
@@ -246,7 +272,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
           encoding: utf8);
       await _shareFile(file, 'application/geo+json');
     } catch (e) {
-      _showSnack('Map export failed: $e');
+      _showSnack(ui(context, 'Map export failed: {v0}', [e]));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -254,7 +280,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
 
   Future<void> _exportGisData() async {
     if (_selectedIds.isEmpty) {
-      _showSnack('Select at least one project');
+      _showSnack(ui(context, 'Select at least one project'));
       return;
     }
     final format = await _chooseGisFormat();
@@ -273,7 +299,8 @@ class _DataExportScreenState extends State<DataExportScreen> {
       );
       final features = GisExportService.extractFeatures(data.toList(), names);
       if (features.isEmpty) {
-        _showSnack('No GIS features found for the selected project(s)');
+        _showSnack(
+            ui(context, 'No GIS features found for the selected project(s)'));
         return;
       }
       final stamp = _timestamp();
@@ -316,7 +343,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
             'GIS data ${format.toUpperCase()} • ${features.length} features');
       }
     } catch (e) {
-      _showSnack('Export failed: $e');
+      _showSnack(ui(context, 'Export failed: {v0}', [e]));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -325,29 +352,29 @@ class _DataExportScreenState extends State<DataExportScreen> {
   Future<String?> _chooseGisFormat() {
     return showDialog<String>(
       context: context,
-      builder: (context) => const SimpleDialog(
-        title: Text('Export GIS data as'),
+      builder: (context) => SimpleDialog(
+        title: Text(ui(context, 'Export GIS data as')),
         children: [
           _FormatOption(
               value: 'csv',
               icon: Icons.table_chart_outlined,
-              title: 'CSV',
-              subtitle: 'Tabular data with WKT geometry'),
+              title: ui(context, 'CSV'),
+              subtitle: ui(context, 'Tabular data with WKT geometry')),
           _FormatOption(
               value: 'kml',
               icon: Icons.map_outlined,
-              title: 'KML',
-              subtitle: 'Google Earth / GIS'),
+              title: ui(context, 'KML'),
+              subtitle: ui(context, 'Google Earth / GIS')),
           _FormatOption(
               value: 'geojson',
               icon: Icons.language,
-              title: 'GeoJSON',
-              subtitle: 'Web / QGIS'),
+              title: ui(context, 'GeoJSON'),
+              subtitle: ui(context, 'Web / QGIS')),
           _FormatOption(
               value: 'gpkg',
               icon: Icons.storage,
-              title: 'GeoPackage',
-              subtitle: 'SQLite + WKB geometry'),
+              title: ui(context, 'GeoPackage'),
+              subtitle: ui(context, 'SQLite + WKB geometry')),
         ],
       ),
     );
@@ -372,7 +399,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
         subject: 'MapBanai export',
       );
     } catch (e) {
-      _showSnack('Sharing failed: $e');
+      _showSnack(ui(context, 'Sharing failed: {v0}', [e]));
     }
     if (file.existsSync()) file.deleteSync();
   }
@@ -387,26 +414,26 @@ class _DataExportScreenState extends State<DataExportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Export Data')),
+      appBar: AppBar(title: Text(ui(context, 'Export Data'))),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
             Text(
-              'Select projects to export',
+              ui(context, 'Select projects to export'),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Share a full project with responses, a project setup without responses, '
-              'or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.',
+              ui(context,
+                  'Share a full project with responses, a project setup without responses, or only saved responses. Project packages include GIS files, forms, settings, web URL and API key by default.'),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 12),
             if (_projects.isEmpty)
-              const Text('No projects available.')
+              Text(ui(context, 'No projects available.'))
             else ...[
               for (final project in _projects)
                 CheckboxListTile(
@@ -415,7 +442,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
                   title: Text(project.name),
                   subtitle: Text(
                     project.description.trim().isEmpty
-                        ? 'No description'
+                        ? ui(context, 'No description')
                         : project.description.trim(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -443,8 +470,8 @@ class _DataExportScreenState extends State<DataExportScreen> {
                 },
                 child: Text(
                   _selectedIds.length == _projects.length
-                      ? 'Deselect all'
-                      : 'Select all',
+                      ? ui(context, 'Deselect all')
+                      : ui(context, 'Select all'),
                 ),
               ),
             ],
@@ -454,7 +481,7 @@ class _DataExportScreenState extends State<DataExportScreen> {
                   ? null
                   : () => _exportProjects(withResponses: true),
               icon: const Icon(Icons.inventory_2_outlined),
-              label: const Text('Project with responses (.mbproj)'),
+              label: Text(ui(context, 'Project with responses (.mbproj)')),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -462,33 +489,33 @@ class _DataExportScreenState extends State<DataExportScreen> {
                   ? null
                   : () => _exportProjects(withResponses: false),
               icon: const Icon(Icons.folder_copy_outlined),
-              label: const Text('Project without responses (.mbproj)'),
+              label: Text(ui(context, 'Project without responses (.mbproj)')),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isLoading ? null : _exportResponsesJson,
               icon: const Icon(Icons.description_outlined),
-              label: const Text('Responses only (JSON)'),
+              label: Text(ui(context, 'Responses only (JSON)')),
             ),
             const SizedBox(height: 16),
-            const Text('Other response formats'),
+            Text(ui(context, 'Other response formats')),
             const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: _isLoading ? null : _exportSurveyCSV,
               icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('Survey responses (CSV)'),
+              label: Text(ui(context, 'Survey responses (CSV)')),
             ),
             const SizedBox(height: 8),
             FilledButton.icon(
               onPressed: _isLoading ? null : _exportGisData,
               icon: const Icon(Icons.map_outlined, size: 18),
-              label: const Text('GIS data'),
+              label: Text(ui(context, 'GIS data')),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isLoading ? null : _exportSpatialAnswers,
               icon: const Icon(Icons.layers_outlined, size: 18),
-              label: const Text('Survey and GIS map (GeoJSON)'),
+              label: Text(ui(context, 'Survey and GIS map (GeoJSON)')),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -498,8 +525,8 @@ class _DataExportScreenState extends State<DataExportScreen> {
                   : _lastExport.isEmpty
                       ? Center(
                           child: Text(
-                            'Choose an export option above — the file will '
-                            'be shared or saved where you want it.',
+                            ui(context,
+                                'Choose an export option above — the file will be shared or saved where you want it.'),
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.grey.shade500),
                           ),

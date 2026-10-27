@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -71,11 +73,9 @@ String _suggestId(String featureType) {
     'polygon' => 'PG',
     _ => 'PT',
   };
-  final date =
-      '${now.year}${now.month.toString().padLeft(2, '0')}'
+  final date = '${now.year}${now.month.toString().padLeft(2, '0')}'
       '${now.day.toString().padLeft(2, '0')}';
-  final time =
-      '${now.hour.toString().padLeft(2, '0')}'
+  final time = '${now.hour.toString().padLeft(2, '0')}'
       '${now.minute.toString().padLeft(2, '0')}';
   return '$prefix-$date-$time';
 }
@@ -162,11 +162,13 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '${widget.featureType[0].toUpperCase()}'
-              '${widget.featureType.substring(1)} details',
+              ui(context, '{v0}{v1} details', [
+                widget.featureType[0].toUpperCase(),
+                widget.featureType.substring(1)
+              ]),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+                    fontWeight: FontWeight.w800,
+                  ),
             ),
             const SizedBox(height: 8),
             _buildGeometrySummary(),
@@ -175,18 +177,18 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
             const SizedBox(height: 16),
             TextField(
               controller: _id,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'ID',
+                labelText: ui(context, 'ID'),
                 isDense: true,
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _name,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Name (optional)',
+                labelText: ui(context, 'Name (optional)'),
                 isDense: true,
               ),
             ),
@@ -195,19 +197,19 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
               controller: _notes,
               maxLines: 3,
               minLines: 2,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Notes (optional)',
+                labelText: ui(context, 'Notes (optional)'),
                 alignLabelWithHint: true,
               ),
             ),
             if (widget.fields.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                'Custom fields',
+                ui(context, 'Custom fields'),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               const SizedBox(height: 8),
               for (final field in widget.fields) ...[
@@ -223,33 +225,29 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
               ],
             ],
             const SizedBox(height: 16),
-            Row(
+            ResponsiveGrid(
+              minChildWidth: 180,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Discard'),
-                  ),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(ui(context, 'Discard')),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pop(
-                      FeatureDetailResult(
-                        id: _id.text.trim(),
-                        name: _name.text.trim(),
-                        notes: _notes.text.trim(),
-                        photo: _photo,
-                        fieldValues: {
-                          for (final field in widget.fields)
-                            if (_fieldControllers[field]!.text.trim().isNotEmpty)
-                              field: _fieldControllers[field]!.text.trim(),
-                        },
-                      ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(
+                    FeatureDetailResult(
+                      id: _id.text.trim(),
+                      name: _name.text.trim(),
+                      notes: _notes.text.trim(),
+                      photo: _photo,
+                      fieldValues: {
+                        for (final field in widget.fields)
+                          if (_fieldControllers[field]!.text.trim().isNotEmpty)
+                            field: _fieldControllers[field]!.text.trim(),
+                      },
                     ),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Save feature'),
                   ),
+                  icon: const Icon(Icons.check),
+                  label: Text(ui(context, 'Save feature')),
                 ),
               ],
             ),
@@ -281,13 +279,18 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
     final lon = widget.longitude;
     if (lat == null || lon == null) {
       return Text(
-        'Point',
+        ui(context, 'Point'),
         style: TextStyle(color: Colors.teal.shade800),
       );
     }
     return Text(
-      'Point\n$lat, $lon'
-      '${widget.accuracyM == null ? '' : '\naccuracy: ±${widget.accuracyM!.toStringAsFixed(1)} m'}',
+      ui(context, 'Point\n{v0}, {v1}{v2}', [
+        lat,
+        lon,
+        widget.accuracyM == null
+            ? ''
+            : '\naccuracy: ±${widget.accuracyM!.toStringAsFixed(1)} m'
+      ]),
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -300,14 +303,14 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
     final vertices = widget.vertices ?? const [];
     if (vertices.length < 2) {
       return Text(
-        'Line',
+        ui(context, 'Line'),
         style: TextStyle(color: Colors.teal.shade800),
       );
     }
     final length = GeometryService.polylineLengthM(vertices);
     return Text(
-      'Line  •  ${vertices.length} vertices  •  '
-      '${GeometryService.formatDistance(length)}',
+      ui(context, 'Line  •  {v0} vertices  •  {v1}',
+          [vertices.length, GeometryService.formatDistance(length)]),
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -320,16 +323,18 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
     final vertices = widget.vertices ?? const [];
     if (vertices.length < 3) {
       return Text(
-        'Polygon',
+        ui(context, 'Polygon'),
         style: TextStyle(color: Colors.teal.shade800),
       );
     }
     final area = GeometryService.polygonAreaM2(vertices);
     final perimeter = GeometryService.polygonPerimeterM(vertices);
     return Text(
-      'Polygon  •  ${vertices.length} vertices\n'
-      'area: ${GeometryService.formatArea(area)}  •  '
-      'perimeter: ${GeometryService.formatDistance(perimeter)}',
+      ui(context, 'Polygon  •  {v0} vertices\narea: {v1}  •  perimeter: {v2}', [
+        vertices.length,
+        GeometryService.formatArea(area),
+        GeometryService.formatDistance(perimeter)
+      ]),
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -340,7 +345,10 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
 
   Widget _buildPhotoSection() {
     final photo = _photo;
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (photo != null) ...[
           ClipRRect(
@@ -356,19 +364,17 @@ class _FeatureDetailSheetState extends State<_FeatureDetailSheet> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
         ],
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _capturePhoto,
-            icon: const Icon(Icons.photo_camera_outlined),
-            label: Text(photo == null ? 'Add photo' : 'Replace photo'),
-          ),
+        OutlinedButton.icon(
+          onPressed: _capturePhoto,
+          icon: const Icon(Icons.photo_camera_outlined),
+          label: Text(photo == null
+              ? ui(context, 'Add photo')
+              : ui(context, 'Replace photo')),
         ),
         if (photo != null) ...[
-          const SizedBox(width: 8),
           IconButton(
-            tooltip: 'Remove photo',
+            tooltip: ui(context, 'Remove photo'),
             onPressed: () => setState(() {
               _photo = null;
             }),

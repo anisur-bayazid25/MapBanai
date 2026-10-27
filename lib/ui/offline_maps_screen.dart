@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mapbanai/services/location_service.dart';
@@ -64,83 +65,93 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-                title: Text('Delete ${package.name}?'),
-                content: const Text(
-                    'This removes its offline resources. Your surveyed features and photos stay on the device.'),
+                title: Text(ui(context, 'Delete {v0}?', [package.name])),
+                content: Text(ui(context,
+                    'This removes its offline resources. Your surveyed features and photos stay on the device.')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete package'))
+                      child: Text(ui(context, 'Delete package')))
                 ]));
     if (confirmed != true) return;
     try {
       await _service.delete(package.id);
     } catch (e) {
       if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not delete package: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ui(context, 'Could not delete package: {v0}', [e]))));
     }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Offline maps'), actions: [
+      appBar: AppBar(title: Text(ui(context, 'Offline maps')), actions: [
         IconButton(
-            tooltip: 'Refresh packages',
+            tooltip: ui(context, 'Refresh packages'),
             onPressed: _refresh,
             icon: const Icon(Icons.refresh))
       ]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.all(16), children: [
-              const Text(
-                  'Download a bounded field area before leaving internet coverage. Completed packages appear in the Basemap selector on every collection map.'),
+              Text(ui(context,
+                  'Download a bounded field area before leaving internet coverage. Completed packages appear in the Basemap selector on every collection map.')),
               const SizedBox(height: 8),
-              const Text(
-                  'Use your own server or a provider that permits offline downloads. Built-in OSM, CARTO and Esri basemaps remain online-only. Keep the app open while downloading. Packages are not part of survey backups; re-download them after reinstall.',
+              Text(
+                  ui(context,
+                      'Use your own server or a provider that permits offline downloads. Built-in OSM, CARTO and Esri basemaps remain online-only. Keep the app open while downloading. Packages are not part of survey backups; re-download them after reinstall.'),
                   style: TextStyle(fontSize: 12)),
               const SizedBox(height: 12),
               if (_error != null)
                 Text(_error!, style: const TextStyle(color: Colors.red)),
               if (OfflineMapService.supported)
                 Text(
-                    'Free device storage: ${OfflineMapService.formatBytes(_service.freeBytes)} · Map cache: ${OfflineMapService.formatBytes(_service.cacheBytes)}'),
+                    ui(context, 'Free device storage: {v0} · Map cache: {v1}', [
+                  OfflineMapService.formatBytes(_service.freeBytes),
+                  OfflineMapService.formatBytes(_service.cacheBytes)
+                ])),
               const SizedBox(height: 12),
               FilledButton.icon(
                   onPressed: !OfflineMapService.supported || _service.busy
                       ? null
                       : _download,
                   icon: const Icon(Icons.download_for_offline_outlined),
-                  label: const Text('Download field area')),
+                  label: Text(ui(context, 'Download field area'))),
               if (_service.busy) ...[
                 const SizedBox(height: 12),
                 LinearProgressIndicator(
                     value: _service.downloadStatus?.progress),
-                Text(
-                    '${_service.downloadStatus?.completed ?? 0} / ${_service.downloadStatus?.required ?? 0} resources · ${OfflineMapService.formatBytes(_service.downloadStatus?.bytes ?? 0)}'),
+                Text(ui(context, '{v0} / {v1} resources · {v2}', [
+                  _service.downloadStatus?.completed ?? 0,
+                  _service.downloadStatus?.required ?? 0,
+                  OfflineMapService.formatBytes(
+                      _service.downloadStatus?.bytes ?? 0)
+                ])),
                 TextButton(
                     onPressed: () async {
                       try {
                         await _service.cancel();
                       } catch (e) {
                         if (context.mounted)
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Cancel failed: $e')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(
+                                  ui(context, 'Cancel failed: {v0}', [e]))));
                       }
                     },
-                    child: const Text('Cancel download')),
+                    child: Text(ui(context, 'Cancel download'))),
               ],
               if (_service.message != null)
                 Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(_service.message!)),
               if (_service.packages.isEmpty)
-                const Padding(
+                Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Text('No offline packages downloaded yet.')),
+                    child: Text(
+                        ui(context, 'No offline packages downloaded yet.'))),
               for (final package in _service.packages)
                 Card(
                     child: ListTile(
@@ -152,12 +163,19 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                           ? Colors.green
                           : Colors.orange),
                   title: Text(package.name),
-                  subtitle: Text(
-                      '${package.status.complete ? "Ready offline" : "Incomplete — delete and retry"} · ${OfflineMapService.formatBytes(package.status.bytes)}\n'
-                      'Zoom ${package.region.definition.minZoom.round()}–${package.region.definition.maxZoom.round()}\n${package.attribution}'),
+                  subtitle:
+                      Text(ui(context, '{v0} · {v1}\nZoom {v2}–{v3}\n{v4}', [
+                    package.status.complete
+                        ? "Ready offline"
+                        : "Incomplete — delete and retry",
+                    OfflineMapService.formatBytes(package.status.bytes),
+                    package.region.definition.minZoom.round(),
+                    package.region.definition.maxZoom.round(),
+                    package.attribution
+                  ])),
                   isThreeLine: true,
                   trailing: IconButton(
-                      tooltip: 'Delete package',
+                      tooltip: ui(context, 'Delete package'),
                       onPressed: _service.busy ? null : () => _delete(package),
                       icon: const Icon(Icons.delete_outline)),
                 )),
@@ -263,7 +281,7 @@ class _DownloadMapDialogState extends State<_DownloadMapDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-          title: const Text('Download field area'),
+          title: Text(ui(context, 'Download field area')),
           content: SizedBox(
               width: 440,
               child: SingleChildScrollView(
@@ -276,13 +294,15 @@ class _DownloadMapDialogState extends State<_DownloadMapDialog> {
                     value: _permission,
                     onChanged: (value) =>
                         setState(() => _permission = value ?? false),
-                    title: const Text(
-                        'I have permission to download this source for offline use.',
+                    title: Text(
+                        ui(context,
+                            'I have permission to download this source for offline use.'),
                         style: TextStyle(fontSize: 13))),
                 OutlinedButton.icon(
                     onPressed: _gpsBusy ? null : _useGps,
                     icon: const Icon(Icons.my_location),
-                    label: const Text('Use area around my GPS location')),
+                    label:
+                        Text(ui(context, 'Use area around my GPS location'))),
                 Row(children: [
                   Expanded(
                       child: _input(_south, 'South latitude', numeric: true)),
@@ -305,18 +325,22 @@ class _DownloadMapDialogState extends State<_DownloadMapDialog> {
                       child: _input(_maxZoom, 'Maximum zoom', numeric: true))
                 ]),
                 DropdownButtonFormField<int>(
+                    itemHeight: null,
+                    isExpanded: true,
                     value: _limitMb,
-                    decoration: const InputDecoration(
-                        labelText: 'Maximum download size'),
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Maximum download size')),
                     items: [50, 100, 250, 500]
                         .map((size) => DropdownMenuItem(
-                            value: size, child: Text('$size MB')))
+                            value: size,
+                            child: Text(ui(context, '{v0} MB', [size]))))
                         .toList(),
                     onChanged: (value) =>
                         setState(() => _limitMb = value ?? 250)),
                 const SizedBox(height: 8),
-                const Text(
-                    'Zoom 18 maximum; 6,000 tiles maximum. Download covers only these bounds and zooms. Larger areas need lower zoom or separate packages.',
+                Text(
+                    ui(context,
+                        'Zoom 18 maximum; 6,000 tiles maximum. Download covers only these bounds and zooms. Larger areas need lower zoom or separate packages.'),
                     style: TextStyle(fontSize: 12)),
                 if (_error != null)
                   Text(_error!, style: const TextStyle(color: Colors.red)),
@@ -324,9 +348,9 @@ class _DownloadMapDialogState extends State<_DownloadMapDialog> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
+                child: Text(ui(context, 'Cancel'))),
             FilledButton(
                 onPressed: _gpsBusy ? null : _submit,
-                child: const Text('Download'))
+                child: Text(ui(context, 'Download')))
           ]);
 }

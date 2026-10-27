@@ -1,3 +1,15 @@
+# MapBanai v2.7.0 (build 34)
+
+- Study Area opens Field Verification, Recurring Collection and Study Area Visits. Project layers and questionnaires are assigned per workflow; Collection rounds preserve separate salinity/heat measurements and progress.
+- Visit sites use readable names, searchable selection, resumable drafts and green/red/yellow status markers. Create recurring point layers from selected numeric survey measurements without altering original responses.
+- Nearest unvisited sites sort by straight-line GPS distance. Without a recent location they sort by name; refresh GPS from the list. Completion and review status is specific to the selected collection round.
+- Project Settings > Workflow requirements configures required questionnaires and geotagged photos separately for each workflow. Requirements are checked before completion and carried in project packages; share an updated package after changing them. Questionnaire photos can satisfy the photo requirement.
+- Compact Google Maps shortcuts open the selected site or current map area externally. Draggable site sheets, shared map controls, a refreshed theme and incremental status updates make the map interface easier to use.
+- Responsive home/internal layouts, broader Bangla UI translations, and a new adaptive map-pin launcher icon, monochrome icon and matching Android splash screen.
+- In-app update downloads stream with backpressure, check resumed ranges/source URLs and provide a browser fallback. Mobile-carrier throughput still needs a real-network comparison; APK size and carrier/CDN routing can also affect download time.
+
+Install app-release.apk over the existing app to retain data. This release includes the updated manager workspace as downloadable files; deploying the manager server remains a separate manager action.
+
 # MapBanai v2.6.10
 
 - Clean survey history by project, layer, day, record type or sync status, with previews and optional linked map-point deletion. Cleared records are removed from the sync queue and stay removed until a point is edited again.

@@ -186,6 +186,12 @@ class ProjectVectorLayerService {
     var coordinates = 0;
     final ids = <String>{};
     for (final layer in layers) {
+      if (layer['workflows'] != null &&
+          (layer['workflows'] is! List ||
+              (layer['workflows'] as List).isEmpty ||
+              (layer['workflows'] as List).any((mode) =>
+                  !['verification', 'recurring', 'visits'].contains(mode))))
+        throw const FormatException('Invalid study workflow assignment.');
       if (layer['id'] is! String ||
           !ids.add(layer['id'] as String) ||
           layer['name'] is! String ||

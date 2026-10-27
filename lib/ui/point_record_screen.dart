@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -109,7 +111,8 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
     try {
       final projectId = await _database.getProjectIdByName(widget.projectName);
       if (projectId == null) {
-        _showSnack('Project not found: ${widget.projectName}');
+        _showSnack(
+            ui(context, 'Project not found: {v0}', [widget.projectName]));
         return;
       }
 
@@ -139,9 +142,9 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      _showSnack('Point saved');
+      _showSnack(ui(context, 'Point saved'));
     } catch (e) {
-      _showSnack('Failed to save point: $e');
+      _showSnack(ui(context, 'Failed to save point: {v0}', [e]));
     } finally {
       if (mounted) {
         setState(() {
@@ -154,10 +157,11 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
   Future<bool> _confirmForceSave(double accuracy) {
     return showConfirmDialog(
       context,
-      title: 'Accuracy check',
-      message: 'Current accuracy (${AccuracyFilter.format(accuracy)}) is worse '
-          'than the configured threshold (${AccuracyFilter.format(_threshold)}). '
-          'Save anyway?',
+      title: ui(context, 'Accuracy check'),
+      message: ui(
+          context,
+          'Current accuracy ({v0}) is worse than the configured threshold ({v1}). Save anyway?',
+          [AccuracyFilter.format(accuracy), AccuracyFilter.format(_threshold)]),
       confirmText: 'Save anyway',
       cancelText: 'Wait',
     );
@@ -185,10 +189,12 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Record Point'),
+        title: Text(ui(context, 'Record Point')),
         actions: [
           IconButton(
-            tooltip: _photo != null ? 'Replace photo' : 'Attach photo (geotagged)',
+            tooltip: _photo != null
+                ? ui(context, 'Replace photo')
+                : ui(context, 'Attach photo (geotagged)'),
             icon: Icon(
               _photo != null
                   ? (_photo!.isGeotagged
@@ -203,13 +209,14 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SafeArea(
+          child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Project: ${widget.projectName}',
+              ui(context, 'Project: {v0}', [widget.projectName]),
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
@@ -218,11 +225,11 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
             _buildAccuracyDisplay(),
             const SizedBox(height: 16),
             _buildThresholdSelector(),
-            const Spacer(),
+            const SizedBox(height: 24),
             _buildSaveButtons(),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -269,7 +276,7 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
           if (!_permissionGranted)
             TextButton(
               onPressed: _startListening,
-              child: const Text('Allow'),
+              child: Text(ui(context, 'Allow')),
             ),
         ],
       ),
@@ -295,7 +302,7 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
       child: Column(
         children: [
           Text(
-            'Current accuracy',
+            ui(context, 'Current accuracy'),
             style: TextStyle(fontSize: 13, color: Colors.blue.shade800),
           ),
           const SizedBox(height: 8),
@@ -325,13 +332,13 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Max acceptable accuracy',
+          ui(context, 'Max acceptable accuracy'),
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+                fontWeight: FontWeight.w600,
+              ),
         ),
         const SizedBox(height: 8),
-        SegmentedButton<double>(
+        ResponsiveChoice<double>(
           segments: [
             for (final t in _thresholds)
               ButtonSegment(value: t, label: Text('${t.round()}m')),
@@ -360,13 +367,13 @@ class _PointRecordScreenState extends State<PointRecordScreen> {
           icon: _saving
               ? const AppLoadingIndicator(dense: true)
               : const Icon(Icons.add_location_alt_outlined),
-          label: const Text('Save point'),
+          label: Text(ui(context, 'Save point')),
         ),
         if (!acceptable && enabled) ...[
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: _saving ? null : () => _save(force: true),
-            child: const Text('Save anyway…'),
+            child: Text(ui(context, 'Save anyway…')),
           ),
         ],
       ],

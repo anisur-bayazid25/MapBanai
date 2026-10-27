@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_template_service.dart';
@@ -49,14 +50,15 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                 content: TextField(
                     controller: controller,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Name')),
+                    decoration:
+                        InputDecoration(labelText: ui(context, 'Name'))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () => Navigator.pop(context, controller.text),
-                      child: const Text('Save'))
+                      child: Text(ui(context, 'Save')))
                 ]));
     await Future<void>.delayed(const Duration(milliseconds: 300));
     controller.dispose();
@@ -65,14 +67,14 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Reusable templates')),
+      appBar: AppBar(title: Text(ui(context, 'Reusable templates'))),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text(
-            'Reuse questionnaires and named layers for a new campaign. Templates contain setup only; each new project gets a fresh identity and needs its own cloud connection. Existing visits and photos stay in the original project.'),
+        Text(ui(context,
+            'Reuse questionnaires and named layers for a new campaign. Templates contain setup only; each new project gets a fresh identity and needs its own cloud connection. Existing visits and photos stay in the original project.')),
         if (widget.projectId != null) ...[
           FilledButton.icon(
               icon: const Icon(Icons.bookmark_add_outlined),
-              label: const Text('Save this project as template'),
+              label: Text(ui(context, 'Save this project as template')),
               onPressed: _busy
                   ? null
                   : () => _run(() async {
@@ -83,7 +85,7 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                       })),
           OutlinedButton.icon(
               icon: const Icon(Icons.layers_outlined),
-              label: const Text('Save selected layer and questionnaire'),
+              label: Text(ui(context, 'Save selected layer and questionnaire')),
               onPressed: _busy
                   ? null
                   : () => _run(() async {
@@ -96,10 +98,10 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
         ],
         if (_busy) const LinearProgressIndicator(),
         if (_templates.isEmpty)
-          const Padding(
+          Padding(
               padding: EdgeInsets.all(20),
-              child: Text(
-                  'No saved templates. Open a configured project → Reusable templates to save one.')),
+              child: Text(ui(context,
+                  'No saved templates. Open a configured project → Reusable templates to save one.'))),
         for (final template in _templates)
           Card(
               child: Padding(
@@ -109,8 +111,10 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                       children: [
                         Text('${template['name']}',
                             style: Theme.of(context).textTheme.titleMedium),
-                        Text(
-                            '${template['kind']} • ${(template['forms'] as List).length} questionnaires'),
+                        Text(ui(context, '{v0} • {v1} questionnaires', [
+                          template['kind'],
+                          (template['forms'] as List).length
+                        ])),
                         Wrap(spacing: 8, children: [
                           TextButton(
                               onPressed: _busy
@@ -130,7 +134,7 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                                                           database: widget
                                                               .database)));
                                       }),
-                              child: const Text('Create project')),
+                              child: Text(ui(context, 'Create project'))),
                           if (widget.projectId != null)
                             TextButton(
                                 onPressed: _busy
@@ -140,12 +144,12 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                                               template, widget.projectId!);
                                           if (mounted)
                                             ScaffoldMessenger.of(context)
-                                                .showSnackBar(const SnackBar(
-                                                    content: Text(
-                                                        'Layers and questionnaires added')));
+                                                .showSnackBar(SnackBar(
+                                                    content: Text(ui(context,
+                                                        'Layers and questionnaires added'))));
                                         }),
-                                child:
-                                    const Text('Add layers to this project')),
+                                child: Text(
+                                    ui(context, 'Add layers to this project'))),
                           TextButton(
                               onPressed: _busy
                                   ? null
@@ -154,7 +158,7 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
                                             .remove('${template['id']}');
                                         await _load();
                                       }),
-                              child: const Text('Remove template')),
+                              child: Text(ui(context, 'Remove template'))),
                         ])
                       ]))),
       ]));

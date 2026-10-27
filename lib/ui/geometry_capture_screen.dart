@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mapbanai/services/location_service.dart';
 import 'package:mapbanai/services/map_service.dart';
 import 'package:mapbanai/ui/common/basemap_picker.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 
 /// Captures a WGS84 GeoJSON geometry for survey or study-area forms.
 /// A successful route returns the geometry map; cancellation returns null.
@@ -88,7 +90,8 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
   void _scheduleRender() {
     _renderQueue =
         _renderQueue.then((_) => _render()).catchError((Object error) {
-      _message('Map preview could not update. Geometry is retained: $error');
+      _message(ui(context,
+          'Map preview could not update. Geometry is retained: {v0}', [error]));
     });
   }
 
@@ -134,11 +137,11 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
     setState(() => _gettingGps = true);
     try {
       if (!await LocationService().ensurePermission()) {
-        _message('Allow location permission to use GPS.');
+        _message(ui(context, 'Allow location permission to use GPS.'));
         return;
       }
       if (!await Geolocator.isLocationServiceEnabled()) {
-        _message('Turn on location services.');
+        _message(ui(context, 'Turn on location services.'));
         return;
       }
       final position = await Geolocator.getCurrentPosition(
@@ -147,16 +150,17 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
       if (!mounted) return;
       if (!LocationService.isUsablePhotoFix(position, DateTime.now(),
           maximumAccuracy: 25)) {
-        _message(
-            'Wait for a fresh, accurate GPS fix (within 25 m and 30 seconds), or tap the map manually.');
+        _message(ui(context,
+            'Wait for a fresh, accurate GPS fix (within 25 m and 30 seconds), or tap the map manually.'));
         return;
       }
       final point = LatLng(position.latitude, position.longitude);
       if (addVertex) _addPoint(point);
       await _map?.animateCamera(CameraUpdate.newLatLngZoom(point, 17));
-      _message('GPS accuracy: ${position.accuracy.toStringAsFixed(1)} m');
+      _message(ui(context, 'GPS accuracy: {v0} m',
+          [position.accuracy.toStringAsFixed(1)]));
     } catch (error) {
-      _message('GPS unavailable: $error');
+      _message(ui(context, 'GPS unavailable: {v0}', [error]));
     } finally {
       if (mounted) setState(() => _gettingGps = false);
     }
@@ -171,7 +175,7 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
             : 2;
     final unique = _points.map((p) => '${p.longitude},${p.latitude}').toSet();
     if (_points.length < minimum || unique.length < minimum) {
-      _message('Add at least $minimum distinct vertices.');
+      _message(ui(context, 'Add at least {v0} distinct vertices.', [minimum]));
       return;
     }
     final coordinates = _points.map((p) => [p.longitude, p.latitude]).toList();
@@ -182,7 +186,7 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
         area += coordinates[i][0] * next[1] - next[0] * coordinates[i][1];
       }
       if (area.abs() < 1e-12) {
-        _message('Polygon vertices must enclose an area.');
+        _message(ui(context, 'Polygon vertices must enclose an area.'));
         return;
       }
       coordinates.add(List<double>.from(coordinates.first));
@@ -222,7 +226,7 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
         appBar: AppBar(
             actions: [
               IconButton(
-                  tooltip: 'Basemap',
+                  tooltip: ui(context, 'Basemap'),
                   icon: const Icon(Icons.map_outlined),
                   onPressed: () async {
                     final choice = await showBasemapPicker(context,
@@ -238,10 +242,10 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
                   })
             ],
             title: Text(widget.geometryType == 'Polygon'
-                ? 'Collect area'
+                ? ui(context, 'Collect area')
                 : widget.geometryType == 'Point'
-                    ? 'Collect point'
-                    : 'Collect line')),
+                    ? ui(context, 'Collect point')
+                    : ui(context, 'Collect line'))),
         body: Stack(children: [
           MapLibreMap(
               initialCameraPosition: CameraPosition(
@@ -265,50 +269,67 @@ class _GeometryCaptureScreenState extends State<GeometryCaptureScreen> {
               left: 12,
               right: 12,
               bottom: 12,
-              child: Card(
-                  child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(
-                            '${_points.length} vertices • Tap map to add vertices'),
-                        const Text(
-                            'Map tiles need internet. Saved geometry stays on this device.',
-                            style: TextStyle(fontSize: 11)),
-                        Wrap(spacing: 8, children: [
-                          TextButton.icon(
-                              onPressed: _gettingGps
-                                  ? null
-                                  : () => _gps(addVertex: false),
-                              icon: const Icon(Icons.my_location),
-                              label: const Text('Locate')),
-                          TextButton.icon(
-                              onPressed: _gettingGps
-                                  ? null
-                                  : () => _gps(addVertex: true),
-                              icon: const Icon(Icons.add_location_alt),
-                              label: const Text('GPS vertex')),
-                          TextButton(
-                              onPressed: _points.isEmpty
-                                  ? null
-                                  : () {
-                                      setState(() => _points.removeLast());
-                                      _scheduleRender();
-                                    },
-                              child: const Text('Undo')),
-                          TextButton(
-                              onPressed: _points.isEmpty
-                                  ? null
-                                  : () {
-                                      setState(() => _points.clear());
-                                      _scheduleRender();
-                                    },
-                              child: const Text('Clear')),
-                          FilledButton(
-                              onPressed: _save,
-                              child: const Text('Save geometry')),
-                        ]),
-                        if (_gettingGps) const LinearProgressIndicator(),
-                      ])))),
+              child: ScreenLayout.mapPanel(
+                  context,
+                  Card(
+                      child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            if (widget.geometryType == 'Point')
+                              Text(ui(
+                                  context,
+                                  _points.isEmpty
+                                      ? 'Tap the map to choose a location'
+                                      : 'Tap the map to move this point'))
+                            else
+                              Text(ui(
+                                  context,
+                                  '{v0} vertices • Tap map to add vertices',
+                                  [_points.length])),
+                            Text(
+                                ui(context,
+                                    'Map tiles need internet. Saved geometry stays on this device.'),
+                                style: TextStyle(fontSize: 11)),
+                            Wrap(spacing: 8, children: [
+                              TextButton.icon(
+                                  onPressed: _gettingGps
+                                      ? null
+                                      : () => _gps(addVertex: false),
+                                  icon: const Icon(Icons.my_location),
+                                  label: Text(ui(context, 'Locate'))),
+                              TextButton.icon(
+                                  onPressed: _gettingGps
+                                      ? null
+                                      : () => _gps(addVertex: true),
+                                  icon: const Icon(Icons.add_location_alt),
+                                  label: Text(ui(
+                                      context,
+                                      widget.geometryType == 'Point'
+                                          ? 'Use GPS position'
+                                          : 'GPS vertex'))),
+                              TextButton(
+                                  onPressed: _points.isEmpty
+                                      ? null
+                                      : () {
+                                          setState(() => _points.removeLast());
+                                          _scheduleRender();
+                                        },
+                                  child: Text(ui(context, 'Undo'))),
+                              TextButton(
+                                  onPressed: _points.isEmpty
+                                      ? null
+                                      : () {
+                                          setState(() => _points.clear());
+                                          _scheduleRender();
+                                        },
+                                  child: Text(ui(context, 'Clear'))),
+                              FilledButton(
+                                  onPressed: _save,
+                                  child: Text(ui(context, 'Save geometry'))),
+                            ]),
+                            if (_gettingGps) const LinearProgressIndicator(),
+                          ]))))),
         ]));
   }
 }

@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/questionnaire_sync_screen.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
@@ -65,7 +66,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   Future<void> _openFormBuilder() async {
     if (_projectId == null) {
-      _showSnack('Select a project before building a form');
+      _showSnack(ui(context, 'Select a project before building a form'));
       return;
     }
     final projectId = _projectId;
@@ -84,7 +85,9 @@ class _SurveyScreenState extends State<SurveyScreen> {
             );
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Form "${form.name}" saved')),
+                SnackBar(
+                    content:
+                        Text(ui(context, 'Form "{v0}" saved', [form.name]))),
               );
             }
             await _loadStoredForms();
@@ -102,24 +105,24 @@ class _SurveyScreenState extends State<SurveyScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Rename project'),
+        title: Text(ui(context, 'Rename project')),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: OutlineInputBorder(),
-            labelText: 'Project name',
-            hintText: 'e.g. Riverbank survey',
+            labelText: ui(context, 'Project name'),
+            hintText: ui(context, 'e.g. Riverbank survey'),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
+            child: Text(ui(context, 'Save')),
           ),
         ],
       ),
@@ -127,7 +130,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
     final clean = name?.trim();
     if (clean == null || clean.isEmpty || clean == current) return;
     if (await _database.projectExists(clean)) {
-      _showSnack('A project named "$clean" already exists');
+      _showSnack(ui(context, 'A project named "{v0}" already exists', [clean]));
       return;
     }
     final project = await _resolveProject();
@@ -138,7 +141,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
         .read<ProjectState>()
         .setSelectedProject(clean, projectId: project.id);
     setState(() => _projectName = clean);
-    _showSnack('Project renamed to "$clean"');
+    _showSnack(ui(context, 'Project renamed to "{v0}"', [clean]));
   }
 
   Future<void> _openProjectSettings() async {
@@ -156,9 +159,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
     if (project == null || !mounted) return;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete project',
-      message: 'Delete "${project.name}" and all its survey responses and '
-          'GIS features? This cannot be undone.',
+      title: ui(context, 'Delete project'),
+      message: ui(
+          context,
+          'Delete "{v0}" and all its survey responses and GIS features? This cannot be undone.',
+          [project.name]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -173,7 +178,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
       context.read<ProjectState>().clearSelectedProject();
     }
     Navigator.of(context).pop();
-    _showSnack('Project "${project.name}" deleted');
+    _showSnack(ui(context, 'Project "{v0}" deleted', [project.name]));
   }
 
   Future<void> _shareProject() async {
@@ -194,15 +199,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Survey Mode'),
+        title: Text(ui(context, 'Survey Mode')),
         actions: [
           IconButton(
-            tooltip: 'Build or import a survey form',
+            tooltip: ui(context, 'Build or import a survey form'),
             icon: const Icon(Icons.library_add_outlined),
             onPressed: _openFormBuilder,
           ),
           PopupMenuButton<String>(
-            tooltip: 'Project options',
+            tooltip: ui(context, 'Project options'),
             onSelected: (value) {
               switch (value) {
                 case 'rename':
@@ -215,14 +220,14 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   _openProjectSettings();
               }
             },
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
               PopupMenuItem(
                 value: 'settings',
                 child: Row(
                   children: [
                     Icon(Icons.settings_outlined, size: 18),
                     SizedBox(width: 8),
-                    Text('Project settings'),
+                    Text(ui(context, 'Project settings')),
                   ],
                 ),
               ),
@@ -232,7 +237,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   children: [
                     Icon(Icons.drive_file_rename_outline, size: 18),
                     SizedBox(width: 8),
-                    Text('Rename project'),
+                    Text(ui(context, 'Rename project')),
                   ],
                 ),
               ),
@@ -242,7 +247,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   children: [
                     Icon(Icons.ios_share_outlined, size: 18),
                     SizedBox(width: 8),
-                    Text('Share project'),
+                    Text(ui(context, 'Share project')),
                   ],
                 ),
               ),
@@ -252,7 +257,8 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   children: [
                     Icon(Icons.delete_outline, size: 18, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Delete project', style: TextStyle(color: Colors.red)),
+                    Text(ui(context, 'Delete project'),
+                        style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -265,18 +271,18 @@ class _SurveyScreenState extends State<SurveyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Select a survey form',
+            Text(
+              ui(context, 'Select a survey form'),
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
-              'Project: $_projectName',
+              ui(context, 'Project: {v0}', [_projectName]),
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-                label: const Text('Sync questionnaire'),
+                label: Text(ui(context, 'Sync questionnaire')),
                 icon: const Icon(Icons.cloud_download_outlined),
                 onPressed: _projectId == null
                     ? null
@@ -295,7 +301,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
                       : ListView(
                           children: [
                             Text(
-                              'My forms',
+                              ui(context, 'My forms'),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleSmall
@@ -344,8 +350,8 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   color: Colors.indigo.shade400,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Start building survey form',
+                Text(
+                  ui(context, 'Start building survey form'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -355,8 +361,8 @@ class _SurveyScreenState extends State<SurveyScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'No forms yet for this project. Tap to build or import '
-                  'your first survey form.',
+                  ui(context,
+                      'No forms yet for this project. Tap to build or import your first survey form.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -437,7 +443,8 @@ class _StoredFormCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${form.questions.length} questions',
+                          ui(context, '{v0} questions',
+                              [form.questions.length]),
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.indigo.shade600,

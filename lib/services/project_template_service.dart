@@ -73,12 +73,23 @@ class ProjectTemplateService {
       settings['study_layers'] = [
         for (final raw in settings['study_layers'] as List? ?? [])
           {
+            ...Map<String, dynamic>.from(raw),
             'id': remap.putIfAbsent('${raw['id']}', () => const Uuid().v4()),
             'name': raw['name']
           }
       ];
       settings['active_layer_id'] =
           remap[settings['active_layer_id']] ?? 'default';
+      // A template starts fresh rounds and progress while retaining assignments.
+      settings['collection_rounds'] = [];
+      settings['study_workflows'] = {
+        for (final entry in (settings['study_workflows'] as Map? ?? {}).entries)
+          entry.key: {
+            ...Map<String, dynamic>.from(entry.value),
+            'layer_id': remap[entry.value['layer_id']] ?? 'default',
+            'round_id': null
+          }
+      };
       final data = ProjectPackageData.from(
           ProjectPackageMeta(
               projectId: id,

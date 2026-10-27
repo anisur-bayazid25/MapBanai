@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -9,12 +10,17 @@ import 'package:mapbanai/services/study_area_outbox_service.dart';
 import 'package:mapbanai/services/study_area_service.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/common/shapefile_companions.dart';
+import 'package:mapbanai/models/study_workflow.dart';
 
 class ProjectVectorLayersScreen extends StatefulWidget {
   final AppDatabase database;
   final int projectId;
+  final StudyWorkflow? workflow;
   const ProjectVectorLayersScreen(
-      {required this.database, required this.projectId, super.key});
+      {required this.database,
+      required this.projectId,
+      this.workflow,
+      super.key});
   @override
   State<ProjectVectorLayersScreen> createState() =>
       _ProjectVectorLayersScreenState();
@@ -61,20 +67,21 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
     final colour = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('Custom layer colour'),
+                title: Text(ui(context, 'Custom layer colour')),
                 content: TextField(
                     controller: input,
                     maxLength: 7,
-                    decoration: const InputDecoration(
-                        labelText: 'Hex colour', hintText: '#267c76')),
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Hex colour'),
+                        hintText: '#267c76')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   TextButton(
                       onPressed: () =>
                           Navigator.pop(context, input.text.trim()),
-                      child: const Text('Apply'))
+                      child: Text(ui(context, 'Apply')))
                 ]));
     input.dispose();
     if (colour == null || !mounted) return;
@@ -88,6 +95,38 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
   }
 
   Future<void> _import() async {
+    final selectedModes = <String>{
+      widget.workflow?.name ?? StudyWorkflow.verification.name
+    };
+    final accepted = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+                    scrollable: true,
+                    title: Text(ui(context, 'Use layers in')),
+                    content: Column(mainAxisSize: MainAxisSize.min, children: [
+                      for (final mode in StudyWorkflow.values)
+                        CheckboxListTile(
+                            title: Text(ui(context, mode.title)),
+                            value: selectedModes.contains(mode.name),
+                            onChanged: (value) => update(() {
+                                  if (value == true)
+                                    selectedModes.add(mode.name);
+                                  else
+                                    selectedModes.remove(mode.name);
+                                }))
+                    ]),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text(ui(context, 'Cancel'))),
+                      FilledButton(
+                          onPressed: selectedModes.isEmpty
+                              ? null
+                              : () => Navigator.pop(context, true),
+                          child: Text(ui(context, 'Choose files')))
+                    ])));
+    if (accepted != true || !mounted) return;
     setState(() {
       busy = true;
       error = null;
@@ -116,13 +155,17 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                   .map((file) => file.identifier)
                   .whereType<String>())) return;
       final imported = await ProjectVectorLayerService.parseFiles(files);
+      for (final layer in imported) {
+        layer['workflows'] = selectedModes.toList();
+      }
       final combined = [...layers, ...imported];
       await service.save(widget.projectId, combined);
       final selected =
           imported.where((layer) => layer['role'] != 'road').firstOrNull;
       if (selected != null) {
         await ProjectWorkspaceService(widget.database).select(widget.projectId,
-            layerId: ProjectVectorLayerService.studyLayerId(selected));
+            layerId: ProjectVectorLayerService.studyLayerId(selected),
+            workflow: widget.workflow);
       }
       if (mounted) setState(() => layers = combined);
     } catch (e) {
@@ -145,18 +188,26 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-              title:
-                  Text(removeBatch ? 'Remove imported file?' : 'Remove layer?'),
+              title: Text(removeBatch
+                  ? ui(context, 'Remove imported file?')
+                  : ui(context, 'Remove layer?')),
               content: Text(removeBatch
-                  ? 'This will remove “${layer['import_file_name'] ?? layer['name']}”, its map layer, ${importedSites.length} imported points, and their local history.'
-                  : 'This will remove “${layer['name']}” from this project.'),
+                  ? ui(
+                      context,
+                      'This will remove “{v0}”, its map layer, {v1} imported points, and their local history.',
+                      [
+                          layer['import_file_name'] ?? layer['name'],
+                          importedSites.length
+                        ])
+                  : ui(context, 'This will remove “{v0}” from this project.',
+                      [layer['name']])),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel')),
+                    child: Text(ui(context, 'Cancel'))),
                 FilledButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Remove')),
+                    child: Text(ui(context, 'Remove'))),
               ],
             ));
     if (confirmed != true || !mounted) return;
@@ -182,8 +233,9 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
         setState(() => layers = remaining);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(removeBatch
-                ? 'Removed ${importedSites.length} imported points and their history.'
-                : 'Layer removed.')));
+                ? ui(context, 'Removed {v0} imported points and their history.',
+                    [importedSites.length])
+                : ui(context, 'Layer removed.'))));
       }
     } catch (e) {
       if (mounted) setState(() => error = 'Could not remove layer: $e');
@@ -196,15 +248,15 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
   Widget build(BuildContext context) => PopScope(
       canPop: !busy,
       child: Scaffold(
-          appBar: AppBar(title: const Text('Project vector layers')),
+          appBar: AppBar(title: Text(ui(context, 'Project vector layers'))),
           body: ListView(padding: const EdgeInsets.all(16), children: [
-            const Text(
-                'Add study-area, facility or road layers. Supported files: shapefile or ZIP, CSV, Excel, GeoJSON and GeoPackage. Road layers can provide shortest-path directions in Study Area Mode. Use WGS84 (EPSG:4326).'),
+            Text(ui(context,
+                'Add study-area, facility or road layers. Supported files: shapefile or ZIP, CSV, Excel, GeoJSON and GeoPackage. Road layers can provide shortest-path directions in Study Area Mode. Use WGS84 (EPSG:4326).')),
             const SizedBox(height: 12),
             FilledButton.icon(
                 onPressed: busy ? null : _import,
                 icon: const Icon(Icons.add),
-                label: const Text('Add vector layers')),
+                label: Text(ui(context, 'Add vector layers'))),
             if (busy) const LinearProgressIndicator(),
             if (error != null)
               Padding(
@@ -213,10 +265,10 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                       style: TextStyle(
                           color: Theme.of(context).colorScheme.error))),
             if (layers.isEmpty && !busy)
-              const Padding(
+              Padding(
                   padding: EdgeInsets.all(20),
-                  child:
-                      Text('No reference layers added to this project yet.')),
+                  child: Text(ui(context,
+                      'No reference layers added to this project yet.'))),
             for (final layer in layers)
               Card(
                   child: Padding(
@@ -225,8 +277,8 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                         SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(layer['name'] as String),
-                            subtitle: Text(
-                                '${(layer['features'] as List).length} features'),
+                            subtitle: Text(ui(context, '{v0} features',
+                                [(layer['features'] as List).length])),
                             value: layer['visible'] != false,
                             onChanged: busy
                                 ? null
@@ -235,6 +287,8 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                                     await _save();
                                   }),
                         DropdownButtonFormField<String>(
+                            itemHeight: null,
+                            isExpanded: true,
                             value: [
                               'reference',
                               'study_area',
@@ -243,19 +297,22 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                             ].contains(layer['role'])
                                 ? layer['role'] as String
                                 : 'reference',
-                            decoration: const InputDecoration(
-                                labelText: 'Layer type', isDense: true),
-                            items: const [
+                            decoration: InputDecoration(
+                                labelText: ui(context, 'Layer type'),
+                                isDense: true),
+                            items: [
                               DropdownMenuItem(
                                   value: 'reference',
-                                  child: Text('Reference layer')),
+                                  child: Text(ui(context, 'Reference layer'))),
                               DropdownMenuItem(
                                   value: 'study_area',
-                                  child: Text('Study area')),
+                                  child: Text(ui(context, 'Study area'))),
                               DropdownMenuItem(
-                                  value: 'facility', child: Text('Facilities')),
+                                  value: 'facility',
+                                  child: Text(ui(context, 'Facilities'))),
                               DropdownMenuItem(
-                                  value: 'road', child: Text('Road network')),
+                                  value: 'road',
+                                  child: Text(ui(context, 'Road network'))),
                             ],
                             onChanged: busy
                                 ? null
@@ -265,12 +322,46 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                                     await _save();
                                     if (mounted) setState(() {});
                                   }),
+                        if (layer['role'] != 'road')
+                          Wrap(spacing: 8, runSpacing: 4, children: [
+                            for (final mode in StudyWorkflow.values)
+                              FilterChip(
+                                  label: Text(ui(context, mode.title)),
+                                  selected: (layer['workflows'] as List?)
+                                          ?.contains(mode.name) ??
+                                      true,
+                                  onSelected: busy
+                                      ? null
+                                      : (selected) async {
+                                          final modes = (layer['workflows']
+                                                      as List? ??
+                                                  StudyWorkflow.values
+                                                      .map((mode) => mode.name)
+                                                      .toList())
+                                              .cast<String>()
+                                              .toSet();
+                                          if (selected)
+                                            modes.add(mode.name);
+                                          else
+                                            modes.remove(mode.name);
+                                          if (modes.isEmpty) {
+                                            setState(() => error =
+                                                'Keep at least one workflow for this layer.');
+                                            return;
+                                          }
+                                          layer['workflows'] = modes.toList();
+                                          await _save();
+                                        }),
+                          ]),
                         if ((layer['source_files'] as List?)?.isNotEmpty ==
                             true)
                           Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                  '${(layer['source_files'] as List).length} source file(s) included in project package',
+                                  ui(
+                                      context,
+                                      '{v0} source file(s) included in project package',
+                                      [(layer['source_files'] as List).length]),
                                   style: const TextStyle(fontSize: 11))),
                         if ((layer['warning'] ?? '').toString().isNotEmpty)
                           Text(layer['warning'].toString()),
@@ -278,7 +369,7 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                           TextButton(
                               onPressed:
                                   busy ? null : () => _customColour(layer),
-                              child: const Text('Colour')),
+                              child: Text(ui(context, 'Colour'))),
                           const SizedBox(width: 12),
                           Expanded(
                               child: Wrap(spacing: 6, children: [
@@ -316,14 +407,15 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                           ])),
                           IconButton(
                               tooltip: layer['import_batch_id'] == null
-                                  ? 'Remove layer'
-                                  : 'Remove imported file and its points',
+                                  ? ui(context, 'Remove layer')
+                                  : ui(context,
+                                      'Remove imported file and its points'),
                               onPressed:
                                   busy ? null : () => _removeLayer(layer),
                               icon: const Icon(Icons.delete_outline))
                         ]),
                         Row(children: [
-                          const Text('Opacity'),
+                          Text(ui(context, 'Opacity')),
                           Expanded(
                               child: Slider(
                                   value: (layer['opacity'] as num).toDouble(),

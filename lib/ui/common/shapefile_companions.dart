@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -43,21 +44,19 @@ Future<bool> resolveShapefileCompanions(
   final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-            title: const Text('Shapefile companion files'),
-            content: const Text(
-                'The matching DBF attribute file is not accessible. '
-                'Choose the folder containing the SHP, DBF, SHX, PRJ and CPG files, '
-                'or import geometry only. You can also select those files together.'),
+            title: Text(ui(context, 'Shapefile companion files')),
+            content: Text(ui(context,
+                'The matching DBF attribute file is not accessible. Choose the folder containing the SHP, DBF, SHX, PRJ and CPG files, or import geometry only. You can also select those files together.')),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel')),
+                  child: Text(ui(context, 'Cancel'))),
               TextButton(
                   onPressed: () => Navigator.pop(context, 'geometry'),
-                  child: const Text('Geometry only')),
+                  child: Text(ui(context, 'Geometry only'))),
               FilledButton(
                   onPressed: () => Navigator.pop(context, 'folder'),
-                  child: const Text('Choose folder')),
+                  child: Text(ui(context, 'Choose folder'))),
             ],
           ));
   if (action == 'geometry') return true;
@@ -76,9 +75,9 @@ Future<bool> resolveShapefileCompanions(
   }
   if (missingAttributes()) {
     if (context.mounted)
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Matching DBF not found in that folder. Select SHP and companions together or import their ZIP.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ui(context,
+              'Matching DBF not found in that folder. Select SHP and companions together or import their ZIP.'))));
     return false;
   }
   return true;

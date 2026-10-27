@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_importer.dart';
@@ -108,7 +109,7 @@ Future<void> runProjectImport(
     await flow.finishImport(session, decision: importDecision);
     if (!context.mounted) return;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Project imported successfully.')),
+      SnackBar(content: Text(ui(context, 'Project imported successfully.'))),
     );
     onImported();
   } catch (error) {
@@ -132,35 +133,34 @@ Future<ImportChoice?> showProjectConflictDialog(
   return showDialog<ImportChoice>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Project already exists'),
+      title: Text(ui(context, 'Project already exists')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '"${meta.projectName}" (version ${meta.projectVersion}) is '
-            'already on this device.',
+            ui(context, '"{v0}" (version {v1}) is already on this device.',
+                [meta.projectName, meta.projectVersion]),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'You can add it as a new copy, or replace the existing project. '
-            'Replacing deletes the current project and everything collected '
-            'in it.',
+          Text(
+            ui(context,
+                'You can add it as a new copy, or replace the existing project. Replacing deletes the current project and everything collected in it.'),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, ImportChoice.cancel),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, ImportChoice.newCopy),
-          child: const Text('Import as new copy'),
+          child: Text(ui(context, 'Import as new copy')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, ImportChoice.replaceExisting),
-          child: const Text('Replace existing project'),
+          child: Text(ui(context, 'Replace existing project')),
         ),
       ],
     ),
@@ -174,16 +174,17 @@ Future<void> _showBootstrapMessage(
   return showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Project code'),
+      title: Text(ui(context, 'Project code')),
       content: Text(
-        '"${meta.projectName}" (version ${meta.projectVersion}).\n\n'
-        'This code carries project information only. Ask the sender for the '
-        'project file (.mbproj) or an import QR code to add it to this phone.',
+        ui(
+            context,
+            '"{v0}" (version {v1}).\n\nThis code carries project information only. Ask the sender for the project file (.mbproj) or an import QR code to add it to this phone.',
+            [meta.projectName, meta.projectVersion]),
       ),
       actions: [
         FilledButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
+          child: Text(ui(context, 'OK')),
         ),
       ],
     ),
@@ -194,12 +195,12 @@ Future<void> showImportErrorDialog(BuildContext context, Object error) {
   return showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Import failed'),
+      title: Text(ui(context, 'Import failed')),
       content: Text(friendlyImportMessage(error)),
       actions: [
         FilledButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
+          child: Text(ui(context, 'OK')),
         ),
       ],
     ),
@@ -229,29 +230,31 @@ Future<void> showExportProjectOptions(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Export "${project.name}" (v${project.projectVersion})',
+                      ui(context, 'Export "{v0}" (v{v1})',
+                          [project.name, project.projectVersion]),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'The .mbproj package includes forms, GIS source files, map layers, settings and cloud setup scripts. Choose whether to include collected responses and their photos.',
+                      ui(context,
+                          'The .mbproj package includes forms, GIS source files, map layers, settings and cloud setup scripts. Choose whether to include collected responses and their photos.'),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title:
-                          const Text('Include collected responses and photos'),
-                      subtitle: const Text(
-                          'Includes survey history, drafts and current Study Area points.'),
+                      title: Text(ui(
+                          context, 'Include collected responses and photos')),
+                      subtitle: Text(ui(context,
+                          'Includes survey history, drafts and current Study Area points.')),
                       value: includeResponses,
                       onChanged: (value) => setSheetState(
                           () => includeResponses = value ?? false),
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Include sync connection'),
-                      subtitle: const Text(
-                          'Include the Apps Script URL and API key for trusted enumerators. Recipients can read the key.'),
+                      title: Text(ui(context, 'Include sync connection')),
+                      subtitle: Text(ui(context,
+                          'Include the Apps Script URL and API key for trusted enumerators. Recipients can read the key.')),
                       value: includeSyncConnection,
                       onChanged: (value) => setSheetState(
                           () => includeSyncConnection = value ?? false),
@@ -262,7 +265,7 @@ Future<void> showExportProjectOptions(
                       child: FilledButton.icon(
                         onPressed: () => Navigator.pop(context, true),
                         icon: const Icon(Icons.save_alt_rounded),
-                        label: const Text('SAVE PROJECT FILE'),
+                        label: Text(ui(context, 'SAVE PROJECT FILE')),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -271,7 +274,7 @@ Future<void> showExportProjectOptions(
                       child: FilledButton.tonalIcon(
                         onPressed: () => Navigator.pop(context, false),
                         icon: const Icon(Icons.ios_share_rounded),
-                        label: const Text('SHARE PROJECT'),
+                        label: Text(ui(context, 'SHARE PROJECT')),
                       ),
                     ),
                   ],
@@ -290,9 +293,11 @@ Future<void> showExportProjectOptions(
     messenger.showSnackBar(
       SnackBar(
         content: Text(switch (status) {
-          ProjectExportStatus.saved => 'Project exported successfully.',
-          ProjectExportStatus.cancelled => 'Export cancelled.',
-          ProjectExportStatus.failed => 'Export failed. Please try again.',
+          ProjectExportStatus.saved =>
+            ui(context, 'Project exported successfully.'),
+          ProjectExportStatus.cancelled => ui(context, 'Export cancelled.'),
+          ProjectExportStatus.failed =>
+            ui(context, 'Export failed. Please try again.'),
         }),
       ),
     );
@@ -303,11 +308,12 @@ Future<void> showExportProjectOptions(
     if (!context.mounted) return;
     if (shared) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Sharing project…')),
+        SnackBar(content: Text(ui(context, 'Sharing project…'))),
       );
     } else {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Sharing is not available right now.')),
+        SnackBar(
+            content: Text(ui(context, 'Sharing is not available right now.'))),
       );
     }
   }

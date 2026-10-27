@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/field_accuracy_review_service.dart';
@@ -113,10 +114,10 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
       if (!mounted) return;
       setState(() => _issues.removeWhere((item) => item.key == finding.key));
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              const Text('Accuracy accepted. Your data and photo are kept.'),
+          content: Text(
+              ui(context, 'Accuracy accepted. Your data and photo are kept.')),
           action: SnackBarAction(
-              label: 'Undo',
+              label: ui(context, 'Undo'),
               onPressed: () async {
                 await FieldAccuracyReviewService(_db)
                     .undo(_identity, finding.key);
@@ -124,8 +125,9 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
               })));
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not save acceptance: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(ui(context, 'Could not save acceptance: {v0}', [error]))));
       }
     }
   }
@@ -145,11 +147,11 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
       ..sort();
     return Scaffold(
         appBar: AppBar(
-            title: Text(
-                'Field quality${_projectName.isEmpty ? '' : ' — $_projectName'}'),
+            title: Text(ui(context, 'Field quality{v0}',
+                [_projectName.isEmpty ? '' : ' — $_projectName'])),
             actions: [
               IconButton(
-                  tooltip: 'Refresh accuracy review',
+                  tooltip: ui(context, 'Refresh accuracy review'),
                   onPressed: _loading ? null : _load,
                   icon: const Icon(Icons.refresh))
             ]),
@@ -159,13 +161,15 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                        'Review GPS accuracy above your limit. Accept a reading if it is suitable for your fieldwork.'),
+                    Text(ui(context,
+                        'Review GPS accuracy above your limit. Accept a reading if it is suitable for your fieldwork.')),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<double>(
+                        itemHeight: null,
+                        isExpanded: true,
                         value: _accuracyLimit,
-                        decoration: const InputDecoration(
-                            labelText: 'GPS accuracy review limit',
+                        decoration: InputDecoration(
+                            labelText: ui(context, 'GPS accuracy review limit'),
                             border: OutlineInputBorder()),
                         items: limits
                             .map((value) => DropdownMenuItem(
@@ -183,8 +187,8 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
                                 if (mounted) await _load();
                               }),
                     const SizedBox(height: 8),
-                    const Text(
-                        'Only readings above this limit appear. Accepted readings stay hidden; photos and records remain saved.'),
+                    Text(ui(context,
+                        'Only readings above this limit appear. Accepted readings stay hidden; photos and records remain saved.')),
                   ])),
           Expanded(
               child: _loading
@@ -192,14 +196,17 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                       const CircularProgressIndicator(),
                       const SizedBox(height: 16),
-                      Text(_progress)
+                      Text(ui(context, _progress))
                     ]))
                   : _error != null
-                      ? Center(child: Text('Cannot review accuracy: $_error'))
+                      ? Center(
+                          child: Text(ui(context,
+                              'Cannot review accuracy: {v0}', [_error])))
                       : _issues.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                  'No GPS readings above the limit need review.',
+                                  ui(context,
+                                      'No GPS readings above the limit need review.'),
                                   textAlign: TextAlign.center))
                           : ListView.builder(
                               itemCount: _issues.length,
@@ -224,8 +231,14 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
                                               const SizedBox(height: 4),
                                               Text(issue.source),
                                               const SizedBox(height: 8),
-                                              Text(
-                                                  'GPS accuracy: ±${issue.accuracyM.toStringAsFixed(1)} m · Limit: ${_accuracyLimit!.toInt()} m'),
+                                              Text(ui(
+                                                  context,
+                                                  'GPS accuracy: ±{v0} m · Limit: {v1} m',
+                                                  [
+                                                    issue.accuracyM
+                                                        .toStringAsFixed(1),
+                                                    _accuracyLimit!.toInt()
+                                                  ])),
                                               const SizedBox(height: 8),
                                               Wrap(spacing: 12, children: [
                                                 OutlinedButton.icon(
@@ -233,15 +246,15 @@ class _FieldQualityScreenState extends State<FieldQualityScreen> {
                                                         _review(issue),
                                                     icon: const Icon(
                                                         Icons.open_in_new),
-                                                    label: const Text(
-                                                        'View record')),
+                                                    label: Text(ui(context,
+                                                        'View record'))),
                                                 FilledButton.icon(
                                                     onPressed: () =>
                                                         _accept(issue),
                                                     icon:
                                                         const Icon(Icons.check),
-                                                    label: const Text(
-                                                        'Accept accuracy')),
+                                                    label: Text(ui(context,
+                                                        'Accept accuracy'))),
                                               ]),
                                             ])));
                               })),

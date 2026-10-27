@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -88,8 +90,9 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
     super.dispose();
   }
 
-  List<({double lat, double lon})> get _polygon =>
-      _recorder.vertices.map((p) => (lat: p.latitude, lon: p.longitude)).toList();
+  List<({double lat, double lon})> get _polygon => _recorder.vertices
+      .map((p) => (lat: p.latitude, lon: p.longitude))
+      .toList();
 
   Future<void> _save() async {
     final vertices = List<Position>.from(_recorder.vertices);
@@ -102,7 +105,8 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
     try {
       final projectId = await _database.getProjectIdByName(widget.projectName);
       if (projectId == null) {
-        _showSnack('Project not found: ${widget.projectName}');
+        _showSnack(
+            ui(context, 'Project not found: {v0}', [widget.projectName]));
         return;
       }
 
@@ -139,9 +143,9 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      _showSnack('Polygon saved');
+      _showSnack(ui(context, 'Polygon saved'));
     } catch (e) {
-      _showSnack('Failed to save polygon: $e');
+      _showSnack(ui(context, 'Failed to save polygon: {v0}', [e]));
     } finally {
       if (mounted) {
         setState(() {
@@ -161,8 +165,8 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
   Future<void> _confirmCancel() async {
     final cancel = await showConfirmDialog(
       context,
-      title: 'Cancel recording?',
-      message: 'The collected vertices will be discarded.',
+      title: ui(context, 'Cancel recording?'),
+      message: ui(context, 'The collected vertices will be discarded.'),
       confirmText: 'Cancel',
       cancelText: 'Keep recording',
       destructive: true,
@@ -175,25 +179,26 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Record Polygon')),
-      body: Padding(
+      appBar: AppBar(title: Text(ui(context, 'Record Polygon'))),
+      body: SafeArea(
+          child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Project: ${widget.projectName}',
+              ui(context, 'Project: {v0}', [widget.projectName]),
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
             _buildStatusCard(),
             const SizedBox(height: 16),
             _buildStatsPanel(),
-            const Spacer(),
+            const SizedBox(height: 24),
             _buildControls(),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -240,7 +245,7 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
           if (!_permissionGranted)
             TextButton(
               onPressed: _startListening,
-              child: const Text('Allow'),
+              child: Text(ui(context, 'Allow')),
             ),
         ],
       ),
@@ -267,22 +272,25 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          ResponsiveGrid(
+            minChildWidth: 130,
             children: [
-              _StatItem(label: 'Area', value: GeometryService.formatArea(area)),
               _StatItem(
-                label: 'Perimeter',
+                  label: ui(context, 'Area'),
+                  value: GeometryService.formatArea(area)),
+              _StatItem(
+                label: ui(context, 'Perimeter'),
                 value: GeometryService.formatDistance(perimeter),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          ResponsiveGrid(
+            minChildWidth: 110,
             children: [
-              _StatItem(label: 'Vertices', value: '$vertices'),
-              _StatItem(label: 'Elapsed', value: _recorder.elapsedLabel),
+              _StatItem(label: ui(context, 'Vertices'), value: '$vertices'),
+              _StatItem(
+                  label: ui(context, 'Elapsed'), value: _recorder.elapsedLabel),
             ],
           ),
           const SizedBox(height: 12),
@@ -291,10 +299,12 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
             children: [
               Icon(Icons.gps_fixed, size: 16, color: accuracyColor),
               const SizedBox(width: 6),
-              Text(
-                'Accuracy: ${AccuracyFilter.format(accuracy)} (max 20 m)',
+              Flexible(
+                  child: Text(
+                ui(context, 'Accuracy: {v0} (max 20 m)',
+                    [AccuracyFilter.format(accuracy)]),
                 style: TextStyle(fontSize: 12, color: accuracyColor),
-              ),
+              )),
             ],
           ),
         ],
@@ -317,12 +327,12 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
                   }
                 : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Start recording'),
+            label: Text(ui(context, 'Start recording')),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
         ],
       );
@@ -331,43 +341,39 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        ResponsiveGrid(
+          minChildWidth: 150,
           children: [
-            Expanded(
-              child: _recorder.paused
-                  ? OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _recorder.resume();
-                          _restartTicker();
-                        });
-                      },
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Resume'),
-                    )
-                  : OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _recorder.pause();
-                        });
-                      },
-                      icon: const Icon(Icons.pause),
-                      label: const Text('Pause'),
-                    ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _recorder.vertices.isEmpty
-                    ? null
-                    : () {
-                        setState(() {
-                          _recorder.undo();
-                        });
-                      },
-                icon: const Icon(Icons.undo),
-                label: const Text('Undo'),
-              ),
+            _recorder.paused
+                ? OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _recorder.resume();
+                        _restartTicker();
+                      });
+                    },
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(ui(context, 'Resume')),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _recorder.pause();
+                      });
+                    },
+                    icon: const Icon(Icons.pause),
+                    label: Text(ui(context, 'Pause')),
+                  ),
+            OutlinedButton.icon(
+              onPressed: _recorder.vertices.isEmpty
+                  ? null
+                  : () {
+                      setState(() {
+                        _recorder.undo();
+                      });
+                    },
+              icon: const Icon(Icons.undo),
+              label: Text(ui(context, 'Undo')),
             ),
           ],
         ),
@@ -377,13 +383,14 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
           icon: _saving
               ? const AppLoadingIndicator(dense: true)
               : const Icon(Icons.check),
-          label: const Text('Save polygon'),
+          label: Text(ui(context, 'Save polygon')),
         ),
         if (_recorder.vertices.isNotEmpty && _recorder.vertices.length < 3)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'At least 3 vertices required (${_recorder.vertices.length}/3)',
+              ui(context, 'At least 3 vertices required ({v0}/3)',
+                  [_recorder.vertices.length]),
               style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
               textAlign: TextAlign.center,
             ),
@@ -392,7 +399,7 @@ class _PolygonRecordScreenState extends State<PolygonRecordScreen> {
         TextButton.icon(
           onPressed: _saving ? null : _confirmCancel,
           icon: const Icon(Icons.close),
-          label: const Text('Cancel recording'),
+          label: Text(ui(context, 'Cancel recording')),
         ),
       ],
     );

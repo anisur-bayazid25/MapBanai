@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/guided_visit_service.dart';
 import 'package:mapbanai/services/study_area_service.dart';
+import 'package:mapbanai/services/study_collection_service.dart';
 
 class SiteObservation {
   final String id;
@@ -13,8 +14,12 @@ class SiteObservation {
   final Map<String, dynamic> form;
   final String outcome;
   final String note;
+  final String roundName;
+  final String period;
+  final String workflow;
   const SiteObservation(this.id, this.timestamp, this.author, this.formId,
-      this.formName, this.answers, this.form, this.outcome, this.note);
+      this.formName, this.answers, this.form, this.outcome, this.note,
+      {this.roundName = '', this.period = '', this.workflow = ''});
   double? number(String key) {
     for (final question in form['questions'] as List? ?? []) {
       if (question is Map &&
@@ -61,6 +66,28 @@ class SiteObservationService {
           '${after['change_note'] ?? ''}');
     }
     for (final row in await db.getSurveySessionsByProject(projectId)) {
+      final collection = StudyCollectionService.data(row);
+      if (row.status == 'saved' &&
+          collection != null &&
+          collection['site_id'] == site.id &&
+          collection['record_kind'] == 'observation') {
+        final id = row.externalId ?? 'local:${row.id}';
+        final round = collection['collection_round'] as Map?;
+        observations[id] = SiteObservation(
+            id,
+            DateTime.tryParse('${collection['observed_at']}') ?? row.createdAt,
+            '${collection['user_name'] ?? ''}',
+            '${collection['form_id'] ?? ''}',
+            '${collection['form_name'] ?? ''}',
+            Map<String, dynamic>.from(collection['answers'] as Map? ?? {}),
+            Map<String, dynamic>.from(
+                collection['form_snapshot'] as Map? ?? {}),
+            '${collection['outcome'] ?? ''}',
+            '${collection['note'] ?? ''}',
+            roundName: '${round?['name'] ?? ''}',
+            period: '${round?['period'] ?? ''}',
+            workflow: '${collection['study_workflow'] ?? ''}');
+      }
       if (row.status != 'saved' || !GuidedVisitService.isVisit(row)) continue;
       final visit = GuidedVisitService.visit(row);
       if (visit['site_id'] != site.id) continue;
@@ -124,6 +151,9 @@ class SiteObservationService {
         'observer',
         'outcome',
         'note',
+        'workflow',
+        'collection_round',
+        'period',
         ...keys
       ],
       for (final row in rows)
@@ -137,6 +167,9 @@ class SiteObservationService {
           row.author,
           row.outcome,
           row.note,
+          row.workflow,
+          row.roundName,
+          row.period,
           for (final key in keys) row.answers[key] ?? ''
         ],
     ];

@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/services/spatial_file_import.dart';
 import 'package:mapbanai/ui/open_spatial_file.dart';
 import 'package:mapbanai/ui/help_screen.dart';
@@ -35,14 +36,16 @@ import 'package:mapbanai/ui/import_flow_dialogs.dart';
 import 'package:mapbanai/ui/project_detail_screen.dart';
 import 'package:mapbanai/ui/project_setup_screen.dart';
 import 'package:mapbanai/ui/settings_screen.dart';
-import 'package:mapbanai/ui/study_area_mode_screen.dart';
+import 'package:mapbanai/ui/study_area_hub_screen.dart';
 import 'package:mapbanai/ui/survey_history_screen.dart';
 import 'package:mapbanai/ui/survey_screen.dart';
 import 'package:mapbanai/ui/webmap_viewer_screen.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.database});
+
+  final AppDatabase? database;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -58,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _database = AppDatabase();
+    _database = widget.database ?? AppDatabase();
     IntentHandler.setOpenListener((path) => _handleIncomingProject(path));
     _backup = BackupService(_database);
     BackgroundGps.instance.addListener(_onBackgroundGpsChanged);
@@ -109,19 +112,19 @@ class _HomeScreenState extends State<HomeScreen> {
       final restore = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Previous data backup found'),
-          content: const Text(
-            'A backup from a previous MapBanai install was found. '
-            'Restore settings and survey responses?',
+          title: Text(ui(context, 'Previous data backup found')),
+          content: Text(
+            ui(context,
+                'A backup from a previous MapBanai install was found. Restore settings and survey responses?'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Not now'),
+              child: Text(ui(context, 'Not now')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Restore'),
+              child: Text(ui(context, 'Restore')),
             ),
           ],
         ),
@@ -150,15 +153,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(restored
-              ? 'Backup restored successfully.'
-              : 'Backup restore failed. Data was not changed.'),
+              ? ui(context, 'Backup restored successfully.')
+              : ui(context, 'Backup restore failed. Data was not changed.')),
         ),
       );
     } catch (e, st) {
       debugPrint('[Restore] _promptRestoreBackup failed: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Restore failed: $e')),
+          SnackBar(content: Text(ui(context, 'Restore failed: {v0}', [e]))),
         );
       }
     }
@@ -183,10 +186,10 @@ class _HomeScreenState extends State<HomeScreen> {
           !file.startsWith('file://')) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Online project links are not supported yet. Ask the sender '
-              'for the project file (.mbproj) or a project QR code.',
+              ui(context,
+                  'Online project links are not supported yet. Ask the sender for the project file (.mbproj) or a project QR code.'),
             ),
           ),
         );
@@ -194,10 +197,10 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Project invite received. Open the .mbproj file in MapBanai to '
-            'import it.',
+            ui(context,
+                'Project invite received. Open the .mbproj file in MapBanai to import it.'),
           ),
         ),
       );
@@ -237,30 +240,32 @@ class _HomeScreenState extends State<HomeScreen> {
     final source = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Import project'),
+        title: Text(ui(context, 'Import project')),
         children: [
           ListTile(
             leading: const Icon(Icons.folder_open_rounded),
-            title: const Text('Choose .mbproj file'),
-            subtitle: const Text('Pick a project package from your device'),
+            title: Text(ui(context, 'Choose .mbproj file')),
+            subtitle:
+                Text(ui(context, 'Pick a project package from your device')),
             onTap: () => Navigator.pop(context, 'file'),
           ),
           ListTile(
             leading: const Icon(Icons.qr_code_2_rounded),
-            title: const Text('Paste project code'),
-            subtitle: const Text('Enter a MapBanai QR code or link'),
+            title: Text(ui(context, 'Paste project code')),
+            subtitle: Text(ui(context, 'Enter a MapBanai QR code or link')),
             onTap: () => Navigator.pop(context, 'paste'),
           ),
           ListTile(
             leading: const Icon(Icons.qr_code_scanner_rounded),
-            title: const Text('Scan QR code'),
-            subtitle: const Text('Open the camera to scan a project code'),
+            title: Text(ui(context, 'Scan QR code')),
+            subtitle:
+                Text(ui(context, 'Open the camera to scan a project code')),
             onTap: () => Navigator.pop(context, 'scan'),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Scan QR from gallery'),
-            subtitle: const Text('Pick a QR image from your gallery'),
+            title: Text(ui(context, 'Scan QR from gallery')),
+            subtitle: Text(ui(context, 'Pick a QR image from your gallery')),
             onTap: () => Navigator.pop(context, 'gallery'),
           ),
         ],
@@ -280,7 +285,8 @@ class _HomeScreenState extends State<HomeScreen> {
             content: Text(
               error is ProjectImportException || error is FormatException
                   ? friendlyImportMessage(error)
-                  : 'Could not open the file picker. Please try again.',
+                  : ui(context,
+                      'Could not open the file picker. Please try again.'),
             ),
           ),
         );
@@ -299,12 +305,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final shown = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Could not read the QR code'),
+            title: Text(ui(context, 'Could not read the QR code')),
             content: Text(error.message),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Close'),
+                child: Text(ui(context, 'Close')),
               ),
               FilledButton(
                 onPressed: () async {
@@ -316,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     await _runProjectImport(qrPayload: payload.trim());
                   }
                 },
-                child: const Text('Paste instead'),
+                child: Text(ui(context, 'Paste instead')),
               ),
             ],
           ),
@@ -364,24 +370,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Paste project code'),
+        title: Text(ui(context, 'Paste project code')),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLines: 4,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: OutlineInputBorder(),
-            hintText: 'Paste the MapBanai code here',
+            hintText: ui(context, 'Paste the MapBanai code here'),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Import'),
+            child: Text(ui(context, 'Import')),
           ),
         ],
       ),
@@ -396,10 +402,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (update == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Update v${update.version} is available'),
+        content:
+            Text(ui(context, 'Update v{v0} is available', [update.version])),
         duration: const Duration(seconds: 8),
         action: SnackBarAction(
-          label: 'View',
+          label: ui(context, 'View'),
           onPressed: () => showUpdateDialog(context, update),
         ),
       ),
@@ -415,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final project = await _resolveSelectedProject(context.read<ProjectState>());
     if (!mounted) return;
     if (project == null || project.archived) {
-      _showSnack('Select an active project first');
+      _showSnack(ui(context, 'Select an active project first'));
       return;
     }
     await Navigator.of(context).push(MaterialPageRoute(
@@ -430,12 +437,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final projectState = context.read<ProjectState>();
     final selected = projectState.selectedProject;
     if (selected.isEmpty) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     final project = await _resolveSelectedProject(projectState);
     if (project == null) {
-      _showSnack('Project not found: $selected');
+      _showSnack(ui(context, 'Project not found: {v0}', [selected]));
       return;
     }
     final config = await _database.getSyncConfig(project.id);
@@ -444,8 +451,9 @@ class _HomeScreenState extends State<HomeScreen> {
         config.syncEndpointUrl!.trim().isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Set up cloud sync for this project first')),
+        SnackBar(
+            content:
+                Text(ui(context, 'Set up cloud sync for this project first'))),
       );
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -475,7 +483,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final isOffline = _isOfflineError(msg);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isOffline ? 'No internet connection' : msg),
+            content:
+                Text(isOffline ? ui(context, 'No internet connection') : msg),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -489,15 +498,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _generateAndOpenWebMap() async {
+    final languageCode = Localizations.localeOf(context).languageCode;
     final projectState = context.read<ProjectState>();
     final selected = projectState.selectedProject;
     if (selected.isEmpty) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     final project = await _resolveSelectedProject(projectState);
     if (project == null) {
-      _showSnack('Project not found: $selected');
+      _showSnack(ui(context, 'Project not found: {v0}', [selected]));
       return;
     }
     // Show loading indicator while generating (can take a moment for large datasets)
@@ -519,12 +529,14 @@ class _HomeScreenState extends State<HomeScreen> {
         // Still generate but inform user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Generating webmap for $count features — this may take a moment...')),
+              content: Text(ui(
+                  context,
+                  'Generating webmap for {v0} features — this may take a moment...',
+                  [count]))),
         );
       }
-      final html =
-          await generator.generateHtml(featureCollection: featureCollection);
+      final html = await generator.generateHtml(
+          featureCollection: featureCollection, languageCode: languageCode);
       final file = await generator.writeToFile(html);
       if (!mounted) return;
       Navigator.of(context).pop(); // close loading
@@ -537,7 +549,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate webmap: $e')),
+        SnackBar(
+            content: Text(ui(context, 'Failed to generate webmap: {v0}', [e]))),
       );
     }
   }
@@ -560,12 +573,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSyncSquare(BuildContext context, String selected) {
     if (selected.isEmpty) {
-      return const _SquareModeCard(
-        title: 'Cloud Sync',
+      return _SquareModeCard(
+        title: ui(context, 'Cloud Sync'),
         color: Color(0xFF6A1B9A),
         icon: Icons.cloud_off_outlined,
         onTap: null,
-        subtitle: 'No project selected',
+        subtitle: ui(context, 'No project selected'),
       );
     }
     final state = context.read<ProjectState>();
@@ -579,12 +592,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     if (projectId == null) {
-      return const _SquareModeCard(
-        title: 'Cloud Sync',
+      return _SquareModeCard(
+        title: ui(context, 'Cloud Sync'),
         color: Color(0xFF6A1B9A),
         icon: Icons.cloud_off_outlined,
         onTap: null,
-        subtitle: 'No project selected',
+        subtitle: ui(context, 'No project selected'),
       );
     }
     return FutureBuilder<SyncConfig?>(
@@ -630,27 +643,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('My enumerator name'),
+                title: Text(ui(context, 'My enumerator name')),
                 content: TextField(
                     controller: input,
                     autofocus: true,
                     maxLength: 100,
-                    decoration: const InputDecoration(
-                        labelText: 'Your name',
-                        helperText: 'Attached to each new submission.')),
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Your name'),
+                        helperText:
+                            ui(context, 'Attached to each new submission.'))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () =>
                           Navigator.pop(context, input.text.trim()),
-                      child: const Text('Save'))
+                      child: Text(ui(context, 'Save')))
                 ]));
     input.dispose();
     if (name == null || !mounted) return;
     if (name.isEmpty) {
-      _showSnack('Enter your name so submissions identify you.');
+      _showSnack(ui(context, 'Enter your name so submissions identify you.'));
       return;
     }
     await _database.setSetting('user_name', name);
@@ -661,7 +675,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final project = await _resolveSelectedProject(context.read<ProjectState>());
     if (!mounted) return;
     if (project == null) {
-      _showSnack('Import or select a project first');
+      _showSnack(ui(context, 'Import or select a project first'));
       return;
     }
     await Navigator.of(context).push(MaterialPageRoute(
@@ -681,25 +695,24 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Welcome to MapBanai'),
+        title: Text(ui(context, 'Welcome to MapBanai')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enter your name — it will be attached to every survey '
-              'response, GPS log entry and export. You can change it later '
-              'in the three-bar menu → My name.',
+              ui(context,
+                  'Enter your name — it will be attached to every survey response, GPS log entry and export. You can change it later in the three-bar menu → My name.'),
               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'User name',
-                hintText: 'e.g., John Doe',
+                labelText: ui(context, 'User name'),
+                hintText: ui(context, 'e.g., John Doe'),
                 prefixIcon: Icon(Icons.person_outline),
               ),
             ),
@@ -708,11 +721,11 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Skip'),
+            child: Text(ui(context, 'Skip')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
+            child: Text(ui(context, 'Save')),
           ),
         ],
       ),
@@ -733,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     BackgroundGps.instance.removeListener(_onBackgroundGpsChanged);
     _backupTimer?.cancel();
-    _database.close();
+    if (widget.database == null) _database.close();
     super.dispose();
   }
 
@@ -752,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         actions: [
           PopupMenuButton<String>(
-            tooltip: 'Menu',
+            tooltip: ui(context, 'Menu'),
             icon: const Icon(Icons.menu),
             onSelected: (value) async {
               if (value == 'name') {
@@ -773,21 +786,21 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'name',
                   child: ListTile(
                       leading: Icon(Icons.person_outline),
-                      title: Text('My name'))),
-              const PopupMenuItem(
+                      title: Text(ui(context, 'My name')))),
+              PopupMenuItem(
                   value: 'responses',
                   child: ListTile(
                       leading: Icon(Icons.history_outlined),
-                      title: Text('My responses'))),
-              const PopupMenuItem(
+                      title: Text(ui(context, 'My responses')))),
+              PopupMenuItem(
                   value: 'help',
                   child: ListTile(
                       leading: Icon(Icons.help_outline),
-                      title: Text('Help & manager setup'))),
+                      title: Text(ui(context, 'Help & manager setup')))),
               PopupMenuItem(
                   value: 'settings',
                   child: ListTile(
@@ -828,117 +841,104 @@ class _HomeScreenState extends State<HomeScreen> {
                   FilledButton.icon(
                     onPressed: () => _openFieldWorkflow(),
                     icon: const Icon(Icons.fact_check_outlined),
-                    label: const Padding(
+                    label: Padding(
                       padding: EdgeInsets.symmetric(vertical: 10),
-                      child: Text('Visit a study site'),
+                      child: Text(ui(context, 'Visit a study site')),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // 4 modes as square tiles — 2×2 grid fits without scrolling
-                  Row(
+                  // Reflow modes and utilities as screen/text size changes.
+                  ResponsiveGrid(
+                    minChildWidth: 130,
                     children: [
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.surveyModeTitle ?? 'Survey Mode',
-                          color: const Color(0xFF2E7D32),
-                          icon: Icons.assignment_turned_in_outlined,
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => SurveyScreen(
-                                    projectName: selected,
-                                    projectId: projectState.selectedProjectId),
-                              ),
-                            );
-                            _loadProjects();
-                          },
-                        ),
+                      _SquareModeCard(
+                        title: l10n?.surveyModeTitle ?? 'Survey Mode',
+                        color: const Color(0xFF2E7D32),
+                        icon: Icons.assignment_turned_in_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SurveyScreen(
+                                  projectName: selected,
+                                  projectId: projectState.selectedProjectId),
+                            ),
+                          );
+                          _loadProjects();
+                        },
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.gisModeTitle ?? 'GIS Mode',
-                          color: const Color(0xFF1565C0),
-                          icon: Icons.map_outlined,
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => GisModeScreen(
-                                    projectName: selected,
-                                    projectId: projectState.selectedProjectId),
-                              ),
-                            );
-                            _loadProjects();
-                          },
-                        ),
+                      _SquareModeCard(
+                        title: l10n?.studyAreaModeTitle ?? 'Study Area Mode',
+                        color: const Color(0xFFE65100),
+                        icon: Icons.explore_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => StudyAreaHubScreen(
+                                    projectId: context
+                                        .read<ProjectState>()
+                                        .selectedProjectId)),
+                          );
+                          _loadProjects();
+                        },
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
+                  ResponsiveGrid(
+                    minChildWidth: 130,
                     children: [
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.gpsModeTitle ?? 'GPS Mode',
-                          color: const Color(0xFF00695C),
-                          icon: Icons.my_location_outlined,
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const GpsModeScreen()),
-                            );
-                            _loadProjects();
-                          },
-                        ),
+                      _SquareModeCard(
+                        title: l10n?.gpsModeTitle ?? 'GPS Mode',
+                        color: const Color(0xFF00695C),
+                        icon: Icons.my_location_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const GpsModeScreen()),
+                          );
+                          _loadProjects();
+                        },
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.studyAreaModeTitle ?? 'Study Area Mode',
-                          color: const Color(0xFFE65100),
-                          icon: Icons.explore_outlined,
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => StudyAreaModeScreen(
-                                      projectId: context
-                                          .read<ProjectState>()
-                                          .selectedProjectId)),
-                            );
-                            _loadProjects();
-                          },
-                        ),
+                      _SquareModeCard(
+                        title: l10n?.gisModeTitle ?? 'GIS Mode',
+                        color: const Color(0xFF1565C0),
+                        icon: Icons.map_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => GisModeScreen(
+                                  projectName: selected,
+                                  projectId: projectState.selectedProjectId),
+                            ),
+                          );
+                          _loadProjects();
+                        },
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Utility row: GPS CSV Viewer · Cloud Sync · WebMap — 3×1 squares
-                  Row(
+                  // Utilities use up to three columns when their labels fit.
+                  ResponsiveGrid(
+                    minChildWidth: 110,
                     children: [
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.gpsCsvViewerTitle ?? 'GPS CSV Viewer',
-                          color: const Color(0xFF283593),
-                          icon: Icons.table_chart_outlined,
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const GpsCsvViewerScreen()),
-                            );
-                            _loadProjects();
-                          },
-                        ),
+                      _SquareModeCard(
+                        title: l10n?.gpsCsvViewerTitle ?? 'GPS CSV Viewer',
+                        color: const Color(0xFF283593),
+                        icon: Icons.table_chart_outlined,
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const GpsCsvViewerScreen()),
+                          );
+                          _loadProjects();
+                        },
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(child: _buildSyncSquare(context, selected)),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _SquareModeCard(
-                          title: l10n?.webMapTitle ?? 'WebMap',
-                          color: const Color(0xFF4A148C),
-                          icon: Icons.public_outlined,
-                          onTap: _generateAndOpenWebMap,
-                        ),
+                      _buildSyncSquare(context, selected),
+                      _SquareModeCard(
+                        title: l10n?.webMapTitle ?? 'WebMap',
+                        color: const Color(0xFF4A148C),
+                        icon: Icons.public_outlined,
+                        onTap: _generateAndOpenWebMap,
                       ),
                     ],
                   ),
@@ -951,7 +951,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       OutlinedButton.icon(
                         onPressed: () => _openFieldWorkflow(quality: true),
                         icon: const Icon(Icons.rule_outlined),
-                        label: const Text('Field quality checks'),
+                        label: Text(ui(context, 'Field quality checks')),
                       ),
                       OutlinedButton.icon(
                         onPressed: () => Navigator.of(context).push(
@@ -959,59 +959,52 @@ class _HomeScreenState extends State<HomeScreen> {
                               builder: (_) => const OfflineMapsScreen()),
                         ),
                         icon: const Icon(Icons.download_for_offline_outlined),
-                        label: const Text('Offline maps'),
+                        label: Text(ui(context, 'Offline maps')),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   _buildCollectedData(projectState, selected),
                   const SizedBox(height: 20),
-                  Row(
+                  ResponsiveGrid(
+                    minChildWidth: 180,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const ProjectSetupScreen()),
-                            );
-                            _loadProjects();
-                          },
-                          icon: const Icon(Icons.folder_open_rounded),
-                          label:
-                              Text(l10n?.projectSettings ?? 'Project settings'),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const ProjectSetupScreen()),
+                          );
+                          _loadProjects();
+                        },
+                        icon: const Icon(Icons.folder_open_rounded),
+                        label:
+                            Text(l10n?.projectSettings ?? 'Project settings'),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (_) => const SurveyHistoryScreen()),
-                            );
-                            _loadProjects();
-                          },
-                          icon: const Icon(Icons.history_outlined),
-                          label: Text(l10n?.history ?? 'History'),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const SurveyHistoryScreen()),
+                          );
+                          _loadProjects();
+                        },
+                        icon: const Icon(Icons.history_outlined),
+                        label: Text(l10n?.history ?? 'History'),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DataExportScreen(
-                                    projectName: selected,
-                                    projectId: projectState.selectedProjectId),
-                              ),
-                            );
-                            _loadProjects();
-                          },
-                          icon: const Icon(Icons.ios_share_outlined),
-                          label: Text(l10n?.export ?? 'Export'),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => DataExportScreen(
+                                  projectName: selected,
+                                  projectId: projectState.selectedProjectId),
+                            ),
+                          );
+                          _loadProjects();
+                        },
+                        icon: const Icon(Icons.ios_share_outlined),
+                        label: Text(l10n?.export ?? 'Export'),
                       ),
                     ],
                   ),
@@ -1072,30 +1065,26 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
           ),
           const SizedBox(height: 8),
-          Row(
+          ResponsiveGrid(
+            minChildWidth: 180,
             children: [
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red.shade600,
-                  ),
-                  onPressed: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const GpsModeScreen()),
-                    );
-                    _loadProjects();
-                  },
-                  child: Text(l10n?.openGpsMode ?? 'Open GPS Mode'),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
                 ),
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const GpsModeScreen()),
+                  );
+                  _loadProjects();
+                },
+                child: Text(l10n?.openGpsMode ?? 'Open GPS Mode'),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () async {
-                    await BackgroundGps.instance.stop();
-                  },
-                  child: Text(l10n?.stop ?? 'Stop'),
-                ),
+              OutlinedButton(
+                onPressed: () async {
+                  await BackgroundGps.instance.stop();
+                },
+                child: Text(l10n?.stop ?? 'Stop'),
               ),
             ],
           ),
@@ -1158,22 +1147,21 @@ class _HomeScreenState extends State<HomeScreen> {
     ProjectState projectState,
   ) async {
     if (_projects.isEmpty) {
-      _showSnack(
-          'No projects yet — open Project Settings to create one, or use '
-          'Import Project to import a .mbproj file');
+      _showSnack(ui(context,
+          'No projects yet — open Project Settings to create one, or use Import Project to import a .mbproj file'));
       return;
     }
     final selected = await showDialog<int>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Select project'),
+        title: Text(ui(context, 'Select project')),
         children: [
           for (final project in _projects)
             RadioListTile<int>(
               title: Text(project.name),
               subtitle: Text(
                 project.description.trim().isEmpty
-                    ? 'No description'
+                    ? ui(context, 'No description')
                     : project.description.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1254,7 +1242,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.green.shade700,
                   ),
                   const SizedBox(width: 8),
-                  Text(
+                  Expanded(
+                      child: Text(
                     l10n != null
                         ? l10n.collectedDataTitle(selected)
                         : 'Collected data — $selected',
@@ -1262,26 +1251,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontWeight: FontWeight.w700,
                           color: Colors.green.shade700,
                         ),
-                  ),
+                  )),
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
+              ResponsiveGrid(
+                minChildWidth: 150,
                 children: [
-                  Expanded(
-                    child: _statTile(
-                      label: l10n?.surveyResponses ?? 'Survey Responses',
-                      value: counts?.survey.toString() ?? '…',
-                      icon: Icons.assignment_turned_in_outlined,
-                    ),
+                  _statTile(
+                    label: l10n?.surveyResponses ?? 'Survey Responses',
+                    value: counts?.survey.toString() ?? '…',
+                    icon: Icons.assignment_turned_in_outlined,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _statTile(
-                      label: l10n?.gisFeatures ?? 'GIS Features',
-                      value: counts?.gis.toString() ?? '…',
-                      icon: Icons.edit_location_alt_outlined,
-                    ),
+                  _statTile(
+                    label: l10n?.gisFeatures ?? 'GIS Features',
+                    value: counts?.gis.toString() ?? '…',
+                    icon: Icons.edit_location_alt_outlined,
                   ),
                 ],
               ),
@@ -1311,7 +1296,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(icon, size: 20, color: Colors.green.shade600),
           const SizedBox(width: 8),
-          Column(
+          Expanded(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -1327,7 +1313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
               ),
             ],
-          ),
+          )),
         ],
       ),
     );
@@ -1434,8 +1420,10 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(_done
-          ? (_error != null ? 'Sync failed' : 'Sync complete')
-          : 'Syncing...'),
+          ? (_error != null
+              ? ui(context, 'Sync failed')
+              : ui(context, 'Sync complete'))
+          : ui(context, 'Syncing...')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1451,7 +1439,7 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '$_photoCurrent/$_photoTotal photos',
+                  ui(context, '{v0}/{v1} photos', [_photoCurrent, _photoTotal]),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ),
@@ -1464,7 +1452,7 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
                 color: Colors.green.shade700, size: 48),
             const SizedBox(height: 12),
             Text(
-              _result?.summary ?? 'Sync finished',
+              _result?.summary ?? ui(context, 'Sync finished'),
               textAlign: TextAlign.center,
             ),
             if (_result != null && _result!.photos.total > 0) ...[
@@ -1482,7 +1470,7 @@ class _SyncProgressDialogState extends State<_SyncProgressDialog> {
           ? [
               TextButton(
                 onPressed: () => Navigator.pop(context, _result),
-                child: const Text('Close'),
+                child: Text(ui(context, 'Close')),
               ),
             ]
           : null,
@@ -1507,8 +1495,8 @@ class _SquareModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 150 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.5),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 150),
       child: Card(
         elevation: 2,
         shape: RoundedRectangleBorder(
@@ -1520,6 +1508,7 @@ class _SquareModeCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
@@ -1532,30 +1521,22 @@ class _SquareModeCard extends StatelessWidget {
                   child: Icon(icon, color: color, size: 28),
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  height: 34 * MediaQuery.textScalerOf(context).scale(1),
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                        ),
-                  ),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                      ),
                 ),
-                const SizedBox(height: 3),
-                SizedBox(
-                  height: 14 * MediaQuery.textScalerOf(context).scale(1),
-                  child: Text(
-                    subtitle ?? '',
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle!,
                     textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                   ),
-                ),
+                ],
               ],
             ),
           ),

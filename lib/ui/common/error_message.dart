@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 
 /// Inline error display with an optional retry action.
@@ -31,7 +32,7 @@ class ErrorMessage extends StatelessWidget {
             FilledButton.tonalIcon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Retry'),
+              label: Text(ui(context, 'Retry')),
             ),
           ],
         ],

@@ -1,6 +1,7 @@
 param([ValidateSet('debug', 'release')][string]$Mode = 'release')
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'development_environment.ps1')
 $previousJavaOptions = $env:JAVA_TOOL_OPTIONS
 try {
     # Windows Java NIO can bind a Unix-domain socket through a short-name TEMP

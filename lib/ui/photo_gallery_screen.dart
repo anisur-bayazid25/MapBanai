@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -55,8 +56,9 @@ class _PhotoGalleryScreenState extends State<PhotoGalleryScreen> {
   Future<void> _deletePhoto(PhotoRecord record) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete photo',
-      message: 'Remove this photo from the device? This cannot be undone.',
+      title: ui(context, 'Delete photo'),
+      message: ui(
+          context, 'Remove this photo from the device? This cannot be undone.'),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -70,7 +72,7 @@ class _PhotoGalleryScreenState extends State<PhotoGalleryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Photos'),
+        title: Text(ui(context, 'Photos')),
       ),
       body: _buildBody(),
     );
@@ -78,7 +80,7 @@ class _PhotoGalleryScreenState extends State<PhotoGalleryScreen> {
 
   Widget _buildBody() {
     if (_error != null) {
-      return Center(child: Text(_error!));
+      return Center(child: Text(ui(context, _error!)));
     }
     final photos = _photos;
     if (photos == null) {
@@ -87,7 +89,8 @@ class _PhotoGalleryScreenState extends State<PhotoGalleryScreen> {
     if (photos.isEmpty) {
       return Center(
         child: Text(
-          'No photos yet.\nCapture photos from a survey form to see them here.',
+          ui(context,
+              'No photos yet.\nCapture photos from a survey form to see them here.'),
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey.shade600),
         ),
@@ -165,7 +168,7 @@ class _PhotoViewScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Delete photo',
+            tooltip: ui(context, 'Delete photo'),
             icon: const Icon(Icons.delete_outline),
             onPressed: () => Navigator.pop(context, 'delete'),
           ),
@@ -211,14 +214,17 @@ class _PhotoViewScreen extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     record.gpsStatus == 'none'
-                        ? 'No coordinates were available at capture time'
-                        : 'Captured ${record.capturedAt.toLocal().toIso8601String()}',
+                        ? ui(context,
+                            'No coordinates were available at capture time')
+                        : ui(context, 'Captured {v0}',
+                            [record.capturedAt.toLocal().toIso8601String()]),
                     style: const TextStyle(fontSize: 11, color: Colors.white54),
                   ),
                   Text(
                     record.accuracy == null
-                        ? 'GPS accuracy: unavailable'
-                        : 'GPS accuracy: ±${record.accuracy!.round()} m',
+                        ? ui(context, 'GPS accuracy: unavailable')
+                        : ui(context, 'GPS accuracy: ±{v0} m',
+                            [record.accuracy!.round()]),
                     style: const TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                 ],

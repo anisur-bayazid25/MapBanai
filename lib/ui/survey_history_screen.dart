@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,9 @@ import 'package:mapbanai/ui/photo_gallery_screen.dart';
 import 'package:mapbanai/ui/survey_form_renderer.dart';
 import 'package:mapbanai/ui/survey_session_detail_screen.dart';
 import 'package:mapbanai/ui/history_cleanup_screen.dart';
+import 'package:mapbanai/models/study_workflow.dart';
+import 'package:mapbanai/services/study_area_store.dart';
+import 'package:mapbanai/ui/study_collection_form_screen.dart';
 
 class SurveyHistoryScreen extends StatefulWidget {
   const SurveyHistoryScreen({super.key, this.projectId});
@@ -104,6 +108,37 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   Future<void> _openDraft(SurveySession draft) async {
     try {
       final response = jsonDecode(draft.responses);
+      if (response is Map && response['workflow'] == 'study_collection_v1') {
+        final sites = await StudyAreaStore().loadSites();
+        final site =
+            sites.where((site) => site.id == response['site_id']).firstOrNull;
+        final forms = await _database.getStoredFormsForProject(draft.projectId);
+        final form = forms
+            .where((form) =>
+                (jsonDecode(form.json) as Map)['id'] == response['form_id'])
+            .firstOrNull;
+        if (site == null || (form == null && response['form_id'] != null)) {
+          _showSnack(ui(context,
+              'This draft’s site or questionnaire is no longer available.'));
+          return;
+        }
+        if (!mounted) return;
+        await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => StudyCollectionFormScreen(
+                    database: _database,
+                    projectId: draft.projectId,
+                    site: site,
+                    workflow: StudyWorkflow.parse(response['study_workflow']),
+                    round: response['collection_round'] is Map
+                        ? CollectionRound.fromJson(response['collection_round'])
+                        : null,
+                    form: form,
+                    resumeSession: draft)));
+        await _load();
+        return;
+      }
       if (response is Map && response['workflow'] == 'guided_visit_v1') {
         await Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => GuidedVisitScreen(
@@ -139,7 +174,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     try {
       responses = jsonDecode(draft.responses) as Map<String, dynamic>;
     } catch (_) {
-      _showSnack('Could not read this draft');
+      _showSnack(ui(context, 'Could not read this draft'));
       return;
     }
     final answers =
@@ -147,7 +182,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
 
     final project = await _database.getProjectById(draft.projectId);
     if (project == null || !mounted) {
-      _showSnack('Project not found for this draft');
+      _showSnack(ui(context, 'Project not found for this draft'));
       return;
     }
 
@@ -174,7 +209,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
       }
     }
     if (stored == null || !mounted) {
-      _showSnack('Survey form not found for this draft');
+      _showSnack(ui(context, 'Survey form not found for this draft'));
       return;
     }
 
@@ -187,7 +222,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Resume survey draft')),
+          appBar: AppBar(title: Text(ui(context, 'Resume survey draft'))),
           body: SurveyFormRenderer(
             form: form,
             initialUsername: username,
@@ -210,7 +245,9 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
               );
               if (messenger.mounted) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text('Saved response for ${project.name}')),
+                  SnackBar(
+                      content: Text(ui(
+                          context, 'Saved response for {v0}', [project.name]))),
                 );
               }
               if (navigator.mounted) navigator.pop();
@@ -227,13 +264,13 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
               await _database.updateSurveySession(
                 draft.id,
                 title: answers['site_name']?.toString() ??
-                    'Draft survey — ${form.name}',
+                    ui(context, 'Draft survey — {v0}', [form.name]),
                 status: 'draft',
                 responses: jsonEncode(updated),
               );
               if (messenger.mounted) {
                 messenger.showSnackBar(
-                    const SnackBar(content: Text('Draft updated')));
+                    SnackBar(content: Text(ui(context, 'Draft updated'))));
               }
               if (navigator.mounted) navigator.pop();
             },
@@ -246,8 +283,9 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   Future<void> _deleteDraft(SurveySession draft) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete draft',
-      message: 'Delete this draft? The unfinished data will be lost.',
+      title: ui(context, 'Delete draft'),
+      message:
+          ui(context, 'Delete this draft? The unfinished data will be lost.'),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -268,10 +306,10 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Survey History'),
+        title: Text(ui(context, 'Survey History')),
         actions: [
           IconButton(
-            tooltip: 'Clean up history',
+            tooltip: ui(context, 'Clean up history'),
             icon: const Icon(Icons.delete_sweep_outlined),
             onPressed: _loading
                 ? null
@@ -283,7 +321,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
                   },
           ),
           IconButton(
-            tooltip: 'Photo gallery',
+            tooltip: ui(context, 'Photo gallery'),
             icon: const Icon(Icons.photo_library_outlined),
             onPressed: () {
               Navigator.of(context).push(
@@ -309,14 +347,15 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade400),
           const SizedBox(height: 16),
           Text(
-            'No saved responses or drafts yet',
+            ui(context, 'No saved responses or drafts yet'),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: Colors.grey.shade600,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Saved responses appear here; unfinished work is kept as drafts',
+            ui(context,
+                'Saved responses appear here; unfinished work is kept as drafts'),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Colors.grey.shade500,
                 ),
@@ -345,7 +384,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
         if (_drafts.isNotEmpty) ...[
           _collapsibleHeader(
             icon: Icons.edit_note,
-            title: 'Drafts',
+            title: ui(context, 'Drafts'),
             count: _drafts.length,
             color: Colors.orange.shade800,
             collapsed: _draftsCollapsed,
@@ -360,7 +399,7 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
             padding: const EdgeInsets.only(top: 48),
             child: Center(
               child: Text(
-                'No saved responses yet',
+                ui(context, 'No saved responses yet'),
                 style: TextStyle(color: Colors.grey.shade600),
               ),
             ),
@@ -520,7 +559,8 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Text(
-          '${_projectName(draft.projectId)}  •  ${_timeLabel(draft.createdAt)}  •  draft',
+          ui(context, '{v0}  •  {v1}  •  draft',
+              [_projectName(draft.projectId), _timeLabel(draft.createdAt)]),
           style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
         ),
         trailing: Row(
@@ -528,10 +568,10 @@ class _SurveyHistoryScreenState extends State<SurveyHistoryScreen> {
           children: [
             TextButton(
               onPressed: () => _openDraft(draft),
-              child: const Text('Resume'),
+              child: Text(ui(context, 'Resume')),
             ),
             IconButton(
-              tooltip: 'Delete draft',
+              tooltip: ui(context, 'Delete draft'),
               icon: const Icon(
                 Icons.delete_outline,
                 size: 20,

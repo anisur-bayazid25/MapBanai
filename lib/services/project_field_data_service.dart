@@ -178,6 +178,11 @@ class ProjectFieldDataService {
       if (response['site_id'] is String)
         response['site_id'] =
             siteIds[response['site_id']] ?? response['site_id'];
+      if (response['workflow'] == 'study_collection_v1') {
+        response['project_external_id'] = project.externalId;
+        response['feature_uuid'] = const Uuid()
+            .v5(Uuid.NAMESPACE_URL, 'mapbanai:feature:${response['site_id']}');
+      }
       if (response['visit'] is Map) {
         final visit = Map<String, dynamic>.from(response['visit']);
         visit['project_id'] = project.id;

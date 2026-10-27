@@ -439,7 +439,8 @@ class AppDatabase extends _$AppDatabase {
       ..addColumns([count])
       ..where(
         surveySessions.projectId.equals(projectId) &
-            surveySessions.status.equals('draft').not(),
+            surveySessions.status.equals('draft').not() &
+            _notCollectionStatus,
       );
     final row = await query.getSingle();
     return row.read(count) ?? 0;
@@ -455,7 +456,8 @@ class AppDatabase extends _$AppDatabase {
       ..addColumns([count])
       ..where(
         surveySessions.projectId.equals(projectId) &
-            surveySessions.status.equals('draft').not(),
+            surveySessions.status.equals('draft').not() &
+            _notCollectionStatus,
       );
     final total = (await totalQuery.getSingle()).read(count) ?? 0;
 
@@ -470,6 +472,10 @@ class AppDatabase extends _$AppDatabase {
 
     return (survey: total - gis, gis: gis);
   }
+
+  // Status events are audit records, not collected questionnaire responses.
+  static const _notCollectionStatus = CustomExpression<bool>(
+      "CASE WHEN json_valid(responses) THEN COALESCE(NOT (json_extract(responses, '\$.workflow') = 'study_collection_v1' AND json_extract(responses, '\$.record_kind') = 'status'), 1) ELSE 1 END");
 
   // ── Stored survey forms ──────────────────────────────────────
 

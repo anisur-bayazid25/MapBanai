@@ -1,3 +1,11 @@
+import 'package:mapbanai/models/workflow_requirements.dart';
+import 'package:mapbanai/services/workflow_requirements_service.dart';
+import 'package:mapbanai/services/site_priority_service.dart';
+import 'package:mapbanai/services/measure_units.dart';
+import 'package:mapbanai/ui/common/map_chrome.dart';
+import 'package:mapbanai/services/google_maps_links.dart';
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/services/study_feature_policy.dart';
 import 'package:mapbanai/services/study_category_style.dart';
 import 'package:mapbanai/services/road_routing_service.dart';
@@ -38,6 +46,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'package:mapbanai/models/study_workflow.dart';
+import 'package:mapbanai/services/study_collection_service.dart';
+import 'package:mapbanai/ui/study_collection_form_screen.dart';
+import 'package:mapbanai/ui/study_workflow_setup_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:mapbanai/ui/guided_visit_screen.dart';
 
 class StudyAreaModeScreen extends StatefulWidget {
   const StudyAreaModeScreen(
@@ -48,6 +62,9 @@ class StudyAreaModeScreen extends StatefulWidget {
       this.database,
       this.projectExternalId,
       this.initialImportPath,
+      this.workflow = StudyWorkflow.verification,
+      this.collectionRound,
+      this.compactControls = false,
       this.viewOnly = false});
 
   final String? initialImportPath;
@@ -57,6 +74,9 @@ class StudyAreaModeScreen extends StatefulWidget {
   final int? projectId;
   final AppDatabase? database;
   final String? projectExternalId;
+  final StudyWorkflow workflow;
+  final CollectionRound? collectionRound;
+  final bool compactControls;
 
   @override
   State<StudyAreaModeScreen> createState() => _StudyAreaModeScreenState();
@@ -66,6 +86,24 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   late final StudyAreaStore _store = widget.store ?? StudyAreaStore();
   late final AppDatabase _database = widget.database ?? AppDatabase();
   ProjectWorkspace? _workspace;
+  late CollectionRound? _round = widget.collectionRound;
+  Map<String, StudyAreaStatus> _collectionStatuses = {};
+  late WorkflowRequirements _requirements =
+      WorkflowRequirements.defaults(widget.workflow);
+  bool _statusBusy = false;
+  final Map<StudyAreaStatus, int> _statusCounts = {};
+  void _recountStatuses() {
+    _statusCounts.clear();
+    for (final site in _sites) {
+      final status = _status(site);
+      _statusCounts[status] = (_statusCounts[status] ?? 0) + 1;
+    }
+  }
+
+  bool get _collection => widget.workflow != StudyWorkflow.verification;
+  StudyAreaStatus _status(StudyAreaSite site) => _collection
+      ? _collectionStatuses[site.id] ?? StudyAreaStatus.pending
+      : site.status.verificationStatus;
   final LocationService _locationService = LocationService();
   MapLibreMapController? _controller;
   bool _styleReady = false;
@@ -127,7 +165,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         if (project != null)
           await ProjectVectorLayerService(_database)
               .linkExistingStudySites(project, _store);
-        _workspace = await ProjectWorkspaceService(_database).load(id);
+        _workspace = await ProjectWorkspaceService(_database)
+            .load(id, workflow: widget.workflow);
         final assigned = await _store.loadSites();
         final hasSites = assigned.any((site) =>
             GuidedVisitService.belongsToProject(site, _workspace!.project) &&
@@ -143,11 +182,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   layer['visible'] != false &&
                   layer['import_batch_id'] == null &&
                   !initialized.contains(layer['id']) &&
-                  (layer['features'] as List).isNotEmpty)
+                  (layer['features'] as List).isNotEmpty &&
+                  ((layer['workflows'] as List?)
+                          ?.contains(widget.workflow.name) ??
+                      true))
               .firstOrNull;
           if (source != null)
             _workspace = await ProjectWorkspaceService(_database).select(id,
-                layerId: ProjectVectorLayerService.studyLayerId(source));
+                layerId: ProjectVectorLayerService.studyLayerId(source),
+                workflow: widget.workflow);
         }
       }
       await _loadSites();
@@ -156,7 +199,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnack('Cannot load project: $error');
+        _showSnack(ui(context, 'Cannot load project: {v0}', [error]));
       }
     }
   }
@@ -175,17 +218,335 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     if (_sites.isNotEmpty) _fitBounds();
   }
 
+  Future<void> _configureWorkflow() async {
+    if (_workspace == null) return;
+    final selection = await Navigator.push<StudyWorkflowSelection>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => StudyWorkflowSetupScreen(
+                database: _database,
+                projectId: _workspace!.project.id,
+                workflow: widget.workflow)));
+    if (selection == null || !mounted) return;
+    _round = selection.round;
+    await _changeWorkspace(selection.workspace);
+  }
+
+  Future<void> _openCollectionForm(StudyAreaSite site) async {
+    final workspace = _workspace;
+    if (workspace == null) return;
+    if ((_requirements.questionnaire && workspace.form == null) ||
+        (widget.workflow == StudyWorkflow.recurring && _round == null)) {
+      _showSnack(
+          ui(context, 'Select a questionnaire and collection round first.'));
+      await _configureWorkflow();
+      return;
+    }
+    if (_collection) {
+      await Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => StudyCollectionFormScreen(
+                  database: _database,
+                  projectId: workspace.project.id,
+                  site: site,
+                  workflow: widget.workflow,
+                  round: _round,
+                  form: workspace.form)));
+    } else {
+      await Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => GuidedVisitScreen(
+                  database: _database,
+                  studyAreaStore: _store,
+                  projectId: workspace.project.id,
+                  initialSiteId: site.id)));
+    }
+    if (mounted) await _loadSites();
+  }
+
+  Future<void> _setCollectionStatus(
+      StudyAreaSite site, StudyAreaStatus status) async {
+    if (_statusBusy || _workspace == null) return;
+    if (status == StudyAreaStatus.completed &&
+        (_requirements.questionnaire || _requirements.photo)) {
+      await _openCollectionForm(site);
+      return;
+    }
+    final workspace = _workspace!;
+    final round = _round;
+    setState(() => _statusBusy = true);
+    try {
+      await StudyCollectionService(_database).save(
+          projectId: workspace.project.id,
+          site: site,
+          workflow: widget.workflow,
+          round: round,
+          outcome: status,
+          statusOnly: true);
+      if (!mounted ||
+          _workspace?.project.id != workspace.project.id ||
+          _workspace?.layerId != workspace.layerId ||
+          _round?.id != round?.id) return;
+      setState(() {
+        final previous = _status(site);
+        _collectionStatuses[site.id] = status;
+        _statusCounts[previous] =
+            ((_statusCounts[previous] ?? 1) - 1).clamp(0, _sites.length);
+        _statusCounts[status] = (_statusCounts[status] ?? 0) + 1;
+      });
+      // Serialize native updates. A saved status must not reload all project
+      // files or clear every site and road annotation on the map.
+      _mapUpdates = _mapUpdates.then((_) async {
+        final controller = _controller;
+        if (!mounted || !_styleReady || controller == null) return;
+        if (_filter != null) {
+          await _renderMapMarkers();
+          return;
+        }
+        final symbols =
+            _symbols.where((s) => s.data?['site_id'] == site.id).toList();
+        if (symbols.isEmpty) return;
+        final current = _status(site);
+        final color = switch (current) {
+          StudyAreaStatus.completed => '#2E7D32',
+          StudyAreaStatus.needsReview => '#F9A825',
+          _ => '#E53935'
+        };
+        final image = 'mapbanai_${current.name}_${color.substring(1)}';
+        if (!_markerImages.contains(image)) {
+          await controller.addImage(image, _markerImage(current, color));
+          _markerImages.add(image);
+        }
+        for (final symbol in symbols) {
+          await controller.updateSymbol(
+              symbol, SymbolOptions(iconImage: image));
+        }
+      }).catchError((Object error) {
+        if (mounted) unawaited(_refreshMapMarkers());
+      });
+      await _mapUpdates;
+    } catch (error) {
+      _showSnack(ui(context, '{v0}', [error]));
+    } finally {
+      if (mounted) setState(() => _statusBusy = false);
+    }
+  }
+
+  Future<void> _openGoogleMaps(StudyAreaSite? site) async {
+    final target = _controller?.cameraPosition?.target ??
+        (_currentPos == null
+            ? const LatLng(23.8103, 90.4125)
+            : LatLng(_currentPos!.latitude, _currentPos!.longitude));
+    final uri = site == null
+        ? GoogleMapsLinks.area(target.latitude, target.longitude,
+            zoom: _controller?.cameraPosition?.zoom ?? 16)
+        : GoogleMapsLinks.site(site.latitude, site.longitude);
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        _showSnack(ui(context, 'Could not open Google Maps.'));
+      }
+    } catch (error) {
+      _showSnack(ui(context, 'Could not open Google Maps: {v0}', [error]));
+    }
+  }
+
+  Future<void> _openTimeline(StudyAreaSite site) async {
+    if (_workspace == null) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => SiteTimelineScreen(
+                database: _database,
+                store: _store,
+                projectId: _workspace!.project.id,
+                site: site,
+                workflow: widget.workflow,
+                collectionRound: _round,
+                storedForm: _workspace!.form)));
+    if (mounted) await _loadSites();
+  }
+
+  String _statusLabel(StudyAreaStatus status) => ui(
+      context,
+      switch (status) {
+        StudyAreaStatus.completed =>
+          widget.workflow == StudyWorkflow.recurring ? 'Collected' : 'Done',
+        StudyAreaStatus.needsReview => 'Needs review',
+        _ => widget.workflow == StudyWorkflow.recurring
+            ? 'Not collected'
+            : 'Undone',
+      });
+  Color _statusColor(StudyAreaStatus status) => switch (status) {
+        StudyAreaStatus.completed => Colors.green.shade700,
+        StudyAreaStatus.needsReview => Colors.amber.shade800,
+        _ => Colors.red.shade700,
+      };
+
+  Widget _compactSelectedPanel() {
+    final site = _selectedSite!;
+    final status = _status(site);
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: AnimatedSwitcher(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 180),
+                        child: Align(
+                            key: ValueKey(site.id),
+                            alignment: Alignment.centerLeft,
+                            child: Text(site.displayName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700))))),
+                IconButton.filledTonal(
+                    tooltip: ui(context, 'Open in Google Maps'),
+                    onPressed: () => _openGoogleMaps(site),
+                    icon: const Icon(Icons.open_in_new_rounded)),
+                IconButton(
+                    tooltip: ui(context, 'Close feature'),
+                    onPressed: () => setState(() => _selectedSite = null),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded))
+              ]),
+              Row(children: [
+                Icon(
+                    status == StudyAreaStatus.needsReview
+                        ? Icons.flag_rounded
+                        : status == StudyAreaStatus.completed
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                    size: 16,
+                    color: _statusColor(status)),
+                const SizedBox(width: 6),
+                Flexible(
+                    child: Text(
+                        _collection
+                            ? _statusLabel(status)
+                            : ui(context, status.label),
+                        style: TextStyle(
+                            color: _statusColor(status),
+                            fontWeight: FontWeight.w600))),
+                if (_statusBusy)
+                  const Padding(
+                      padding: EdgeInsets.only(left: 10),
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)))
+              ]),
+              const SizedBox(height: 12),
+              Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                        onPressed: _statusBusy
+                            ? null
+                            : () => _openCollectionForm(site),
+                        icon: const Icon(Icons.assignment_outlined, size: 20),
+                        label: Text(ui(
+                            context,
+                            _collection
+                                ? (_workspace?.form == null
+                                    ? 'Site observation'
+                                    : 'Fill questionnaire')
+                                : 'Verify with questionnaire'))),
+                    IconButton.filledTonal(
+                        tooltip: ui(context, 'Site timeline'),
+                        onPressed: () => _openTimeline(site),
+                        icon: const Icon(Icons.history_rounded)),
+                    IconButton.filledTonal(
+                        tooltip: ui(context, 'Center on site'),
+                        onPressed: () => _controller?.animateCamera(
+                            CameraUpdate.newLatLng(
+                                LatLng(site.latitude, site.longitude))),
+                        icon: const Icon(Icons.center_focus_strong_rounded)),
+                    if (_collection) ...[
+                      if (widget.workflow == StudyWorkflow.visits ||
+                          !_requirements.questionnaire)
+                        IconButton.filledTonal(
+                            tooltip: ui(context, 'Mark done'),
+                            style: IconButton.styleFrom(
+                                foregroundColor: Colors.green.shade700),
+                            onPressed: _statusBusy
+                                ? null
+                                : () => _setCollectionStatus(
+                                    site, StudyAreaStatus.completed),
+                            icon: const Icon(Icons.check_circle_outline)),
+                      IconButton.filledTonal(
+                          tooltip: ui(
+                              context,
+                              widget.workflow == StudyWorkflow.recurring
+                                  ? 'Mark not collected'
+                                  : 'Mark undone'),
+                          style: IconButton.styleFrom(
+                              foregroundColor: Colors.red.shade700),
+                          onPressed: _statusBusy
+                              ? null
+                              : () => _setCollectionStatus(
+                                  site, StudyAreaStatus.pending),
+                          icon: const Icon(Icons.radio_button_unchecked)),
+                      IconButton.filledTonal(
+                          tooltip: ui(context, 'Needs review'),
+                          style: IconButton.styleFrom(
+                              foregroundColor: Colors.amber.shade800),
+                          onPressed: _statusBusy
+                              ? null
+                              : () => _setCollectionStatus(
+                                  site, StudyAreaStatus.needsReview),
+                          icon: const Icon(Icons.flag_outlined)),
+                    ] else
+                      PopupMenuButton<String>(
+                          tooltip: ui(context, 'More actions'),
+                          icon: const Icon(Icons.more_horiz),
+                          onSelected: (action) {
+                            if (action == 'unchanged') _markUnchanged(site);
+                            if (action == 'move') _beginMove(site);
+                            if (action == 'edit') _editSite(site);
+                            if (action == 'remove') _deleteSite(site);
+                          },
+                          itemBuilder: (_) => [
+                                PopupMenuItem(
+                                    value: 'unchanged',
+                                    child: Text(ui(context, 'Unchanged'))),
+                                PopupMenuItem(
+                                    value: 'move',
+                                    child:
+                                        Text(ui(context, 'Location changed'))),
+                                PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text(ui(context, 'Edit feature'))),
+                                PopupMenuItem(
+                                    value: 'remove',
+                                    child:
+                                        Text(ui(context, 'Location removed'))),
+                              ])
+                  ]),
+            ]));
+  }
+
   Future<void> _claimLegacy() async {
     final workspace = _workspace;
     if (workspace == null) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     final sites = (await _store.loadSites())
         .where((s) => s.projectId == null && s.projectExternalId == null)
         .toList();
     if (!mounted || sites.isEmpty) {
-      _showSnack('No unassigned sites');
+      _showSnack(ui(context, 'No unassigned sites'));
       return;
     }
     final selected = <String>{};
@@ -193,17 +554,20 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         context: context,
         builder: (context) => StatefulBuilder(
             builder: (context, update) => AlertDialog(
-                    title: Text('${sites.length} unassigned map sites'),
+                    title: Text(ui(
+                        context, '{v0} unassigned map sites', [sites.length])),
                     content: SizedBox(
                         width: 520,
                         height: 360,
                         child: Column(children: [
-                          const Text(
-                              'These are stored map sites without a project assignment. Review their details before assigning or deleting them. They are separate from survey responses.'),
+                          Text(ui(context,
+                              'These are stored map sites without a project assignment. Review their details before assigning or deleting them. They are separate from survey responses.')),
                           CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                  'Select all (${selected.length} selected)'),
+                              title: Text(ui(
+                                  context,
+                                  'Select all ({v0} selected)',
+                                  [selected.length])),
                               value: selected.length == sites.length,
                               onChanged: (value) => update(() {
                                     selected.clear();
@@ -227,8 +591,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                                         title: Text(site.displayName,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis),
-                                        subtitle: Text(
-                                            'ID: ${site.id}\n$source${date == null ? '' : '\n${date.toLocal()}'}'),
+                                        subtitle: Text(ui(
+                                            context, 'ID: {v0}\n{v1}{v2}', [
+                                          site.id,
+                                          source,
+                                          date == null
+                                              ? ''
+                                              : '\n${date.toLocal()}'
+                                        ])),
                                         value: selected.contains(site.id),
                                         onChanged: (value) => update(() {
                                               if (value == true) {
@@ -242,33 +612,35 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel')),
+                          child: Text(ui(context, 'Cancel'))),
                       TextButton(
                           onPressed: selected.isEmpty
                               ? null
                               : () => Navigator.pop(context, 'delete'),
-                          child: const Text('Delete selected')),
+                          child: Text(ui(context, 'Delete selected'))),
                       FilledButton(
                           onPressed: selected.isEmpty
                               ? null
                               : () => Navigator.pop(context, 'assign'),
-                          child: const Text('Assign selected'))
+                          child: Text(ui(context, 'Assign selected')))
                     ])));
     if (action == null || !mounted) return;
     if (action == 'delete') {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: const Text('Delete unassigned sites?'),
-                  content: Text(
-                      'Remove ${selected.length} selected map sites and their local histories? This cannot be undone.'),
+                  title: Text(ui(context, 'Delete unassigned sites?')),
+                  content: Text(ui(
+                      context,
+                      'Remove {v0} selected map sites and their local histories? This cannot be undone.',
+                      [selected.length])),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
+                        child: Text(ui(context, 'Cancel'))),
                     FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Delete'))
+                        child: Text(ui(context, 'Delete')))
                   ]));
       if (confirmed == true)
         await _store.deleteSites(selected, expectedTokens: {
@@ -294,11 +666,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         await ProjectVectorLayerService(_database)
             .ensureStudySites(_workspace!.project, _workspace!.layerId, _store);
       }
+      if (_workspace != null)
+        _requirements = await WorkflowRequirementsService(_database)
+            .get(_workspace!.project.id, widget.workflow);
       sites = await _store.loadSites();
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnack('Cannot load study area: $e. Stored data was preserved.');
+        _showSnack(ui(context,
+            'Cannot load study area: {v0}. Stored data was preserved.', [e]));
       }
       return;
     }
@@ -324,6 +700,22 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         _categoryStyle = StudyCategoryStyle();
       }
     }
+    if (_collection && _workspace != null) {
+      if (widget.workflow == StudyWorkflow.recurring &&
+          (_round == null || _round!.layerId != _workspace!.layerId)) {
+        final rounds = await ProjectWorkspaceService(_database)
+            .rounds(_workspace!.project.id, _workspace!.layerId);
+        _round = rounds.lastOrNull;
+      }
+      _collectionStatuses =
+          widget.workflow == StudyWorkflow.recurring && _round == null
+              ? {}
+              : await StudyCollectionService(_database).statuses(
+                  _workspace!.project.id,
+                  _workspace!.layerId,
+                  widget.workflow,
+                  _round);
+    }
     if (!mounted) return;
     setState(() {
       _sites = widget.viewOnly
@@ -341,6 +733,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             .where((s) => s.id == widget.initialSelectedSiteId)
             .firstOrNull;
       }
+      _recountStatuses();
       _isLoading = false;
     });
     if (_styleReady) _refreshMapMarkers();
@@ -356,19 +749,19 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final name = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('Fieldworker name'),
+                title: Text(ui(context, 'Fieldworker name')),
                 content: TextField(
                     controller: controller,
-                    decoration: const InputDecoration(
-                        labelText: 'Name used in change history')),
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Name used in change history'))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () =>
                           Navigator.pop(context, controller.text.trim()),
-                      child: const Text('Save'))
+                      child: Text(ui(context, 'Save')))
                 ]));
     // Dispose after the dialog route animation has finished using its field.
     if (name == null || name.isEmpty) return;
@@ -380,41 +773,51 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     showDialog(
         context: context,
         builder: (context) => AlertDialog(
-                title: Text('History: ${site.displayName}'),
+                title: Text(ui(context, 'History: {v0}', [site.displayName])),
                 content: SizedBox(
                     width: 520,
                     height: 450,
                     child: site.history.isEmpty
-                        ? const Text(
-                            'No recorded changes yet. Imported baseline is preserved when the first edit is saved.')
+                        ? Text(ui(context,
+                            'No recorded changes yet. Imported baseline is preserved when the first edit is saved.'))
                         : ListView(
                             children: site.history.reversed
-                                .map((revision) => ExpansionTile(title: Text('${revision.action} • ${revision.author}'), subtitle: Text('${revision.timestamp.toLocal()}${revision.visitId == null ? '' : '\nVisit: ${revision.visitId}'}'), children: [
-                                      if (revision.before != null) ...[
-                                        const Text('Before',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold)),
-                                        SelectableText(
-                                            const JsonEncoder.withIndent('  ')
-                                                .convert(revision.before))
-                                      ],
-                                      const Text('After',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold)),
-                                      SelectableText(
-                                          const JsonEncoder.withIndent('  ')
-                                              .convert(revision.after)),
-                                      if (revision.sessionId != null)
-                                        Text(
-                                            'Survey response: ${revision.sessionId}'),
-                                      if (revision.photoPath != null)
-                                        Text('Photo: ${revision.photoPath}')
-                                    ]))
+                                .map((revision) => ExpansionTile(
+                                        title: Text(
+                                            '${revision.action} • ${revision.author}'),
+                                        subtitle: Text(
+                                            '${revision.timestamp.toLocal()}${revision.visitId == null ? '' : '\nVisit: ${revision.visitId}'}'),
+                                        children: [
+                                          if (revision.before != null) ...[
+                                            Text(ui(context, 'Before'),
+                                                style: TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold)),
+                                            SelectableText(
+                                                const JsonEncoder.withIndent(
+                                                        '  ')
+                                                    .convert(revision.before))
+                                          ],
+                                          Text(ui(context, 'After'),
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold)),
+                                          SelectableText(
+                                              const JsonEncoder.withIndent('  ')
+                                                  .convert(revision.after)),
+                                          if (revision.sessionId != null)
+                                            Text(ui(
+                                                context,
+                                                'Survey response: {v0}',
+                                                [revision.sessionId])),
+                                          if (revision.photoPath != null)
+                                            Text(ui(context, 'Photo: {v0}',
+                                                [revision.photoPath]))
+                                        ]))
                                 .toList())),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'))
+                      child: Text(ui(context, 'Close')))
                 ]));
   }
 
@@ -555,17 +958,17 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         setState(() => _selectedSite =
             _sites.where((site) => site.id == updated.id).firstOrNull);
       }
-      _showSnack(
-          'This feature changed elsewhere. Reopen it and review the latest version.');
+      _showSnack(ui(context,
+          'This feature changed elsewhere. Reopen it and review the latest version.'));
     } catch (error) {
-      _showSnack('Could not save the feature: $error');
+      _showSnack(ui(context, 'Could not save the feature: {v0}', [error]));
     }
   }
 
   void _beginMove(StudyAreaSite site) {
     if (site.currentGeometry['type'] != 'Point') {
-      _showSnack(
-          'Move is available for points. Use Redraw geometry for lines and areas.');
+      _showSnack(ui(context,
+          'Move is available for points. Use Redraw geometry for lines and areas.'));
       return;
     }
     setState(() {
@@ -612,8 +1015,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final position = _currentPos, workspace = _workspace;
     if (position == null || workspace == null) {
       _showSnack(position == null
-          ? 'Waiting for a GPS fix'
-          : 'Select a project first');
+          ? ui(context, 'Waiting for a GPS fix')
+          : ui(context, 'Select a project first'));
       return;
     }
     try {
@@ -626,8 +1029,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           endLatitude: site.latitude,
           endLongitude: site.longitude);
       if (route == null) {
-        _showSnack(
-            'No connected road route found. Add a road layer in Project settings.');
+        _showSnack(ui(context,
+            'No connected road route found. Add a road layer in Project settings.'));
         return;
       }
       setState(() {
@@ -647,7 +1050,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             bottom: 300));
       }
     } catch (error) {
-      _showSnack('Could not calculate a road route: $error');
+      _showSnack(
+          ui(context, 'Could not calculate a road route: {v0}', [error]));
     }
   }
 
@@ -667,25 +1071,27 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<void> _manageProjectLayers() async {
     final workspace = _workspace;
     if (workspace == null) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => ProjectVectorLayersScreen(
-            database: _database, projectId: workspace.project.id)));
+            database: _database,
+            projectId: workspace.project.id,
+            workflow: widget.workflow)));
     if (!mounted) return;
-    _workspace =
-        await ProjectWorkspaceService(_database).load(workspace.project.id);
+    _workspace = await ProjectWorkspaceService(_database)
+        .load(workspace.project.id, workflow: widget.workflow);
     await _loadSites();
   }
 
-  void _onStyleLoaded() {
+  void _onStyleLoaded() async {
     _styleReady = true;
     _markerImages.clear();
     final controller = _controller;
     if (controller != null) {
-      unawaited(controller.setSymbolIconAllowOverlap(true));
-      unawaited(controller.setSymbolIconIgnorePlacement(true));
+      await controller.setSymbolIconAllowOverlap(true);
+      await controller.setSymbolIconIgnorePlacement(true);
     }
     _refreshMapMarkers();
   }
@@ -699,7 +1105,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       if (!mounted || request != _mapRenderGeneration) return;
       await _renderMapMarkers();
     }).catchError((Object error) {
-      _showSnack('Map preview failed: $error. Stored features are retained.');
+      _showSnack(ui(context,
+          'Map preview failed: {v0}. Stored features are retained.', [error]));
     });
     return _mapUpdates;
   }
@@ -822,14 +1229,20 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         !_referenceLayers.any((layer) =>
             layer['visible'] == false &&
             (layer['import_batch_id'] ?? layer['id']) == s.importBatchId) &&
-        (_filter == null || s.status.verificationStatus == _filter) &&
+        (_filter == null || _status(s) == _filter) &&
         _categoryStyle.visible(s))) {
       try {
         final color = _categoryStyle.color(site);
         final data = {'site_id': site.id};
         Future<void> drawPoint(double lon, double lat) async {
-          final status = site.status.verificationStatus;
-          final colorHex = _categoryStyle.color(site);
+          final status = _status(site);
+          final colorHex = _collection
+              ? switch (status) {
+                  StudyAreaStatus.completed => '#2E7D32',
+                  StudyAreaStatus.needsReview => '#F9A825',
+                  _ => '#E53935'
+                }
+              : _categoryStyle.color(site);
           final imageName = 'mapbanai_${status.name}_${colorHex.substring(1)}';
           if (_markerImages.add(imageName)) {
             await controller.addImage(
@@ -1019,7 +1432,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
 
   Future<void> _importSites({String? pathOverride}) async {
     if (_workspace == null || widget.viewOnly) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     final result = pathOverride == null
@@ -1037,7 +1450,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     if (path == null) return;
     final ioFile = File(path);
     if (!SpatialFileImport.supports(path)) {
-      _showSnack('Select GeoJSON, GeoPackage, SHP/ZIP, CSV, Excel or KML/KMZ.');
+      _showSnack(ui(context,
+          'Select GeoJSON, GeoPackage, SHP/ZIP, CSV, Excel or KML/KMZ.'));
       return;
     }
     // Show loading
@@ -1137,7 +1551,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       Navigator.of(context).pop();
       loadingDialogOpen = false;
       if (imported.isEmpty) {
-        _showSnack('No sites found in file. Check format and lat/lon columns.');
+        _showSnack(ui(context,
+            'No sites found in file. Check format and lat/lon columns.'));
         return;
       }
       final warnings = projectLayers
@@ -1148,21 +1563,22 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         final proceed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-                    title: const Text('Check imported files'),
+                    title: Text(ui(context, 'Check imported files')),
                     content: Text(warnings.join('\n\n')),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
+                          child: Text(ui(context, 'Cancel'))),
                       FilledButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Continue'))
+                          child: Text(ui(context, 'Continue')))
                     ]));
         if (proceed != true) return;
       }
       final fileName = p.basename(path);
       for (final layer in projectLayers) {
         layer['role'] = 'study_area';
+        layer['workflows'] = [widget.workflow.name];
         layer['import_batch_id'] = batchId;
         layer['import_file_name'] = fileName;
         layer['study_layer_id'] = workspace.layerId;
@@ -1245,11 +1661,13 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       _workspace =
           await ProjectWorkspaceService(_database).load(workspace.project.id);
       await _loadSites();
-      _showSnack(
-          'Imported ${merged.added} new features, updated ${merged.updated}, kept ${merged.kept} local versions.');
+      _showSnack(ui(
+          context,
+          'Imported {v0} new features, updated {v1}, kept {v2} local versions.',
+          [merged.added, merged.updated, merged.kept]));
     } catch (e) {
       if (mounted && loadingDialogOpen) Navigator.of(context).pop();
-      _showSnack('Import failed: $e');
+      _showSnack(ui(context, 'Import failed: {v0}', [e]));
     }
   }
 
@@ -1269,8 +1687,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       final requiredSurvey =
           StudyFeaturePolicy.requiresSurvey(updated.status, isNew: isNew);
       if (requiredSurvey && schema == null) {
-        _showSnack(
-            'New and updated features require a questionnaire. Select a survey form first.');
+        _showSnack(ui(context,
+            'New and updated features require a questionnaire. Select a survey form first.'));
         return false;
       }
       if (schema != null && (requiredSurvey || fillSurvey)) {
@@ -1307,7 +1725,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
           await _store.applyMerge(preview,
               resolutions: choices, author: _fieldworker);
         } catch (e) {
-          _showSnack('Conflict resolution failed: $e');
+          _showSnack(ui(context, 'Conflict resolution failed: {v0}', [e]));
           draft = updated;
           continue;
         }
@@ -1317,7 +1735,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             _selectedSite = _sites.where((s) => s.id == site.id).firstOrNull);
         return true;
       } catch (e) {
-        _showSnack('Save failed: $e. Your edits are retained.');
+        _showSnack(
+            ui(context, 'Save failed: {v0}. Your edits are retained.', [e]));
         draft = updated;
         continue;
       }
@@ -1325,7 +1744,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       await _loadSites();
       if (!mounted) return true;
       setState(() => _selectedSite = updated);
-      _showSnack('Feature saved');
+      _showSnack(ui(context, 'Feature saved'));
       return true;
     }
     return false;
@@ -1334,7 +1753,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   void _startDrawing(String type, {StudyAreaSite? site}) {
     if (widget.viewOnly) return;
     if (_workspace == null) {
-      _showSnack("Select a project first");
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     _draft.clear();
@@ -1360,13 +1779,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
   Future<void> _saveDrawing() async {
     final type = _drawType;
     if (type == null || _draft.length < (type == 'Polygon' ? 3 : 2)) {
-      _showSnack('Add at least ${type == 'Polygon' ? 3 : 2} vertices.');
+      _showSnack(ui(
+          context, 'Add at least {v0} vertices.', [type == 'Polygon' ? 3 : 2]));
       return;
     }
     final points = _draft.map((p) => [p.longitude, p.latitude]).toList();
     if (_draft.map((p) => '${p.longitude},${p.latitude}').toSet().length <
         (type == 'Polygon' ? 3 : 2)) {
-      _showSnack('Use distinct vertices.');
+      _showSnack(ui(context, 'Use distinct vertices.'));
       return;
     }
     if (type == 'Polygon') {
@@ -1376,7 +1796,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         area += points[i][0] * next[1] - next[0] * points[i][1];
       }
       if (area.abs() < 1e-12) {
-        _showSnack('Polygon vertices must enclose an area.');
+        _showSnack(ui(context, 'Polygon vertices must enclose an area.'));
         return;
       }
       points.add(List<double>.from(points.first));
@@ -1438,13 +1858,14 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final workspace = _workspace;
     final schema = workspace?.schema;
     if (workspace == null || schema == null) {
-      _showSnack('Select a project and survey form first.');
+      _showSnack(ui(context, 'Select a project and survey form first.'));
       return;
     }
     final gps = _currentPos;
     if (gps == null ||
         DateTime.now().difference(gps.timestamp).inSeconds > 30) {
-      _showSnack('Wait for a fresh GPS location before recording a site.');
+      _showSnack(ui(
+          context, 'Wait for a fresh GPS location before recording a site.'));
       return;
     }
     final geometry = <String, dynamic>{
@@ -1477,15 +1898,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       await StudyAreaOutboxService(_database).enqueue(site, _fieldworker);
       await _loadSites();
       if (mounted) setState(() => _selectedSite = site);
-      _showSnack('Survey feature saved');
+      _showSnack(ui(context, 'Survey feature saved'));
     } catch (e) {
-      _showSnack('Could not save feature: $e');
+      _showSnack(ui(context, 'Could not save feature: {v0}', [e]));
     }
   }
 
   Future<void> _addSite(LatLng coordinates, {Position? gps}) async {
     if (_workspace == null) {
-      _showSnack('Select a project first');
+      _showSnack(ui(context, 'Select a project first'));
       return;
     }
     final site = StudyAreaSite(
@@ -1510,16 +1931,16 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete site'),
-        content: Text('Delete "${site.displayName}"?'),
+        title: Text(ui(context, 'Delete site')),
+        content: Text(ui(context, 'Delete "{v0}"?', [site.displayName])),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(ui(context, 'Delete')),
           ),
         ],
       ),
@@ -1528,53 +1949,56 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     await _store.deleteSite(site.id);
     setState(() => _selectedSite = null);
     await _loadSites();
-    _showSnack('Site deleted');
+    _showSnack(ui(context, 'Site deleted'));
   }
 
   Future<void> _exportSites() async {
     if (_sites.isEmpty) {
-      _showSnack('No sites to export');
+      _showSnack(ui(context, 'No sites to export'));
       return;
     }
     final format = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Export sites'),
+        title: Text(ui(context, 'Export sites')),
         children: [
           SimpleDialogOption(
               onPressed: () => Navigator.pop(context, 'changes'),
               child: ListTile(
                   leading: const Icon(Icons.difference_outlined),
-                  title: const Text('Changed features only (GeoJSON)'),
-                  subtitle: Text(
-                      '${_sites.where((s) => s.hasChanges).length} features, full history for team merge'))),
+                  title: Text(ui(context, 'Changed features only (GeoJSON)')),
+                  subtitle: Text(ui(
+                      context,
+                      '{v0} features, full history for team merge',
+                      [_sites.where((s) => s.hasChanges).length])))),
           SimpleDialogOption(
               onPressed: () => Navigator.pop(context, 'geojson'),
-              child: const ListTile(
+              child: ListTile(
                   leading: Icon(Icons.map_outlined),
-                  title: Text('Updated map (GeoJSON)'),
-                  subtitle:
-                      Text('Full geometry, attributes and revision baseline'))),
+                  title: Text(ui(context, 'Updated map (GeoJSON)')),
+                  subtitle: Text(ui(context,
+                      'Full geometry, attributes and revision baseline')))),
           SimpleDialogOption(
               onPressed: () => Navigator.pop(context, 'html'),
-              child: const ListTile(
+              child: ListTile(
                   leading: Icon(Icons.public),
-                  title: Text('Portable HTML map'),
-                  subtitle: Text('View and filter features in a browser'))),
+                  title: Text(ui(context, 'Portable HTML map')),
+                  subtitle: Text(
+                      ui(context, 'View and filter features in a browser')))),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 'csv'),
-            child: const ListTile(
+            child: ListTile(
               leading: Icon(Icons.table_chart_outlined),
-              title: Text('CSV'),
-              subtitle: Text('Excel-compatible CSV'),
+              title: Text(ui(context, 'CSV')),
+              subtitle: Text(ui(context, 'Excel-compatible CSV')),
             ),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 'xlsx'),
-            child: const ListTile(
+            child: ListTile(
               leading: Icon(Icons.grid_on_outlined),
-              title: Text('Excel (XLSX)'),
-              subtitle: Text('Native Excel workbook'),
+              title: Text(ui(context, 'Excel (XLSX)')),
+              subtitle: Text(ui(context, 'Native Excel workbook')),
             ),
           ),
         ],
@@ -1606,11 +2030,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         await file.writeAsBytes(bytes, flush: true);
       }
       await Share.shareXFiles([XFile(file.path)],
-          text: 'MapBanai Study Area export');
-      _showSnack(
-          'Export ready: ${file.path.split(Platform.pathSeparator).last}');
+          text: ui(context, 'MapBanai Study Area export'));
+      _showSnack(ui(context, 'Export ready: {v0}',
+          [file.path.split(Platform.pathSeparator).last]));
     } catch (e) {
-      _showSnack('Export failed: $e');
+      _showSnack(ui(context, 'Export failed: {v0}', [e]));
     }
   }
 
@@ -1627,7 +2051,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         allLayerPoints: true);
     if (!mounted) return;
     if (preview.points.isEmpty && preview.records.isEmpty) {
-      _showSnack('This layer has no points or survey history to clear.');
+      _showSnack(
+          ui(context, 'This layer has no points or survey history to clear.'));
       return;
     }
     var clearHistory = true;
@@ -1635,16 +2060,27 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-                title: const Text('Clear study layer'),
+                title: Text(ui(context, 'Clear study layer')),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('${workspace.project.name} / ${workspace.layer.name}\n\n'
-                      'Remove all ${preview.points.length} map points? This cannot be undone.'),
+                  Text(ui(
+                      context,
+                      '{v0} / {v1}\n\nRemove all {v2} map points? This cannot be undone.',
+                      [
+                        workspace.project.name,
+                        workspace.layer.name,
+                        preview.points.length
+                      ])),
                   CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                          'Also clear survey history and sync queue'),
-                      subtitle: Text(
-                          '${preview.records.length} records, including ${preview.pendingCount} waiting to sync. Cloud copies remain unchanged.'),
+                      title: Text(ui(
+                          context, 'Also clear survey history and sync queue')),
+                      subtitle: Text(ui(
+                          context,
+                          '{v0} records, including {v1} waiting to sync. Cloud copies remain unchanged.',
+                          [
+                            preview.records.length,
+                            preview.pendingCount
+                          ])),
                       value: clearHistory,
                       onChanged: (value) =>
                           setDialogState(() => clearHistory = value!)),
@@ -1652,11 +2088,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
+                    child: Text(ui(context, 'Cancel')),
                   ),
                   FilledButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Clear'),
+                    child: Text(ui(context, 'Clear')),
                   ),
                 ],
               )),
@@ -1672,7 +2108,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             });
       }
     } catch (error) {
-      _showSnack('Could not clear sites: $error');
+      _showSnack(ui(context, 'Could not clear sites: {v0}', [error]));
       return;
     }
     if (!mounted) return;
@@ -1681,8 +2117,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     });
     await _loadSites();
     _showSnack(clearHistory
-        ? 'Layer points, history and sync queue cleared'
-        : 'Layer points cleared; history kept');
+        ? ui(context, 'Layer points, history and sync queue cleared')
+        : ui(context, 'Layer points cleared; history kept'));
   }
 
   Future<void> _cleanupHistory() async {
@@ -1769,43 +2205,63 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            widget.viewOnly ? 'Study Area — View only' : 'Study Area Mode'),
-        bottom: widget.viewOnly
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(112),
-                child: ProjectWorkspaceBar(
-                    database: _database,
-                    workspace: _workspace,
-                    onChanged: _changeWorkspace,
-                    enabled: _drawType == null && !widget.viewOnly,
-                    onAddPoint: widget.viewOnly ? null : _addSurveyAtGps)),
+            widget.viewOnly
+                ? ui(context, 'Study Area — View only')
+                : widget.compactControls
+                    ? ui(context, widget.workflow.title)
+                    : ui(context, 'Study Area Mode'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
         actions: [
+          if (!widget.compactControls && !_collection)
+            IconButton(
+                tooltip: ui(context, 'Open in Google Maps'),
+                onPressed: () => _openGoogleMaps(_selectedSite),
+                icon: const Icon(Icons.open_in_new_rounded)),
+          if (widget.compactControls && !widget.viewOnly)
+            IconButton(
+                tooltip: ui(context, 'Study workspace'),
+                onPressed: _configureWorkflow,
+                icon: const Icon(Icons.tune)),
+          if (ScreenLayout.isWide(context))
+            IconButton(
+              tooltip: ui(context, 'Import sites'),
+              icon: const Icon(Icons.file_download_outlined,
+                  color: Color(0xFF1565C0)),
+              onPressed: widget.viewOnly
+                  ? null
+                  : () => widget.compactControls
+                      ? _manageProjectLayers()
+                      : _importSites(),
+            ),
+          if (ScreenLayout.isWide(context))
+            IconButton(
+              tooltip: ui(context, 'Export sites'),
+              icon: const Icon(Icons.file_upload_outlined,
+                  color: Color(0xFF2E7D32)),
+              onPressed: _exportSites,
+            ),
           IconButton(
-            tooltip: 'Import sites',
-            icon: const Icon(Icons.file_download_outlined,
-                color: Color(0xFF1565C0)),
-            onPressed: widget.viewOnly ? null : () => _importSites(),
-          ),
-          IconButton(
-            tooltip: 'Export sites',
-            icon: const Icon(Icons.file_upload_outlined,
-                color: Color(0xFF2E7D32)),
-            onPressed: _exportSites,
-          ),
-          IconButton(
-            tooltip: 'Basemap',
+            tooltip: ui(context, 'Basemap'),
             icon: const Icon(Icons.map_outlined),
             onPressed: _showBasemapDialog,
           ),
-          IconButton(
-            tooltip: 'Project layers',
-            icon: const Icon(Icons.layers_outlined),
-            onPressed: _manageProjectLayers,
-          ),
+          if (ScreenLayout.isWide(context))
+            IconButton(
+              tooltip: ui(context, 'Project layers'),
+              icon: const Icon(Icons.layers_outlined),
+              onPressed: _manageProjectLayers,
+            ),
           PopupMenuButton<String>(
             onSelected: (v) {
-              if (widget.viewOnly && v != 'fit') return;
+              if (widget.viewOnly && v != 'fit' && v != 'export') return;
+              if (v == 'import') {
+                if (widget.compactControls)
+                  _manageProjectLayers();
+                else
+                  _importSites();
+              }
+              if (v == 'export') _exportSites();
               if (v == 'claim') _claimLegacy();
               if (v == 'operator') _editOperator();
               if (v == 'layers') _manageProjectLayers();
@@ -1816,177 +2272,209 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               if (v == 'fit') _fitBounds();
             },
             itemBuilder: (context) => [
+              if (!ScreenLayout.isWide(context)) ...[
+                if (!widget.viewOnly)
+                  PopupMenuItem(
+                      value: 'import',
+                      child: Text(ui(context, 'Import sites'))),
+                PopupMenuItem(
+                    value: 'export', child: Text(ui(context, 'Export sites'))),
+              ],
               PopupMenuItem(
-                  value: 'operator', child: Text('Fieldworker: $_fieldworker')),
-              const PopupMenuItem(
+                  value: 'operator',
+                  child:
+                      Text(ui(context, 'Fieldworker: {v0}', [_fieldworker]))),
+              PopupMenuItem(
                   value: 'claim',
-                  child: Text('Assign previous unassigned sites')),
+                  child: Text(ui(context, 'Assign previous unassigned sites'))),
               if (!widget.viewOnly)
-                const PopupMenuItem(
+                PopupMenuItem(
                     value: 'layers',
-                    child: Text('Manage project files and road layers')),
-              const PopupMenuItem(
-                  value: 'line', child: Text('Add line (tap vertices)')),
-              const PopupMenuItem(
-                  value: 'polygon', child: Text('Add polygon (tap vertices)')),
-              const PopupMenuItem(value: 'fit', child: Text('Fit all sites')),
-              const PopupMenuItem(
-                  value: 'clear', child: Text('Clear all sites')),
+                    child: Text(
+                        ui(context, 'Manage project files and road layers'))),
+              PopupMenuItem(
+                  value: 'line',
+                  child: Text(ui(context, 'Add line (tap vertices)'))),
+              PopupMenuItem(
+                  value: 'polygon',
+                  child: Text(ui(context, 'Add polygon (tap vertices)'))),
+              PopupMenuItem(
+                  value: 'fit', child: Text(ui(context, 'Fit all sites'))),
+              PopupMenuItem(
+                  value: 'clear', child: Text(ui(context, 'Clear all sites'))),
               if (!widget.viewOnly)
-                const PopupMenuItem(
+                PopupMenuItem(
                     value: 'history_cleanup',
-                    child: Text('Clean up survey history')),
+                    child: Text(ui(context, 'Clean up survey history'))),
             ],
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          _buildCachedMapView(basemap),
-          Positioned(
-              left: 8,
-              bottom: 8,
-              child: OfflineBasemapNotice(choice: _offlineBasemap)),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_sites.isEmpty)
+      body: Column(children: [
+        if (!widget.viewOnly && !widget.compactControls)
+          ScreenLayout.mapPanel(
+              context,
+              ProjectWorkspaceBar(
+                  database: _database,
+                  workspace: _workspace,
+                  onChanged: _changeWorkspace,
+                  enabled: _drawType == null && !widget.viewOnly,
+                  onAddPoint: widget.viewOnly ? null : _addSurveyAtGps)),
+        Expanded(
+            child: Stack(
+          children: [
+            _buildCachedMapView(basemap),
             Positioned(
-              left: 16,
-              right: 16,
-              top: 16,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.location_off_outlined,
-                          size: 36, color: Colors.grey),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'No sites yet',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Use the top Import button for GeoJSON, GeoPackage, zipped shapefiles, CSV, Excel or KML/KMZ.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                left: 8,
+                bottom: 8,
+                child: OfflineBasemapNotice(choice: _offlineBasemap)),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_sites.isEmpty)
+              Positioned(
+                left: 16,
+                right: 16,
+                top: 16,
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.location_off_outlined,
+                            size: 36, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        Text(
+                          ui(context, 'No sites yet'),
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          ui(context,
+                              'Use the top Import button for GeoJSON, GeoPackage, zipped shapefiles, CSV, Excel or KML/KMZ.'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: _buildHeaderCard(),
-          ),
-          if (_movingSite != null)
             Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Card(
-                    child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          const Text(
-                              'Tap the map to place this feature at its new location.'),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Expanded(
-                                child: OutlinedButton(
-                                    onPressed: _cancelMove,
-                                    child: const Text('Cancel'))),
-                            const SizedBox(width: 10),
-                            Expanded(
-                                child: FilledButton(
-                                    onPressed: _movingCoordinates == null
-                                        ? null
-                                        : _saveMove,
-                                    child: const Text('Save location'))),
-                          ])
-                        ])))),
-          if (_drawType != null)
-            Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Card(
-                    child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text(
-                              '$_drawType: ${_draft.length} vertices. Tap map to add vertices.'),
-                          Wrap(spacing: 8, children: [
-                            TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _drawType = null;
-                                    _drawingSite = null;
-                                    _draft.clear();
-                                  });
-                                  _refreshMapMarkers();
-                                },
-                                child: const Text('Cancel')),
-                            TextButton(
-                                onPressed: () {
-                                  if (_draft.isNotEmpty)
-                                    setState(() => _draft.removeLast());
-                                  _refreshMapMarkers();
-                                },
-                                child: const Text('Undo')),
-                            FilledButton(
-                                onPressed: _saveDrawing,
-                                child: const Text('Save feature'))
-                          ]),
-                        ])))),
-          if (_selectedSite != null)
-            Positioned(
+              top: 12,
               left: 12,
-              right: 72,
-              bottom: 12,
-              child: _buildSelectedPanel(),
+              right: 12,
+              child: ScreenLayout.mapPanel(context, _buildHeaderCard()),
             ),
-          Positioned(
-            right: 12,
-            bottom: 120,
-            child: Column(
-              children: [
-                FloatingActionButton.small(
-                  heroTag: 'locate_sa',
-                  tooltip: 'Center on GPS',
-                  onPressed: () {
-                    final pos = _currentPos;
-                    if (pos == null) {
-                      _showSnack('Waiting for GPS fix');
-                      return;
-                    }
-                    _controller?.animateCamera(
-                      CameraUpdate.newLatLngZoom(
-                          LatLng(pos.latitude, pos.longitude), 16),
-                    );
-                  },
-                  child: const Icon(Icons.my_location),
+            if (_movingSite != null)
+              Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Card(
+                      child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(ui(context,
+                                'Tap the map to place this feature at its new location.')),
+                            const SizedBox(height: 8),
+                            ResponsiveGrid(children: [
+                              OutlinedButton(
+                                  onPressed: _cancelMove,
+                                  child: Text(ui(context, 'Cancel'))),
+                              FilledButton(
+                                  onPressed: _movingCoordinates == null
+                                      ? null
+                                      : _saveMove,
+                                  child: Text(ui(context, 'Save location'))),
+                            ])
+                          ])))),
+            if (_drawType != null)
+              Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Card(
+                      child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(ui(
+                                context,
+                                '{v0}: {v1} vertices. Tap map to add vertices.',
+                                [_drawType, _draft.length])),
+                            Wrap(spacing: 8, children: [
+                              TextButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _drawType = null;
+                                      _drawingSite = null;
+                                      _draft.clear();
+                                    });
+                                    _refreshMapMarkers();
+                                  },
+                                  child: Text(ui(context, 'Cancel'))),
+                              TextButton(
+                                  onPressed: () {
+                                    if (_draft.isNotEmpty)
+                                      setState(() => _draft.removeLast());
+                                    _refreshMapMarkers();
+                                  },
+                                  child: Text(ui(context, 'Undo'))),
+                              FilledButton(
+                                  onPressed: _saveDrawing,
+                                  child: Text(ui(context, 'Save feature')))
+                            ]),
+                          ])))),
+            if (_selectedSite != null && widget.compactControls)
+              MapSiteSheet(child: _compactSelectedPanel()),
+            if (_selectedSite != null && !widget.compactControls)
+              Positioned(
+                  left: 12,
+                  right: 72,
+                  bottom: 12,
+                  child: ScreenLayout.mapPanel(
+                      context,
+                      _collection
+                          ? _compactSelectedPanel()
+                          : _buildSelectedPanel())),
+            if (!widget.compactControls || _selectedSite == null)
+              Positioned(
+                right: 12,
+                bottom: widget.compactControls ? 20 : 120,
+                child: Column(
+                  children: [
+                    FloatingActionButton.small(
+                      heroTag: 'locate_sa',
+                      tooltip: ui(context, 'Center on GPS'),
+                      onPressed: () {
+                        final pos = _currentPos;
+                        if (pos == null) {
+                          _showSnack(ui(context, 'Waiting for GPS fix'));
+                          return;
+                        }
+                        _controller?.animateCamera(
+                          CameraUpdate.newLatLngZoom(
+                              LatLng(pos.latitude, pos.longitude), 16),
+                        );
+                      },
+                      child: const Icon(Icons.my_location),
+                    ),
+                    const SizedBox(height: 8),
+                    FloatingActionButton.small(
+                      heroTag: 'fit_sa',
+                      tooltip: ui(context, 'Fit all sites'),
+                      onPressed: _fitBounds,
+                      child: const Icon(Icons.center_focus_strong_outlined),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                FloatingActionButton.small(
-                  heroTag: 'fit_sa',
-                  tooltip: 'Fit all sites',
-                  onPressed: _fitBounds,
-                  child: const Icon(Icons.center_focus_strong_outlined),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ),
+          ],
+        ))
+      ]),
     );
   }
 
@@ -1999,24 +2487,27 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         builder: (context) => StatefulBuilder(builder: (context, update) {
               final categories = style.categories(_sites);
               return AlertDialog(
-                  title: const Text('Categories & colors'),
+                  title: Text(ui(context, 'Categories & colors')),
                   content: SizedBox(
                       width: 360,
                       child: SingleChildScrollView(
                           child:
                               Column(mainAxisSize: MainAxisSize.min, children: [
                         DropdownButtonFormField<String>(
+                            itemHeight: null,
                             value: style.column,
                             isExpanded: true,
-                            decoration: const InputDecoration(
-                                labelText: 'Color by column'),
-                            hint: const Text('Single color'),
+                            decoration: InputDecoration(
+                                labelText: ui(context, 'Color by column')),
+                            hint: Text(ui(context, 'Single color')),
                             items: [
-                              const DropdownMenuItem(
-                                  value: null, child: Text('Single color')),
-                              const DropdownMenuItem(
+                              DropdownMenuItem(
+                                  value: null,
+                                  child: Text(ui(context, 'Single color'))),
+                              DropdownMenuItem(
                                   value: '__verification_status__',
-                                  child: Text('Verification status')),
+                                  child:
+                                      Text(ui(context, 'Verification status'))),
                               for (final column in columns)
                                 DropdownMenuItem(
                                     value: column, child: Text(column))
@@ -2026,7 +2517,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                                   style.colors.clear();
                                   style.hidden.clear();
                                 })),
-                        Text('Point size: ${style.radius.round()}'),
+                        Text(ui(context, 'Point size: {v0}',
+                            [style.radius.round()])),
                         Slider(
                             value: style.radius,
                             min: 4,
@@ -2035,15 +2527,15 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                             onChanged: (value) =>
                                 update(() => style.radius = value)),
                         if (style.column != null) ...[
-                          Row(children: [
+                          ResponsiveGrid(children: [
                             TextButton(
                                 onPressed: () =>
                                     update(() => style.hidden.clear()),
-                                child: const Text('Show all')),
+                                child: Text(ui(context, 'Show all'))),
                             TextButton(
                                 onPressed: () => update(
                                     () => style.hidden.addAll(categories)),
-                                child: const Text('Hide all'))
+                                child: Text(ui(context, 'Hide all')))
                           ]),
                           for (final category in categories)
                             Row(children: [
@@ -2060,7 +2552,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                                   child: Text(
                                       '$category (${_sites.where((s) => style.category(s) == category).length})')),
                               PopupMenuButton<String>(
-                                  tooltip: 'Category color',
+                                  tooltip: ui(context, 'Category color'),
                                   onSelected: (color) => update(
                                       () => style.colors[category] = color),
                                   icon: Icon(Icons.circle,
@@ -2089,10 +2581,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
+                        child: Text(ui(context, 'Cancel'))),
                     FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Apply'))
+                        child: Text(ui(context, 'Apply')))
                   ]);
             }));
     if (applied != true || !mounted) return;
@@ -2103,39 +2595,297 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
     await _refreshMapMarkers();
   }
 
-  Widget _buildHeaderCard() => Card(
-      child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(children: [
-            Expanded(
-                child: Text(
-                    '${_sites.where((s) => (_filter == null || s.status.verificationStatus == _filter) && _categoryStyle.visible(s)).length} / ${_sites.length} features',
-                    style: const TextStyle(fontWeight: FontWeight.w700))),
-            IconButton(
-                tooltip: 'Categories & colors',
-                onPressed: _chooseCategories,
-                icon: const Icon(Icons.palette_outlined)),
-            DropdownButton<StudyAreaStatus>(
-                value: _filter,
-                underline: const SizedBox.shrink(),
-                hint: const Text('All'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('All')),
+  Future<void> _showUnvisitedSites() async {
+    bool refreshing = false;
+    String? error;
+    final selected = await showModalBottomSheet<StudyAreaSite>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheetContext) =>
+            StatefulBuilder(builder: (sheetContext, update) {
+              final position = _currentPos;
+              final fresh = position != null &&
+                  DateTime.now().difference(position.timestamp).abs() <=
+                      const Duration(minutes: 2);
+              final rows = SitePriorityService.unvisited(_sites,
+                  status: _status,
+                  latitude: fresh ? position.latitude : null,
+                  longitude: fresh ? position.longitude : null);
+              final located =
+                  rows.isNotEmpty && rows.first.distanceMeters != null;
+              return SizedBox(
+                  height: MediaQuery.sizeOf(sheetContext).height * .8,
+                  child: Column(children: [
+                    ListTile(
+                        title: Text(ui(context, 'Nearest unvisited sites')),
+                        subtitle: Text(ui(
+                            context,
+                            located
+                                ? 'Straight-line distance from your GPS location.'
+                                : 'No recent GPS location. Sites are sorted by name.')),
+                        trailing: IconButton(
+                            tooltip: ui(context, 'Refresh location'),
+                            icon: refreshing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.my_location),
+                            onPressed: refreshing
+                                ? null
+                                : () async {
+                                    update(() {
+                                      refreshing = true;
+                                      error = null;
+                                    });
+                                    try {
+                                      if (!await _locationService
+                                          .ensurePermission())
+                                        throw StateError(
+                                            'Location permission is required.');
+                                      final fix =
+                                          await Geolocator.getCurrentPosition()
+                                              .timeout(
+                                                  const Duration(seconds: 15));
+                                      if (mounted) _currentPos = fix;
+                                    } catch (problem) {
+                                      error = '$problem';
+                                    }
+                                    if (sheetContext.mounted)
+                                      update(() => refreshing = false);
+                                  })),
+                    if (error != null)
+                      Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(ui(context, error!))),
+                    if (rows.isEmpty)
+                      Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(ui(
+                              context, 'No unvisited sites in this layer.'))),
+                    Expanded(
+                        child: ListView.builder(
+                            itemCount: rows.length,
+                            itemBuilder: (_, index) {
+                              final row = rows[index];
+                              return ListTile(
+                                  leading: const Icon(Icons.place_outlined),
+                                  title: Text(row.site.displayName),
+                                  subtitle: row.distanceMeters == null
+                                      ? null
+                                      : Text(MeasureUnits.formatDistance(
+                                          row.distanceMeters!)),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () =>
+                                      Navigator.pop(sheetContext, row.site));
+                            })),
+                  ]));
+            }));
+    if (!mounted || selected == null) return;
+    final filtered = _filter != null;
+    setState(() {
+      _selectedSite = selected;
+      _filter = null;
+    });
+    if (filtered) await _refreshMapMarkers();
+    await _controller?.animateCamera(CameraUpdate.newLatLngZoom(
+        LatLng(selected.latitude, selected.longitude), 16));
+  }
+
+  Future<void> _showStatusFilters() async {
+    final selected = await showModalBottomSheet<String>(
+        context: context,
+        useSafeArea: true,
+        builder: (context) => SafeArea(
+            top: false,
+            child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListTile(
+                          leading: const Icon(Icons.palette_outlined),
+                          title: Text(ui(context, 'Categories & colors')),
+                          onTap: () => Navigator.pop(context, 'style')),
+                      Text(ui(context, 'Filter status'),
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Flexible(
+                          child: SingleChildScrollView(
+                              child: Column(children: [
+                        RadioListTile<String>(
+                            value: 'all',
+                            groupValue: _filter?.name ?? 'all',
+                            title: Text(ui(context, 'All sites')),
+                            onChanged: (value) =>
+                                Navigator.pop(context, value)),
+                        for (final status in [
+                          StudyAreaStatus.pending,
+                          StudyAreaStatus.completed,
+                          StudyAreaStatus.needsReview
+                        ])
+                          RadioListTile<String>(
+                              value: status.name,
+                              groupValue: _filter?.name ?? 'all',
+                              title: Text(_collection
+                                  ? _statusLabel(status)
+                                  : ui(context, status.label)),
+                              secondary: Text('${_statusCounts[status] ?? 0}'),
+                              onChanged: (value) =>
+                                  Navigator.pop(context, value)),
+                      ])))
+                    ]))));
+    if (!mounted || selected == null) return;
+    if (selected == 'style') {
+      await _chooseCategories();
+      return;
+    }
+    setState(() => _filter = selected == 'all'
+        ? null
+        : StudyAreaStatus.values.firstWhere((s) => s.name == selected));
+    await _refreshMapMarkers();
+  }
+
+  Widget _buildCompactHeader() => MapControlSurface(
+      padding: const EdgeInsets.fromLTRB(12, 4, 6, 8),
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                  child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _workspace == null || _statusBusy
+                          ? null
+                          : _configureWorkflow,
+                      child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 8),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                    _workspace?.layer.name ??
+                                        ui(context, 'Study area'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                if (_round != null)
+                                  Text(_round!.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall),
+                              ])))),
+              if (_selectedSite == null)
+                IconButton(
+                    tooltip: ui(context, 'Open in Google Maps'),
+                    onPressed: () => _openGoogleMaps(null),
+                    icon: const Icon(Icons.open_in_new_rounded)),
+              IconButton(
+                  tooltip: ui(context, 'Nearest unvisited sites'),
+                  onPressed: _showUnvisitedSites,
+                  icon: const Icon(Icons.near_me_outlined)),
+              IconButton(
+                  tooltip: ui(context, 'Filter status'),
+                  onPressed: _showStatusFilters,
+                  icon: const Icon(Icons.tune_rounded)),
+            ]),
+            SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                          label: Text(ui(context, 'All sites')),
+                          selected: _filter == null,
+                          onSelected: (_) {
+                            setState(() => _filter = null);
+                            _refreshMapMarkers();
+                          })),
                   for (final status in [
-                    StudyAreaStatus.pending,
                     StudyAreaStatus.completed,
+                    StudyAreaStatus.pending,
                     StudyAreaStatus.needsReview
                   ])
-                    DropdownMenuItem(
-                        value: status,
-                        child: Text(
-                            '${status.label}: ${_sites.where((s) => s.status.verificationStatus == status).length}')),
-                ],
-                onChanged: (value) {
-                  setState(() => _filter = value);
-                  _refreshMapMarkers();
-                }),
-          ])));
+                    Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Tooltip(
+                            message: _collection
+                                ? _statusLabel(status)
+                                : ui(context, status.label),
+                            child: ChoiceChip(
+                                showCheckmark: false,
+                                selected: _filter == status,
+                                avatar: Icon(
+                                    status == StudyAreaStatus.completed
+                                        ? Icons.check_circle_outline
+                                        : status == StudyAreaStatus.needsReview
+                                            ? Icons.flag_outlined
+                                            : Icons.circle_outlined,
+                                    size: 18,
+                                    color: _statusColor(status)),
+                                label: Text('${_statusCounts[status] ?? 0}'),
+                                onSelected: (_) {
+                                  setState(() => _filter =
+                                      _filter == status ? null : status);
+                                  _refreshMapMarkers();
+                                }))),
+                ]))
+          ]));
+
+  Widget _buildHeaderCard() => widget.compactControls || _collection
+      ? _buildCompactHeader()
+      : Card(
+          child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: ResponsiveGrid(minChildWidth: 180, children: [
+                Text(
+                    ui(context, '{v0} / {v1} features', [
+                      _sites
+                          .where((s) =>
+                              (_filter == null ||
+                                  s.status.verificationStatus == _filter) &&
+                              _categoryStyle.visible(s))
+                          .length,
+                      _sites.length
+                    ]),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                IconButton(
+                    tooltip: ui(context, 'Categories & colors'),
+                    onPressed: _chooseCategories,
+                    icon: const Icon(Icons.palette_outlined)),
+                DropdownButton<StudyAreaStatus>(
+                    isExpanded: true,
+                    itemHeight: null,
+                    value: _filter,
+                    underline: const SizedBox.shrink(),
+                    hint: Text(ui(context, 'All')),
+                    items: [
+                      DropdownMenuItem(
+                          value: null, child: Text(ui(context, 'All'))),
+                      for (final status in [
+                        StudyAreaStatus.pending,
+                        StudyAreaStatus.completed,
+                        StudyAreaStatus.needsReview
+                      ])
+                        DropdownMenuItem(
+                            value: status,
+                            child: Text(
+                                '${ui(context, status.label)}: ${_sites.where((s) => s.status.verificationStatus == status).length}')),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _filter = value);
+                      _refreshMapMarkers();
+                    }),
+              ])));
 
   String _siteField(StudyAreaSite site, List<String> keys,
       {String fallback = '—'}) {
@@ -2168,10 +2918,10 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('ID  $id'),
-                    Text('Layer  $layer'),
-                    Text('Name  $name'),
-                    Text('Location  $location')
+                    Text(ui(context, 'ID  {v0}', [id])),
+                    Text(ui(context, 'Layer  {v0}', [layer])),
+                    Text(ui(context, 'Name  {v0}', [name])),
+                    Text(ui(context, 'Location  {v0}', [location]))
                   ])));
     }
     final pos = _currentPos;
@@ -2188,27 +2938,12 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'ID  $id',
+                    ui(context, 'ID  {v0}', [id]),
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 13),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Chip(
-                  label: Text(site.status.label,
-                      style: const TextStyle(fontSize: 11)),
-                  backgroundColor: switch (site.status.verificationStatus) {
-                    StudyAreaStatus.completed => Colors.green.shade50,
-                    StudyAreaStatus.needsReview => Colors.amber.shade50,
-                    _ => Colors.red.shade50,
-                  },
-                  side: BorderSide(
-                      color: Color(int.parse(
-                          site.status.colorHex.replaceFirst('#', 'FF'),
-                          radix: 16))),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
@@ -2223,6 +2958,21 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                 ),
               ],
             ),
+            Chip(
+              label: Text(ui(context, site.status.label),
+                  style: const TextStyle(fontSize: 11)),
+              backgroundColor: switch (site.status.verificationStatus) {
+                StudyAreaStatus.completed => Colors.green.shade50,
+                StudyAreaStatus.needsReview => Colors.amber.shade50,
+                _ => Colors.red.shade50,
+              },
+              side: BorderSide(
+                  color: Color(int.parse(
+                      site.status.colorHex.replaceFirst('#', 'FF'),
+                      radix: 16))),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+            ),
             _detailRow('Layer', layer),
             _detailRow('Name', name),
             _detailRow('Location', location),
@@ -2233,11 +2983,11 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       site.currentGeometry['type'] as String,
                       site: site),
                   icon: const Icon(Icons.edit_location_alt_outlined),
-                  label: const Text('Redraw geometry')),
+                  label: Text(ui(context, 'Redraw geometry'))),
             if (_workspace != null)
               TextButton.icon(
                   icon: const Icon(Icons.timeline),
-                  label: const Text('Site timeline / add observation'),
+                  label: Text(ui(context, 'Site timeline / add observation')),
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => SiteTimelineScreen(
                           database: _database,
@@ -2247,48 +2997,43 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
             TextButton.icon(
                 onPressed: () => _showHistory(site),
                 icon: const Icon(Icons.history),
-                label: Text('Revision history (${site.history.length})')),
+                label: Text(ui(context, 'Revision history ({v0})',
+                    [site.history.length]))),
             if (routeVisible)
               Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                      'Shortest road route  ${StudyAreaService.formatDistance(_routeDistanceM!)}',
+                      ui(context, 'Shortest road route  {v0}',
+                          [StudyAreaService.formatDistance(_routeDistanceM!)]),
                       style: const TextStyle(fontWeight: FontWeight.w600))),
             const SizedBox(height: 6),
             if (pos == null)
-              const Text('Waiting for GPS fix', style: TextStyle(fontSize: 11)),
-            Row(children: [
-              Expanded(
-                  child: OutlinedButton.icon(
-                      onPressed: () => _markUnchanged(site),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Unchanged'))),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: OutlinedButton.icon(
-                      onPressed: () => _beginMove(site),
-                      icon: const Icon(Icons.location_on_outlined, size: 16),
-                      label: const Text('Location changed'))),
+              Text(ui(context, 'Waiting for GPS fix'),
+                  style: TextStyle(fontSize: 11)),
+            ResponsiveGrid(children: [
+              OutlinedButton.icon(
+                  onPressed: () => _markUnchanged(site),
+                  icon: const Icon(Icons.check_circle_outline, size: 16),
+                  label: Text(ui(context, 'Unchanged'))),
+              OutlinedButton.icon(
+                  onPressed: () => _beginMove(site),
+                  icon: const Icon(Icons.location_on_outlined, size: 16),
+                  label: Text(ui(context, 'Location changed'))),
             ]),
-            Row(
+            ResponsiveGrid(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _editSite(site),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit'),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: () => _editSite(site),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text(ui(context, 'Edit')),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red.shade700,
-                    ),
-                    onPressed: () => _deleteSite(site),
-                    icon: const Icon(Icons.delete_outline, size: 16),
-                    label: const Text('Location removed'),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
                   ),
+                  onPressed: () => _deleteSite(site),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: Text(ui(context, 'Location removed')),
                 ),
               ],
             ),
@@ -2299,8 +3044,8 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                       onPressed: () => _showRoadRoute(site),
                       icon: const Icon(Icons.directions_outlined, size: 17),
                       label: Text(routeVisible
-                          ? 'Refresh road directions'
-                          : 'Show road directions'))),
+                          ? ui(context, 'Refresh road directions')
+                          : ui(context, 'Show road directions')))),
             const SizedBox(height: 4),
             SizedBox(
               width: double.infinity,
@@ -2314,7 +3059,7 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
                   }
                 },
                 icon: const Icon(Icons.center_focus_strong_outlined, size: 16),
-                label: const Text('Center on site'),
+                label: Text(ui(context, 'Center on site')),
               ),
             ),
           ],
@@ -2397,7 +3142,9 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
     if (key.isEmpty) return;
     if (_attrControllers.any((e) => e.key.toLowerCase() == key.toLowerCase())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Attribute "$key" already exists')),
+        SnackBar(
+            content:
+                Text(ui(context, 'Attribute "{v0}" already exists', [key]))),
       );
       return;
     }
@@ -2412,7 +3159,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Edit site ${widget.site.id}'),
+      title: Text(ui(context, 'Edit site {v0}', [widget.site.id])),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -2429,8 +3176,8 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                           controller: _latCtrl,
                           enabled:
                               widget.site.currentGeometry['type'] == 'Point',
-                          decoration: const InputDecoration(
-                            labelText: 'Latitude',
+                          decoration: InputDecoration(
+                            labelText: ui(context, 'Latitude'),
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: const TextInputType.numberWithOptions(
@@ -2443,8 +3190,8 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                           controller: _lonCtrl,
                           enabled:
                               widget.site.currentGeometry['type'] == 'Point',
-                          decoration: const InputDecoration(
-                            labelText: 'Longitude',
+                          decoration: InputDecoration(
+                            labelText: ui(context, 'Longitude'),
                             border: OutlineInputBorder(),
                           ),
                           keyboardType: const TextInputType.numberWithOptions(
@@ -2455,9 +3202,11 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                   )),
               const SizedBox(height: 12),
               DropdownButtonFormField<StudyAreaStatus>(
+                itemHeight: null,
+                isExpanded: true,
                 value: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
+                decoration: InputDecoration(
+                  labelText: ui(context, 'Status'),
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -2466,7 +3215,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                   StudyAreaStatus.needsReview
                 ]
                     .map((status) => DropdownMenuItem(
-                        value: status, child: Text(status.label)))
+                        value: status, child: Text(ui(context, status.label))))
                     .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _status = v);
@@ -2475,36 +3224,37 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
               const SizedBox(height: 12),
               if (StudyFeaturePolicy.requiresSurvey(_status,
                   isNew: widget.isNew))
-                const Padding(
+                Padding(
                     padding: EdgeInsets.only(bottom: 12),
-                    child: Text(
-                        'Questionnaire required for new or updated features.'))
+                    child: Text(ui(context,
+                        'Questionnaire required for new or updated features.')))
               else
                 CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Fill questionnaire (optional)'),
+                    title: Text(ui(context, 'Fill questionnaire (optional)')),
                     value: _fillSurvey,
                     onChanged: (value) {
                       setState(() => _fillSurvey = value ?? false);
                       widget.onSurveyChoice?.call(_fillSurvey);
                     }),
               if (widget.site.currentGeometry['type'] != 'Point')
-                const Text(
-                    'Full line/polygon geometry is retained. Coordinates show its reference vertex.',
+                Text(
+                    ui(context,
+                        'Full line/polygon geometry is retained. Coordinates show its reference vertex.'),
                     style: TextStyle(fontSize: 12)),
               if (widget.site.original != null)
                 ExpansionTile(
-                    title: const Text('Original imported data'),
+                    title: Text(ui(context, 'Original imported data')),
                     children: [
                       SelectableText(widget.site.original.toString())
                     ]),
               TextField(
                   controller: _noteCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Verification / change note'),
+                  decoration: InputDecoration(
+                      labelText: ui(context, 'Verification / change note')),
                   maxLines: 2),
               const SizedBox(height: 12),
-              Text('Attributes',
+              Text(ui(context, 'Attributes'),
                   style: Theme.of(context)
                       .textTheme
                       .titleSmall
@@ -2513,7 +3263,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
               if (_attrControllers.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('No attributes',
+                  child: Text(ui(context, 'No attributes'),
                       style:
                           TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ),
@@ -2560,8 +3310,8 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                   Expanded(
                     child: TextField(
                       controller: _newKeyCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'New key',
+                      decoration: InputDecoration(
+                        labelText: ui(context, 'New key'),
                         isDense: true,
                         border: OutlineInputBorder(),
                       ),
@@ -2572,8 +3322,8 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
                   Expanded(
                     child: TextField(
                       controller: _newValCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Value',
+                      decoration: InputDecoration(
+                        labelText: ui(context, 'Value'),
                         isDense: true,
                         border: OutlineInputBorder(),
                       ),
@@ -2593,7 +3343,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         FilledButton(
           onPressed: () {
@@ -2601,13 +3351,14 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
             final lon = double.tryParse(_lonCtrl.text.trim());
             if (lat == null || lon == null || !lat.isFinite || !lon.isFinite) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invalid coordinates')),
+                SnackBar(content: Text(ui(context, 'Invalid coordinates'))),
               );
               return;
             }
             if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Coordinates out of range')),
+                SnackBar(
+                    content: Text(ui(context, 'Coordinates out of range'))),
               );
               return;
             }
@@ -2629,7 +3380,7 @@ class _EditSiteDialogState extends State<_EditSiteDialog> {
             );
             Navigator.pop(context, updated);
           },
-          child: const Text('Save'),
+          child: Text(ui(context, 'Save')),
         ),
       ],
     );

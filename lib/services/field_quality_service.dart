@@ -345,11 +345,23 @@ class FieldQualityService {
       final photos = <PhotoRecord>[];
       final topPhoto = photo(response['photo']);
       if (topPhoto != null) photos.add(topPhoto);
-      for (final value in answers.values) {
+      void collectPhotos(dynamic value) {
         final record = photo(value);
-        if (record != null && !photos.any((item) => item.path == record.path))
-          photos.add(record);
+        if (record != null) {
+          if (!photos.any((item) => item.path == record.path))
+            photos.add(record);
+        } else if (value is Map) {
+          for (final child in value.values) {
+            collectPhotos(child);
+          }
+        } else if (value is List) {
+          for (final child in value) {
+            collectPhotos(child);
+          }
+        }
       }
+
+      collectPhotos(answers);
       for (final record in photos) {
         if (record.accuracy != null &&
             (!record.accuracy!.isFinite ||
@@ -370,7 +382,10 @@ class FieldQualityService {
           issues.add(FieldQualityIssue('photo', '${session.title}: $problem',
               sessionId: session.id));
       }
-      if (visit is Map && topPhoto == null)
+      if (photos.isEmpty &&
+          ((response['workflow_requirements'] as Map?)?['require_photo'] ==
+                  true ||
+              (visit is Map && response['workflow_requirements'] == null)))
         issues.add(FieldQualityIssue(
             'photo', '${session.title}: visit evidence photo is missing',
             sessionId: session.id));

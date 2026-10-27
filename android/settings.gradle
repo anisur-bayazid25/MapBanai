@@ -1,4 +1,15 @@
 pluginManagement {
+    // Kotlin 2.2 metadata needs R8 8.10.21 or newer. Keep the existing AGP
+    // integration and replace only its bundled optimizer, as documented by R8.
+    buildscript {
+        repositories {
+            google()
+            mavenCentral()
+        }
+        dependencies {
+            classpath("com.android.tools:r8:8.10.21")
+        }
+    }
     def flutterSdkPath = {
         def properties = new Properties()
         file("local.properties").withInputStream { properties.load(it) }

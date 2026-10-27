@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -133,12 +135,13 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Capture Photo'),
+        title: Text(ui(context, 'Capture Photo')),
       ),
-      body: Padding(
+      body: SafeArea(
+          child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: _record != null ? _buildPreview() : _buildCaptureUi(),
-      ),
+      )),
     );
   }
 
@@ -156,42 +159,38 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
             child: Row(
               children: [
                 const Icon(Icons.gps_fixed, color: Colors.green, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'GPS fix ready · ±${_accuracy!.round()} m — photo will be '
-                    'geotagged',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.green.shade800,
-                    ),
+                Text(
+                  ui(
+                      context,
+                      'GPS fix ready · ±{v0} m — photo will be geotagged',
+                      [_accuracy!.round()]),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.green.shade800,
                   ),
                 ),
               ],
             ),
           ),
         const SizedBox(height: 16),
-        Expanded(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.photo_camera_back_outlined,
-                  size: 72,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _status ??
-                      'Every photo must contain GPS coordinates. '
-                          'Stay at the photo location until GPS is confirmed. '
-                          'Gallery photos keep their existing GPS when valid.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ],
-            ),
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.photo_camera_back_outlined,
+                size: 72,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _status ??
+                    ui(context,
+                        'Every photo must contain GPS coordinates. Stay at the photo location until GPS is confirmed. Gallery photos keep their existing GPS when valid.'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
           ),
         ),
         if (_busy) ...[
@@ -203,34 +202,30 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
           FilledButton.icon(
             onPressed: _busy ? null : _storePendingPhoto,
             icon: const Icon(Icons.gps_fixed),
-            label: const Text('Retry GPS for selected photo'),
+            label: Text(ui(context, 'Retry GPS for selected photo')),
           ),
           const SizedBox(height: 12),
           TextButton(
             onPressed: _busy ? null : () => Geolocator.openAppSettings(),
-            child: const Text('Open app permission settings'),
+            child: Text(ui(context, 'Open app permission settings')),
           ),
           TextButton(
             onPressed: _busy ? null : () => Geolocator.openLocationSettings(),
-            child: const Text('Open device location settings'),
+            child: Text(ui(context, 'Open device location settings')),
           ),
         ],
-        Row(
+        ResponsiveGrid(
+          minChildWidth: 180,
           children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _busy ? null : () => _capture(ImageSource.camera),
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: const Text('Open camera'),
-              ),
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _capture(ImageSource.camera),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: Text(ui(context, 'Open camera')),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _busy ? null : () => _capture(ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Gallery'),
-              ),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _capture(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: Text(ui(context, 'Gallery')),
             ),
           ],
         ),
@@ -243,7 +238,8 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.4,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.file(
@@ -278,7 +274,9 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      record.isGeotagged ? 'Geotagged' : 'Not geotagged',
+                      record.isGeotagged
+                          ? ui(context, 'Geotagged')
+                          : ui(context, 'Not geotagged'),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: record.isGeotagged
@@ -291,7 +289,7 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                       record.latitude != null && record.longitude != null
                           ? '${record.latitude!.toStringAsFixed(6)}, '
                               '${record.longitude!.toStringAsFixed(6)}'
-                          : 'No coordinates available',
+                          : ui(context, 'No coordinates available'),
                       style: TextStyle(
                         fontSize: 12,
                         color: record.isGeotagged
@@ -309,8 +307,9 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                     ),
                     Text(
                       record.accuracy == null
-                          ? 'GPS accuracy: unavailable'
-                          : 'GPS accuracy: ±${record.accuracy!.round()} m',
+                          ? ui(context, 'GPS accuracy: unavailable')
+                          : ui(context, 'GPS accuracy: ±{v0} m',
+                              [record.accuracy!.round()]),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ],
@@ -320,22 +319,18 @@ class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
+        ResponsiveGrid(
+          minChildWidth: 180,
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _retake,
-                icon: const Icon(Icons.replay_outlined),
-                label: const Text('Retake'),
-              ),
+            OutlinedButton.icon(
+              onPressed: _retake,
+              icon: const Icon(Icons.replay_outlined),
+              label: Text(ui(context, 'Retake')),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: record.isGeotagged ? _save : null,
-                icon: const Icon(Icons.check_outlined),
-                label: const Text('Use photo'),
-              ),
+            FilledButton.icon(
+              onPressed: record.isGeotagged ? _save : null,
+              icon: const Icon(Icons.check_outlined),
+              label: Text(ui(context, 'Use photo')),
             ),
           ],
         ),

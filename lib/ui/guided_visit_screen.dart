@@ -1,8 +1,15 @@
+import 'package:mapbanai/models/workflow_requirements.dart';
+import 'package:mapbanai/services/workflow_requirements_service.dart';
+import 'package:mapbanai/services/google_maps_links.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/site_timeline_screen.dart';
 import 'package:mapbanai/state/project_state.dart';
 import 'package:provider/provider.dart';
 import 'package:mapbanai/services/form_attribute_service.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
+import 'package:mapbanai/models/study_workflow.dart';
 import 'package:mapbanai/ui/common/project_workspace_bar.dart';
 import 'dart:convert';
 
@@ -51,6 +58,8 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
   final TextEditingController _note = TextEditingController();
   Map<String, dynamic>? _geometry;
   StudyAreaStatus _status = StudyAreaStatus.verified;
+  WorkflowRequirements _requirements =
+      WorkflowRequirements.defaults(StudyWorkflow.verification);
   bool _loading = true;
   bool _busy = false;
   bool _allowPop = false;
@@ -73,6 +82,19 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     super.dispose();
   }
 
+  Future<void> _openGoogleMaps() async {
+    final site = _selectedSite;
+    if (site == null) return;
+    try {
+      if (!await launchUrl(GoogleMapsLinks.site(site.latitude, site.longitude),
+          mode: LaunchMode.externalApplication)) {
+        _message(ui(context, 'Could not open Google Maps.'));
+      }
+    } catch (error) {
+      _message(ui(context, 'Could not open Google Maps: {v0}', [error]));
+    }
+  }
+
   void _message(String text) {
     if (mounted)
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -82,7 +104,14 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     try {
       final project = await _db.getProjectById(widget.projectId);
       if (project == null) throw StateError('Project does not exist.');
-      final workspace = await ProjectWorkspaceService(_db).load(project.id);
+      _requirements = await WorkflowRequirementsService(_db)
+          .get(project.id, StudyWorkflow.verification);
+      final workspace = await ProjectWorkspaceService(_db)
+          .load(project.id, workflow: StudyWorkflow.verification);
+      await ProjectVectorLayerService(_db)
+          .linkExistingStudySites(workspace.project, _store);
+      await ProjectVectorLayerService(_db)
+          .ensureStudySites(workspace.project, workspace.layerId, _store);
       final sites = await _store.loadSites();
 
       final rows = await _db.getSurveySessionsByProject(project.id);
@@ -116,7 +145,11 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
             .toList();
         _loading = false;
       });
-      if (resume != null) _restore(resume);
+      if (resume != null) {
+        _restore(resume);
+      } else if (widget.initialSiteId != null && _selectedSite != null) {
+        await _startVisit();
+      }
     } catch (error) {
       if (mounted)
         setState(() {
@@ -153,13 +186,25 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     });
   }
 
+  Future<void> _startVisit() async {
+    final existing = _resumable
+        .where((row) =>
+            row.status == 'draft' &&
+            GuidedVisitService.visit(row)['site_id'] == _selectedSite!.id)
+        .firstOrNull;
+    final row = existing ??
+        await _service.start(projectId: widget.projectId, site: _selectedSite!);
+    if (mounted) _restore(row);
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await action();
     } catch (error) {
-      _message('$error. Your last saved draft is preserved.');
+      _message(
+          ui(context, '{v0}. Your last saved draft is preserved.', [error]));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -222,8 +267,8 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     await _saveSite();
     final stored = _selectedForm;
     if (stored == null) throw StateError('Choose a project survey form.');
-    await ProjectWorkspaceService(_db)
-        .select(widget.projectId, formId: stored.id);
+    await ProjectWorkspaceService(_db).select(widget.projectId,
+        formId: stored.id, workflow: StudyWorkflow.verification);
     var response = GuidedVisitService.decode(_session!);
     if (GuidedVisitService.visit(_session!)['stored_form_id'] != stored.id) {
       final row = await _service.saveDraft(
@@ -297,24 +342,32 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     final accepted = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('Compare map and saved visit'),
+                title: Text(ui(context, 'Compare map and saved visit')),
                 content: SingleChildScrollView(
-                    child: Text(
-                        'Current map (revision ${current.revision}):\n${const JsonEncoder.withIndent('  ').convert(current.stateSnapshot())}\n\nSaved visit proposal:\n${const JsonEncoder.withIndent('  ').convert(proposal)}\n\nApplying the saved visit replaces current attributes and geometry. Both versions remain in revision history.')),
+                    child: Text(ui(
+                        context,
+                        'Current map (revision {v0}):\n{v1}\n\nSaved visit proposal:\n{v2}\n\nApplying the saved visit replaces current attributes and geometry. Both versions remain in revision history.',
+                        [
+                      current.revision,
+                      const JsonEncoder.withIndent('  ')
+                          .convert(current.stateSnapshot()),
+                      const JsonEncoder.withIndent('  ').convert(proposal)
+                    ]))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Keep current map')),
+                      child: Text(ui(context, 'Keep current map'))),
                   FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Apply reviewed visit'))
+                      child: Text(ui(context, 'Apply reviewed visit')))
                 ]));
     if (accepted != true) return;
     final result = await _service.rebasePending(row,
         expectedCurrentToken: current.revisionToken);
     if (mounted) setState(() => _session = result.session);
     if (!result.mapApplied)
-      _message('Map update still needs review: ${result.error}');
+      _message(
+          ui(context, 'Map update still needs review: {v0}', [result.error]));
   }
 
   Future<void> _addAttribute() async {
@@ -323,28 +376,30 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     final added = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('Add information'),
+                title: Text(ui(context, 'Add information')),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
                   TextField(
                       controller: name,
-                      decoration:
-                          const InputDecoration(labelText: 'Field name')),
+                      decoration: InputDecoration(
+                          labelText: ui(context, 'Field name'))),
                   TextField(
                       controller: value,
-                      decoration: const InputDecoration(labelText: 'Value'))
+                      decoration:
+                          InputDecoration(labelText: ui(context, 'Value')))
                 ]),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Add'))
+                      child: Text(ui(context, 'Add')))
                 ]));
     if (added == true && name.text.trim().isNotEmpty && mounted) {
       final key = name.text.trim();
       if (_attributes.containsKey(key)) {
-        _message('This field already exists. Edit its value above.');
+        _message(
+            ui(context, 'This field already exists. Edit its value above.'));
       } else {
         setState(
             () => _attributes[key] = TextEditingController(text: value.text));
@@ -354,12 +409,124 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
     value.dispose();
   }
 
+  String _siteDescription(StudyAreaSite site) {
+    final fields = {
+      for (final e in site.attributes.entries)
+        e.key.trim().toLowerCase(): e.value
+    };
+    return [fields['location'], fields['layer'], ui(context, site.status.label)]
+        .whereType<String>()
+        .where((part) => part.trim().isNotEmpty)
+        .join(' · ');
+  }
+
+  String _draftName(SurveySession row) {
+    final snapshot = GuidedVisitService.visit(row)['site_after'];
+    return snapshot is Map
+        ? StudyAreaSite.fromJson(Map<String, dynamic>.from(snapshot))
+            .displayName
+        : ui(context, 'Saved visit');
+  }
+
+  Future<void> _chooseSite() async {
+    var query = '';
+    final sorted = List<StudyAreaSite>.from(_sites)
+      ..sort((a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    final selected = await showModalBottomSheet<StudyAreaSite>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => FractionallySizedBox(
+              heightFactor: .85,
+              child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      16, 16, 16, MediaQuery.viewInsetsOf(sheetContext).bottom),
+                  child: StatefulBuilder(builder: (context, update) {
+                    final matches = sorted
+                        .where((site) =>
+                            '${site.displayName} ${site.attributes.values.join(' ')} ${site.id}'
+                                .toLowerCase()
+                                .contains(query.toLowerCase()))
+                        .toList();
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(children: [
+                            Expanded(
+                                child: Text(ui(context, 'Choose a site'),
+                                    style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold))),
+                            IconButton(
+                                tooltip: ui(context, 'Close'),
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close))
+                          ]),
+                          TextField(
+                              autofocus: false,
+                              decoration: InputDecoration(
+                                  labelText:
+                                      ui(context, 'Search by name or location'),
+                                  prefixIcon: Icon(Icons.search)),
+                              onChanged: (value) =>
+                                  update(() => query = value)),
+                          const SizedBox(height: 8),
+                          if (matches.isEmpty)
+                            Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(ui(context, 'No matching sites'))),
+                          Expanded(
+                              child: ListView.builder(
+                                  itemCount: matches.length,
+                                  itemBuilder: (context, index) {
+                                    final site = matches[index];
+                                    return ListTile(
+                                        leading: const Icon(
+                                            Icons.location_on_outlined),
+                                        title: Text(site.displayName,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis),
+                                        subtitle: Text(_siteDescription(site),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis),
+                                        onTap: () =>
+                                            Navigator.pop(context, site));
+                                  })),
+                        ]);
+                  })),
+            ));
+    if (selected != null && mounted) setState(() => _selectedSite = selected);
+  }
+
+  bool _primaryAttribute(String name) => const {
+        'name',
+        'site_name',
+        'station_name',
+        'facility_name',
+        'sts_name',
+        'label',
+        'location',
+        'address',
+        'নাম',
+        'ঠিকানা'
+      }.contains(name.trim().toLowerCase());
+  Widget _attributeField(MapEntry<String, TextEditingController> entry) =>
+      Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: TextField(
+              controller: entry.value,
+              decoration: InputDecoration(labelText: ui(context, entry.key))));
   @override
   Widget build(BuildContext context) {
     final row = _session;
     final metadata = row == null ? null : GuidedVisitService.visit(row);
     final response = row == null ? null : GuidedVisitService.decode(row);
     final photo = response == null ? null : response['photo'];
+    final questionnaireReady =
+        (!_requirements.questionnaire && response?['form_snapshot'] is! Map) ||
+            (metadata?['form_validated'] == true &&
+                metadata?['stored_form_id'] == _selectedForm?.id);
     final saved = row?.status == 'saved';
     return PopScope(
         canPop: _allowPop,
@@ -368,12 +535,19 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
         },
         child: Scaffold(
             appBar: AppBar(
-                title: Text(
-                    'Guided visit${_project == null ? '' : ' — ${_project!.name}'}')),
+                actions: [
+                  if (_selectedSite != null)
+                    IconButton(
+                        tooltip: ui(context, 'Open in Google Maps'),
+                        onPressed: _openGoogleMaps,
+                        icon: const Icon(Icons.open_in_new_rounded))
+                ],
+                title: Text(ui(context, 'Guided visit{v0}',
+                    [_project == null ? '' : ' — ${_project!.name}']))),
             body: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? Center(child: Text(_error!))
+                    ? Center(child: Text(ui(context, _error!)))
                     : AbsorbPointer(
                         absorbing: _busy,
                         child: ListView(
@@ -383,6 +557,7 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                               if (row == null) ...[
                                 ProjectWorkspaceBar(
                                     database: _db,
+                                    workflow: StudyWorkflow.verification,
                                     workspace: _workspace,
                                     onChanged: (workspace) async {
                                       try {
@@ -409,41 +584,33 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                         await _load();
                                       }
                                     }),
-                                const Text(
-                                    'Choose a baseline feature to verify, update and document.'),
+                                Text(ui(context,
+                                    'Choose a baseline feature to verify, update and document.')),
                                 const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                    value: _selectedSite?.id,
-                                    isExpanded: true,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Baseline feature'),
-                                    items: _sites
-                                        .map((site) => DropdownMenuItem(
-                                            value: site.id,
-                                            child: Text(site.displayName)))
-                                        .toList(),
-                                    onChanged: (id) => setState(() =>
-                                        _selectedSite = _sites
-                                            .where((site) => site.id == id)
-                                            .firstOrNull)),
+                                OutlinedButton.icon(
+                                    key: const ValueKey('choose-visit-site'),
+                                    onPressed:
+                                        _sites.isEmpty ? null : _chooseSite,
+                                    icon: const Icon(Icons.search),
+                                    label: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
+                                        child: Text(
+                                            _selectedSite?.displayName ??
+                                                ui(context, 'Choose a site')))),
+                                if (_selectedSite != null)
+                                  Text(_siteDescription(_selectedSite!)),
                                 const SizedBox(height: 12),
                                 FilledButton(
                                     onPressed: _selectedSite == null
                                         ? null
-                                        : () => _run(() async {
-                                              final draft =
-                                                  await _service.start(
-                                                      projectId:
-                                                          widget.projectId,
-                                                      site: _selectedSite!);
-                                              if (mounted) _restore(draft);
-                                            }),
-                                    child: const Text('Start visit')),
+                                        : () => _run(_startVisit),
+                                    child: Text(ui(context, 'Start visit'))),
                                 if (_selectedSite != null)
                                   TextButton.icon(
                                       icon: const Icon(Icons.timeline),
-                                      label: const Text(
-                                          'Site timeline / compare observations'),
+                                      label: Text(ui(context,
+                                          'Site timeline / compare observations')),
                                       onPressed: () => Navigator.of(context)
                                           .push(MaterialPageRoute(
                                               builder: (_) =>
@@ -454,14 +621,17 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                                           widget.projectId,
                                                       site: _selectedSite!)))),
                                 if (_sites.isEmpty)
-                                  const Text(
-                                      'Import study-area features first to begin a guided baseline visit.'),
+                                  Text(ui(context,
+                                      'Import study-area features first to begin a guided baseline visit.')),
                                 for (final draft in _resumable)
                                   ListTile(
-                                      title: Text(draft.title),
+                                      title: Text(_draftName(draft),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
                                       subtitle: Text(draft.status == 'draft'
-                                          ? 'Resume saved draft'
-                                          : 'Survey saved; map update needs attention'),
+                                          ? ui(context, 'Resume saved draft')
+                                          : ui(context,
+                                              'Survey saved; map update needs attention')),
                                       trailing: const Icon(Icons.chevron_right),
                                       onTap: () => _restore(draft)),
                               ] else if (saved) ...[
@@ -474,15 +644,18 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                         : Colors.orange,
                                     size: 48),
                                 Text(metadata['site_sync'] == 'applied'
-                                    ? 'Visit saved and study map updated.'
-                                    : 'Visit and photo are saved. Study map update is pending.'),
+                                    ? ui(context,
+                                        'Visit saved and study map updated.')
+                                    : ui(context,
+                                        'Visit and photo are saved. Study map update is pending.')),
                                 if (metadata['reconciliation_error'] != null)
                                   Text(metadata['reconciliation_error']
                                       .toString()),
                                 if (metadata['site_sync'] != 'applied')
                                   OutlinedButton(
                                       onPressed: () => _run(_reviewConflict),
-                                      child: const Text('Review map conflict')),
+                                      child: Text(
+                                          ui(context, 'Review map conflict'))),
                                 if (metadata['site_sync'] != 'applied')
                                   FilledButton(
                                       onPressed: () => _run(() async {
@@ -492,12 +665,15 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                               setState(() =>
                                                   _session = result.session);
                                             if (!result.mapApplied)
-                                              _message(
-                                                  'Map still needs review: ${result.error}');
+                                              _message(ui(
+                                                  context,
+                                                  'Map still needs review: {v0}',
+                                                  [result.error]));
                                           }),
-                                      child: const Text('Retry map update')),
-                                Text(
-                                    'Visit ${metadata['id']} • Site ${metadata['site_id']} • Survey record ${row.id}'),
+                                      child: Text(
+                                          ui(context, 'Retry map update'))),
+                                Text(ui(context, '{v0} • Survey record {v1}',
+                                    [_selectedSite!.displayName, row.id])),
                                 const SizedBox(height: 12),
                                 OutlinedButton(
                                     onPressed: () => _run(() async {
@@ -507,42 +683,63 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                           });
                                           await _load();
                                         }),
-                                    child: const Text('Visit another feature')),
+                                    child: Text(
+                                        ui(context, 'Visit another feature'))),
                               ] else ...[
-                                Text('1. Verify ${_selectedSite!.displayName}',
+                                Text(
+                                    ui(context, '1. Verify {v0}',
+                                        [_selectedSite!.displayName]),
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
                                 DropdownButtonFormField<StudyAreaStatus>(
-                                    value: _status,
+                                    itemHeight: null,
+                                    value:
+                                        _status == StudyAreaStatus.notFound ||
+                                                _status ==
+                                                    StudyAreaStatus.needsReview
+                                            ? _status
+                                            : StudyAreaStatus.verified,
                                     isExpanded: true,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Visit outcome'),
-                                    items: StudyAreaStatus.values
-                                        .where((status) =>
-                                            status != StudyAreaStatus.pending &&
-                                            status != StudyAreaStatus.completed)
+                                    decoration: InputDecoration(
+                                        labelText:
+                                            ui(context, 'Visit outcome')),
+                                    items: const [
+                                      StudyAreaStatus.verified,
+                                      StudyAreaStatus.notFound,
+                                      StudyAreaStatus.needsReview
+                                    ]
                                         .map((status) => DropdownMenuItem(
                                             value: status,
-                                            child: Text(status.label)))
+                                            child: Text(
+                                                ui(context, status.label))))
                                         .toList(),
                                     onChanged: (status) =>
                                         setState(() => _status = status!)),
-                                for (final entry in _attributes.entries)
-                                  Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: TextField(
-                                          controller: entry.value,
-                                          decoration: InputDecoration(
-                                              labelText: entry.key))),
+                                for (final entry in _attributes.entries.where(
+                                    (entry) => _primaryAttribute(entry.key)))
+                                  _attributeField(entry),
+                                if (_attributes.keys
+                                    .any((name) => !_primaryAttribute(name)))
+                                  ExpansionTile(
+                                      title: Text(
+                                          ui(context, 'More site details')),
+                                      children: [
+                                        for (final entry in _attributes.entries
+                                            .where((entry) =>
+                                                !_primaryAttribute(entry.key)))
+                                          _attributeField(entry)
+                                      ]),
                                 TextButton.icon(
                                     onPressed: _addAttribute,
                                     icon: const Icon(Icons.add),
-                                    label: const Text('Add information')),
+                                    label:
+                                        Text(ui(context, 'Add information'))),
                                 TextField(
                                     controller: _note,
                                     maxLines: 3,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Change or review note')),
+                                    decoration: InputDecoration(
+                                        labelText: ui(
+                                            context, 'Change or review note'))),
                                 OutlinedButton.icon(
                                     onPressed: () => _run(() async {
                                           if (![
@@ -552,20 +749,30 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                           ].contains(_geometry!['type'])) {
                                             await showDialog<void>(
                                                 context: context,
-                                                builder: (context) => AlertDialog(
-                                                        title: const Text(
-                                                            'Multipart geometry'),
+                                                builder: (context) =>
+                                                    AlertDialog(
+                                                        title: Text(ui(context,
+                                                            'Multipart geometry')),
                                                         content:
                                                             SingleChildScrollView(
-                                                                child: Text(
-                                                                    'This complete geometry is preserved. Edit its parts in GIS software and merge the revised GeoJSON to redraw it.\n\n${const JsonEncoder.withIndent('  ').convert(_geometry)}')),
+                                                                child: Text(ui(
+                                                                    context,
+                                                                    'This complete geometry is preserved. Edit its parts in GIS software and merge the revised GeoJSON to redraw it.\n\n{v0}',
+                                                                    [
+                                                              const JsonEncoder
+                                                                      .withIndent(
+                                                                      '  ')
+                                                                  .convert(
+                                                                      _geometry)
+                                                            ]))),
                                                         actions: [
                                                           TextButton(
                                                               onPressed: () =>
                                                                   Navigator.pop(
                                                                       context),
-                                                              child: const Text(
-                                                                  'Close'))
+                                                              child: Text(ui(
+                                                                  context,
+                                                                  'Close')))
                                                         ]));
                                             return;
                                           }
@@ -586,17 +793,19 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                                 () => _geometry = geometry);
                                         }),
                                     icon: const Icon(Icons.map),
-                                    label:
-                                        const Text('Review or edit geometry')),
+                                    label: Text(ui(
+                                        context, 'Review or edit geometry'))),
                                 const SizedBox(height: 20),
-                                Text('2. Collect information',
+                                Text(ui(context, '2. Collect information'),
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
                                 DropdownButtonFormField<int>(
+                                    itemHeight: null,
                                     value: _selectedForm?.id,
                                     isExpanded: true,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Project survey form'),
+                                    decoration: InputDecoration(
+                                        labelText:
+                                            ui(context, 'Project survey form')),
                                     items: _forms
                                         .map((form) => DropdownMenuItem(
                                             value: form.id,
@@ -610,20 +819,25 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                     onPressed: _selectedForm == null
                                         ? null
                                         : () => _run(_openSurvey),
-                                    child: Text(
-                                        metadata!['form_validated'] == true
-                                            ? 'Review saved survey'
-                                            : 'Open survey')),
-                                if (_forms.isEmpty)
-                                  const Text(
-                                      'Add an XLSForm to this project before finishing a visit.'),
+                                    child: Text(questionnaireReady
+                                        ? ui(context, 'Review saved survey')
+                                        : ui(context, 'Open survey'))),
+                                if (_forms.isEmpty &&
+                                    _requirements.questionnaire)
+                                  Text(ui(context,
+                                      'Add an XLSForm to this project before finishing a visit.')),
                                 const SizedBox(height: 20),
-                                Text('3. Geotagged evidence photo',
+                                Text(ui(context, '3. Geotagged evidence photo'),
                                     style:
                                         Theme.of(context).textTheme.titleLarge),
                                 Text(photo == null
-                                    ? 'A photo is required before finishing.'
-                                    : 'Photo attached with embedded GPS.'),
+                                    ? ui(
+                                        context,
+                                        _requirements.photo
+                                            ? 'A photo is required before finishing.'
+                                            : 'Photo is optional.')
+                                    : ui(context,
+                                        'Photo attached with embedded GPS.')),
                                 OutlinedButton.icon(
                                     onPressed: () => _run(() async {
                                           await _saveSite();
@@ -644,32 +858,41 @@ class _GuidedVisitScreenState extends State<GuidedVisitScreen> {
                                         }),
                                     icon: const Icon(Icons.camera_alt),
                                     label: Text(photo == null
-                                        ? 'Capture photo'
-                                        : 'Replace photo')),
+                                        ? ui(context, 'Capture photo')
+                                        : ui(context, 'Replace photo'))),
                                 const SizedBox(height: 20),
+                                if (!questionnaireReady)
+                                  Text(ui(context,
+                                      'Complete the required steps to finish. You can save a draft at any time.')),
                                 FilledButton(
-                                    onPressed: () => _run(() async {
-                                          await _saveSite();
-                                          final result = await _service
-                                              .finalize(_session!);
-                                          if (mounted)
-                                            setState(() =>
-                                                _session = result.session);
-                                          if (!result.mapApplied)
-                                            _message(
-                                                'Visit saved; map update needs review: ${result.error}');
-                                        }),
-                                    child: const Text(
-                                        'Finish visit and update map')),
+                                    onPressed: !questionnaireReady
+                                        ? null
+                                        : () => _run(() async {
+                                              await _saveSite();
+                                              final result = await _service
+                                                  .finalize(_session!);
+                                              if (mounted)
+                                                setState(() =>
+                                                    _session = result.session);
+                                              if (!result.mapApplied)
+                                                _message(ui(
+                                                    context,
+                                                    'Visit saved; map update needs review: {v0}',
+                                                    [result.error]));
+                                            }),
+                                    child: Text(ui(context,
+                                        'Finish visit and update map'))),
                                 OutlinedButton(
                                     onPressed: () => _run(() async {
                                           await _saveSite();
-                                          _message(
-                                              'Visit draft saved. You can resume it later.');
+                                          _message(ui(context,
+                                              'Visit draft saved. You can resume it later.'));
                                         }),
-                                    child: const Text('Save draft')),
-                                Text(
-                                    'Draft visit ${row.id}. Leaving this screen saves the feature edits.'),
+                                    child: Text(ui(context, 'Save draft'))),
+                                Text(ui(
+                                    context,
+                                    'Draft visit {v0}. Leaving this screen saves the feature edits.',
+                                    [row.id])),
                               ],
                             ]))));
   }
@@ -705,8 +928,8 @@ class _VisitSurveyRouteState extends State<_VisitSurveyRoute> {
     } catch (error) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text('Could not save draft: $error. Answers remain here.')));
+            content: Text(ui(context,
+                'Could not save draft: {v0}. Answers remain here.', [error]))));
     } finally {
       if (mounted) setState(() => _leaving = false);
     }

@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/workflow_requirements_service.dart';
 import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
@@ -78,6 +79,28 @@ class ProjectExporter {
       'active_form_schema_id': workspace.schema?.id,
       'gps_accuracy_threshold_m': project.gpsThresholdM,
       'archived': project.archived,
+    };
+    final workflowConfig =
+        await ProjectWorkspaceService(_database).config(project.id);
+    settingsJson['collection_rounds'] =
+        workflowConfig['collection_rounds'] ?? [];
+    final workflowSelections = <String, dynamic>{};
+    for (final entry in (workflowConfig['workflows'] as Map? ?? {}).entries) {
+      final selected =
+          forms.where((form) => form.id == entry.value['form_id']).firstOrNull;
+      workflowSelections[entry.key.toString()] = {
+        'layer_id': entry.value['layer_id'],
+        'round_id': entry.value['round_id'],
+        'form_schema_id':
+            selected == null ? null : _tryDecodeForm(selected.json)['id'],
+      };
+    }
+    settingsJson['study_workflows'] = workflowSelections;
+    settingsJson['workflow_requirements'] = {
+      for (final entry in WorkflowRequirementsService.decode(
+              workflowConfig['workflow_requirements'])
+          .entries)
+        entry.key.name: entry.value.toJson()
     };
     final studyCategoryStyles = <String, dynamic>{};
     for (final layer in workspace.layers) {

@@ -1,3 +1,4 @@
+import 'package:mapbanai/services/workflow_requirements_service.dart';
 import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/services/project_field_data_service.dart';
 import 'package:mapbanai/services/project_asset_service.dart';
@@ -598,8 +599,29 @@ class ProjectImporter {
           jsonEncode({
             'layers': data.settings['study_layers'],
             'layer_id': data.settings['active_layer_id'],
-            'form_id': selectedForm
+            'form_id': selectedForm,
+            'collection_rounds': data.settings['collection_rounds'] ?? [],
+            'workflows': {
+              for (final entry
+                  in (data.settings['study_workflows'] as Map? ?? {}).entries)
+                entry.key: {
+                  'layer_id': entry.value['layer_id'],
+                  'round_id': entry.value['round_id'],
+                  'form_id': forms
+                      .where((form) =>
+                          (jsonDecode(form.json) as Map)['id'] ==
+                          entry.value['form_schema_id'])
+                      .firstOrNull
+                      ?.id,
+                }
+            },
           }));
+    }
+    if (data.settings.containsKey('workflow_requirements')) {
+      await WorkflowRequirementsService(_database).save(
+          projectId,
+          WorkflowRequirementsService.decode(
+              data.settings['workflow_requirements']));
     }
     final styleConfigs = data.settings['study_category_styles'];
     final layerConfigs = data.settings['study_layers'];

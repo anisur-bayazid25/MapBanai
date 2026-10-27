@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -465,9 +467,9 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
   Future<void> _saveForm() async {
     if (_saving) return;
     if (widget.form.groups.any((group) => group.isRepeat)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'This legacy form has unsupported repeats. Import a form with one submission per feature before collecting more data.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ui(context,
+              'This legacy form has unsupported repeats. Import a form with one submission per feature before collecting more data.'))));
       return;
     }
     AppLocalizations? l10n;
@@ -508,8 +510,10 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
                   (double.tryParse(answer.toString()) == null ||
                       !double.parse(answer.toString()).isFinite)))) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                '${question.labelFor(_formLanguage)}: enter a valid ${question.type == QuestionType.integer ? 'whole number' : 'number'}')));
+            content: Text(ui(context, '{v0}: enter a valid {v1}', [
+          question.labelFor(_formLanguage),
+          question.type == QuestionType.integer ? 'whole number' : 'number'
+        ]))));
         return;
       }
       final constraintError = SurveyLogic.evaluateConstraint(
@@ -537,9 +541,9 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
   /// constraint validation, so interrupted surveys can be resumed later.
   Future<void> _saveDraft() async {
     if (widget.form.groups.any((group) => group.isRepeat)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Draft cannot be saved: repeated records are not supported. Import a form with one submission per feature.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ui(context,
+              'Draft cannot be saved: repeated records are not supported. Import a form with one submission per feature.'))));
       return;
     }
     await _persist(widget.onSaveDraft);
@@ -568,8 +572,10 @@ class _SurveyFormRendererState extends State<SurveyFormRenderer> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Could not save responses: $error. Your answers are still here.')),
+              content: Text(ui(
+                  context,
+                  'Could not save responses: {v0}. Your answers are still here.',
+                  [error]))),
         );
       }
     } finally {
@@ -682,13 +688,13 @@ class _QuestionWidget extends StatelessWidget {
           absorbing: question.readOnly,
           child: Opacity(
               opacity: question.readOnly ? 0.65 : 1,
-              child: _buildInputWidget(l10n)),
+              child: _buildInputWidget(context, l10n)),
         ),
       ],
     );
   }
 
-  Widget _buildInputWidget(AppLocalizations? l10n) {
+  Widget _buildInputWidget(BuildContext context, AppLocalizations? l10n) {
     switch (question.type) {
       case QuestionType.text:
         return TextField(
@@ -739,7 +745,7 @@ class _QuestionWidget extends StatelessWidget {
         );
 
       case QuestionType.yes_no:
-        return SegmentedButton<String>(
+        return ResponsiveChoice<String>(
           segments: [
             ButtonSegment(value: 'yes', label: Text(l10n?.yes ?? 'Yes')),
             ButtonSegment(value: 'no', label: Text(l10n?.no ?? 'No')),
@@ -750,6 +756,8 @@ class _QuestionWidget extends StatelessWidget {
 
       case QuestionType.select_one:
         return DropdownButtonFormField<String>(
+          itemHeight: null,
+          isExpanded: true,
           value: value?.toString(),
           onChanged: (newValue) => onChanged(newValue),
           decoration: InputDecoration(
@@ -767,6 +775,8 @@ class _QuestionWidget extends StatelessWidget {
 
       case QuestionType.dropdown:
         return DropdownButtonFormField<String>(
+          itemHeight: null,
+          isExpanded: true,
           value: value?.toString(),
           onChanged: (newValue) => onChanged(newValue),
           decoration: InputDecoration(
@@ -851,7 +861,9 @@ class _QuestionWidget extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  value != null ? value.toString() : 'Not computed yet',
+                  value != null
+                      ? value.toString()
+                      : ui(context, 'Not computed yet'),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -1180,7 +1192,7 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
           permission == LocationPermission.deniedForever) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission required')),
+          SnackBar(content: Text(ui(context, 'Location permission required'))),
         );
         return;
       }
@@ -1195,7 +1207,8 @@ class _GpsCaptureFieldState extends State<_GpsCaptureField> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not get location: $e')),
+        SnackBar(
+            content: Text(ui(context, 'Could not get location: {v0}', [e]))),
       );
     } finally {
       if (mounted) {
@@ -1282,7 +1295,7 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
           permission == LocationPermission.deniedForever) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission required')),
+          SnackBar(content: Text(ui(context, 'Location permission required'))),
         );
         return;
       }
@@ -1295,7 +1308,8 @@ class _GpsAccuracyFieldState extends State<_GpsAccuracyField> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not get accuracy: $e')),
+        SnackBar(
+            content: Text(ui(context, 'Could not get accuracy: {v0}', [e]))),
       );
     } finally {
       if (mounted) {
@@ -1446,17 +1460,19 @@ class _PhotoField extends StatelessWidget {
               ),
               if (photo != null)
                 IconButton(
-                  tooltip: 'Remove photo',
+                  tooltip: ui(context, 'Remove photo'),
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => onChanged(null),
                 ),
-              ElevatedButton(
-                onPressed: () => _capture(context),
-                child: Text(photo == null
-                    ? (l10n?.attachPhoto ?? 'Attach')
-                    : (l10n?.replacePhoto ?? 'Replace')),
-              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: () => _capture(context),
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: Text(photo == null
+                ? (l10n?.attachPhoto ?? 'Attach')
+                : (l10n?.replacePhoto ?? 'Replace')),
           ),
         ],
       ),
@@ -1487,19 +1503,21 @@ class _GeometryField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final geometry = _geometry;
-    return Row(children: [
-      Expanded(
-          child: Text(geometry == null
-              ? 'No geometry captured'
-              : '${geometry['type']} captured')),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(geometry == null
+          ? ui(context, 'No geometry captured')
+          : ui(context, '{v0} captured', [geometry['type']])),
+      const SizedBox(height: 8),
       if (geometry != null)
-        IconButton(
-            tooltip: 'Remove geometry',
+        TextButton.icon(
+            label: Text(ui(context, 'Remove geometry')),
             onPressed: () => onChanged(null),
             icon: const Icon(Icons.close)),
       OutlinedButton.icon(
           icon: const Icon(Icons.map_outlined),
-          label: Text(geometry == null ? 'Draw on map' : 'Edit on map'),
+          label: Text(geometry == null
+              ? ui(context, 'Draw on map')
+              : ui(context, 'Edit on map')),
           onPressed: () async {
             final captured = await Navigator.of(context)
                 .push<Map<String, dynamic>>(MaterialPageRoute(

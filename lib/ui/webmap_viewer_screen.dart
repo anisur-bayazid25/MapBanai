@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/ui/project_vector_layers_screen.dart';
 import 'package:mapbanai/services/atlas_image_export.dart';
@@ -71,14 +73,15 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     try {
       final generator = WebMapGenerator(
           dataService: WebMapDataService(db, studyAreaStore: StudyAreaStore()));
-      _file = await generator
-          .writeToFile(await generator.generateHtml(projectId: id));
+      _file = await generator.writeToFile(await generator.generateHtml(
+          projectId: id,
+          languageCode: Localizations.localeOf(context).languageCode));
       await _controller.loadFile(_file.path);
     } catch (error) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Cannot reload layers: $error")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ui(context, 'Cannot reload layers: {v0}', [error]))));
       }
     }
   }
@@ -89,8 +92,9 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
           "if (typeof openMapStudio === 'function') openMapStudio();");
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot open map styles: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(ui(context, 'Cannot open map styles: {v0}', [error]))));
       }
     }
   }
@@ -145,8 +149,8 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
           'receiveMapSymbol(${jsonEncode(key)}, ${jsonEncode(data)});');
     } catch (error) {
       if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Cannot load icon: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ui(context, 'Cannot load icon: {v0}', [error]))));
     }
   }
 
@@ -174,7 +178,7 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
             }
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Map image saved')));
+                  SnackBar(content: Text(ui(context, 'Map image saved'))));
             }
           }
           return;
@@ -196,8 +200,8 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
           subject: 'MapBanai filtered data');
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ui(context, 'Export failed: {v0}', [error]))));
       }
     }
   }
@@ -210,7 +214,7 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     final project = await showDialog<Project>(
         context: context,
         builder: (context) =>
-            SimpleDialog(title: const Text('Select project'), children: [
+            SimpleDialog(title: Text(ui(context, 'Select project')), children: [
               for (final project in projects)
                 SimpleDialogOption(
                     onPressed: () => Navigator.pop(context, project),
@@ -226,7 +230,9 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     try {
       final generator = WebMapGenerator(
           dataService: WebMapDataService(db, studyAreaStore: StudyAreaStore()));
-      final html = await generator.generateHtml(projectId: project.id);
+      final html = await generator.generateHtml(
+          projectId: project.id,
+          languageCode: Localizations.localeOf(context).languageCode);
       _file = await generator.writeToFile(html);
       _projectName = project.name;
       _projectId = project.id;
@@ -234,8 +240,9 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot open project map: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text(ui(context, 'Cannot open project map: {v0}', [error]))));
       }
     }
   }
@@ -244,13 +251,13 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
     try {
       await Share.shareXFiles(
         [XFile(_file.path)],
-        text: 'MapBanai WebMap',
+        text: ui(context, 'MapBanai WebMap'),
         subject: 'MapBanai WebMap',
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: $e')),
+          SnackBar(content: Text(ui(context, 'Share failed: {v0}', [e]))),
         );
       }
     }
@@ -260,16 +267,17 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_projectName.isEmpty ? 'Project Atlas' : _projectName),
+        title: Text(
+            _projectName.isEmpty ? ui(context, 'Project Atlas') : _projectName),
         actions: [
           if (widget.database != null)
             IconButton(
                 onPressed: _chooseProject,
-                tooltip: "Select project",
+                tooltip: ui(context, 'Select project'),
                 icon: const Icon(Icons.folder_outlined)),
           IconButton(
             icon: const Icon(Icons.share_outlined),
-            tooltip: 'Share HTML file',
+            tooltip: ui(context, 'Share HTML file'),
             onPressed: _share,
           ),
         ],
@@ -277,18 +285,16 @@ class _WebmapViewerScreenState extends State<WebmapViewerScreen> {
       bottomNavigationBar: SafeArea(
           child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(children: [
-                Expanded(
-                    child: FilledButton.icon(
-                        onPressed: _loading ? null : _openStudio,
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('Download Map'))),
+              child: ResponsiveGrid(minChildWidth: 180, children: [
+                FilledButton.icon(
+                    onPressed: _loading ? null : _openStudio,
+                    icon: const Icon(Icons.download_outlined),
+                    label: Text(ui(context, 'Download Map'))),
                 if (widget.database != null && _projectId != null) ...[
-                  const SizedBox(width: 8),
                   OutlinedButton.icon(
                       onPressed: _loading ? null : _manageLayers,
                       icon: const Icon(Icons.layers_outlined),
-                      label: const Text("Layers")),
+                      label: Text(ui(context, 'Layers'))),
                 ],
               ]))),
       body: Stack(

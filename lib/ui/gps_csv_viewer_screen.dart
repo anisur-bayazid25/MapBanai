@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/gps_csv_service.dart';
@@ -65,7 +67,9 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
     if (readings.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No readings in "${log.name}" to project')),
+        SnackBar(
+            content: Text(
+                ui(context, 'No readings in "{v0}" to project', [log.name]))),
       );
       return;
     }
@@ -89,7 +93,7 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('WebMap failed: $e')),
+        SnackBar(content: Text(ui(context, 'WebMap failed: {v0}', [e]))),
       );
     }
   }
@@ -121,7 +125,7 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
         if (!mounted) return;
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No readings in selected logs')),
+          SnackBar(content: Text(ui(context, 'No readings in selected logs'))),
         );
         return;
       }
@@ -140,7 +144,7 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('WebMap failed: $e')),
+        SnackBar(content: Text(ui(context, 'WebMap failed: {v0}', [e]))),
       );
     }
   }
@@ -148,11 +152,12 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
   Future<void> _shareLog(GpsLog log) async {
     final path = await _store.filePath(log.id);
     try {
-      await Share.shareXFiles([XFile(path)], text: 'GPS log ${log.name}');
+      await Share.shareXFiles([XFile(path)],
+          text: ui(context, 'GPS log {v0}', [log.name]));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Share failed: $e')),
+        SnackBar(content: Text(ui(context, 'Share failed: {v0}', [e]))),
       );
     }
   }
@@ -161,16 +166,16 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GPS CSV Viewer'),
+        title: Text(ui(context, 'GPS CSV Viewer')),
         actions: [
           if (_logs.length > 1)
             IconButton(
-              tooltip: 'Project multiple on WebMap',
+              tooltip: ui(context, 'Project multiple on WebMap'),
               icon: const Icon(Icons.layers_outlined),
               onPressed: _projectMultipleOnWebMap,
             ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: ui(context, 'Refresh'),
             icon: const Icon(Icons.refresh),
             onPressed: _load,
           ),
@@ -188,13 +193,14 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                         Icon(Icons.table_chart_outlined,
                             size: 48, color: Colors.grey.shade400),
                         const SizedBox(height: 12),
-                        const Text(
-                          'No GPS logs yet',
+                        Text(
+                          ui(context, 'No GPS logs yet'),
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Record GPS tracks in GPS Mode. They will appear here for viewing and WebMap overlay.',
+                          ui(context,
+                              'Record GPS tracks in GPS Mode. They will appear here for viewing and WebMap overlay.'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 12, color: Colors.grey.shade600),
@@ -227,11 +233,15 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                             style:
                                 const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(
-                          '$count readings'
-                          '${last == null ? '' : ' • last ${_formatTime(last)}'}'
-                          '${log.surveyor.trim().isEmpty ? '' : ' • ${log.surveyor}'}',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ui(context, '{v0} readings{v1}{v2}', [
+                            count,
+                            last == null ? '' : ' • last ${_formatTime(last)}',
+                            log.surveyor.trim().isEmpty
+                                ? ''
+                                : ' • ${log.surveyor}'
+                          ]),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
                         ),
                         trailing: PopupMenuButton<String>(
                           onSelected: (v) {
@@ -247,27 +257,27 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
                                 break;
                             }
                           },
-                          itemBuilder: (context) => const [
+                          itemBuilder: (context) => [
                             PopupMenuItem(
                                 value: 'view',
                                 child: Row(children: [
                                   Icon(Icons.table_view_outlined, size: 18),
                                   SizedBox(width: 8),
-                                  Text('View CSV')
+                                  Text(ui(context, 'View CSV'))
                                 ])),
                             PopupMenuItem(
                                 value: 'webmap',
                                 child: Row(children: [
                                   Icon(Icons.public_outlined, size: 18),
                                   SizedBox(width: 8),
-                                  Text('Project on WebMap')
+                                  Text(ui(context, 'Project on WebMap'))
                                 ])),
                             PopupMenuItem(
                                 value: 'share',
                                 child: Row(children: [
                                   Icon(Icons.ios_share_outlined, size: 18),
                                   SizedBox(width: 8),
-                                  Text('Share CSV')
+                                  Text(ui(context, 'Share CSV'))
                                 ])),
                           ],
                         ),
@@ -283,7 +293,7 @@ class _GpsCsvViewerScreenState extends State<GpsCsvViewerScreen> {
               child: FilledButton.icon(
                 onPressed: _projectMultipleOnWebMap,
                 icon: const Icon(Icons.public_outlined),
-                label: const Text('Project multiple logs on WebMap'),
+                label: Text(ui(context, 'Project multiple logs on WebMap')),
               ),
             ),
     );
@@ -310,7 +320,7 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Select logs to project'),
+      title: Text(ui(context, 'Select logs to project')),
       content: SizedBox(
         width: 320,
         child: ListView(
@@ -319,7 +329,8 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
             for (final log in widget.logs)
               CheckboxListTile(
                 title: Text(log.name),
-                subtitle: Text('${widget.counts[log.id] ?? 0} readings'),
+                subtitle: Text(
+                    ui(context, '{v0} readings', [widget.counts[log.id] ?? 0])),
                 value: _selected.contains(log.id),
                 onChanged: (v) {
                   setState(() {
@@ -337,11 +348,13 @@ class _MultiSelectDialogState extends State<_MultiSelectDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         FilledButton(
-          onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _selected),
-          child: Text('Project ${_selected.length} logs'),
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.pop(context, _selected),
+          child: Text(ui(context, 'Project {v0} logs', [_selected.length])),
         ),
       ],
     );
@@ -393,7 +406,7 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
   Future<void> _projectOnWebMap() async {
     if (_readings.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No readings to project')),
+        SnackBar(content: Text(ui(context, 'No readings to project'))),
       );
       return;
     }
@@ -416,7 +429,7 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('WebMap failed: $e')),
+        SnackBar(content: Text(ui(context, 'WebMap failed: {v0}', [e]))),
       );
     }
   }
@@ -424,36 +437,35 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
   Future<void> _share() async {
     final path = await _store.filePath(widget.log.id);
     try {
-      await Share.shareXFiles([XFile(path)], text: 'GPS log ${widget.log.name}');
+      await Share.shareXFiles([XFile(path)],
+          text: ui(context, 'GPS log {v0}', [widget.log.name]));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Share failed: $e')),
+        SnackBar(content: Text(ui(context, 'Share failed: {v0}', [e]))),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final stats = _readings.isEmpty
-        ? null
-        : GpsCsvService.stats(_readings);
+    final stats = _readings.isEmpty ? null : GpsCsvService.stats(_readings);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.log.name),
         actions: [
           IconButton(
-            tooltip: 'Project on WebMap',
+            tooltip: ui(context, 'Project on WebMap'),
             icon: const Icon(Icons.public_outlined),
             onPressed: _readings.isEmpty ? null : _projectOnWebMap,
           ),
           IconButton(
-            tooltip: 'Share CSV',
+            tooltip: ui(context, 'Share CSV'),
             icon: const Icon(Icons.ios_share_outlined),
             onPressed: _share,
           ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: ui(context, 'Refresh'),
             icon: const Icon(Icons.refresh),
             onPressed: _load,
           ),
@@ -465,7 +477,7 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text('Failed to load: $_error',
+                    child: Text(ui(context, 'Failed to load: {v0}', [_error]),
                         style: TextStyle(color: Colors.red.shade700)),
                   ),
                 )
@@ -475,18 +487,19 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
                     const Divider(height: 1),
                     Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Row(
+                      child: ResponsiveGrid(
+                        minChildWidth: 180,
                         children: [
                           FilledButton.icon(
                             onPressed: _projectOnWebMap,
                             icon: const Icon(Icons.public_outlined, size: 18),
-                            label: const Text('Project on WebMap'),
+                            label: Text(ui(context, 'Project on WebMap')),
                           ),
-                          const SizedBox(width: 8),
                           OutlinedButton.icon(
                             onPressed: _share,
-                            icon: const Icon(Icons.ios_share_outlined, size: 18),
-                            label: const Text('Share'),
+                            icon:
+                                const Icon(Icons.ios_share_outlined, size: 18),
+                            label: Text(ui(context, 'Share')),
                           ),
                         ],
                       ),
@@ -494,8 +507,9 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
                     Expanded(
                       child: _readings.isEmpty
                           ? Center(
-                              child: Text('No readings yet',
-                                  style: TextStyle(color: Colors.grey.shade600)),
+                              child: Text(ui(context, 'No readings yet'),
+                                  style:
+                                      TextStyle(color: Colors.grey.shade600)),
                             )
                           : SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -503,31 +517,42 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
                                 child: DataTable(
                                   headingRowColor: WidgetStateProperty.all(
                                       Colors.teal.shade50),
-                                  columns: const [
-                                    DataColumn(label: Text('ID')),
-                                    DataColumn(label: Text('Timestamp')),
-                                    DataColumn(label: Text('Latitude')),
-                                    DataColumn(label: Text('Longitude')),
-                                    DataColumn(label: Text('Alt (m)')),
-                                    DataColumn(label: Text('Acc (m)')),
-                                    DataColumn(label: Text('Notes')),
+                                  columns: [
+                                    DataColumn(label: Text(ui(context, 'ID'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Timestamp'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Latitude'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Longitude'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Alt (m)'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Acc (m)'))),
+                                    DataColumn(
+                                        label: Text(ui(context, 'Notes'))),
                                   ],
                                   rows: [
                                     for (final r in _readings)
                                       DataRow(cells: [
                                         DataCell(Text(r.id.toString())),
                                         DataCell(Text(_fmtTs(r.timestamp))),
-                                        DataCell(Text(r.latitude.toStringAsFixed(6))),
-                                        DataCell(Text(r.longitude.toStringAsFixed(6))),
-                                        DataCell(Text(r.altitude.toStringAsFixed(1))),
-                                        DataCell(Text(r.accuracy.toStringAsFixed(1))),
+                                        DataCell(Text(
+                                            r.latitude.toStringAsFixed(6))),
+                                        DataCell(Text(
+                                            r.longitude.toStringAsFixed(6))),
+                                        DataCell(Text(
+                                            r.altitude.toStringAsFixed(1))),
+                                        DataCell(Text(
+                                            r.accuracy.toStringAsFixed(1))),
                                         DataCell(SizedBox(
                                           width: 180,
                                           child: Text(
                                             r.notes.isEmpty ? '—' : r.notes,
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontSize: 12),
+                                            style:
+                                                const TextStyle(fontSize: 12),
                                           ),
                                         )),
                                       ]),
@@ -549,18 +574,17 @@ class _GpsCsvDetailScreenState extends State<GpsCsvDetailScreen> {
         : '${(dist / 1000).toStringAsFixed(2)} km';
     final count = stats['count'];
     final duration = stats['duration_s'] as int;
-    final durStr = duration < 60
-        ? '${duration}s'
-        : '${duration ~/ 60}m ${duration % 60}s';
+    final durStr =
+        duration < 60 ? '${duration}s' : '${duration ~/ 60}m ${duration % 60}s';
     return Container(
       color: Colors.teal.shade50,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
           _statChip(Icons.table_rows_outlined, '$count readings'),
-          const SizedBox(width: 8),
           _statChip(Icons.route_outlined, distStr),
-          const SizedBox(width: 8),
           _statChip(Icons.timer_outlined, durStr),
         ],
       ),

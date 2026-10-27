@@ -1,3 +1,6 @@
+import 'package:mapbanai/ui/common/map_chrome.dart';
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/services/record_geometry.dart';
 import 'package:mapbanai/ui/study_area_mode_screen.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
@@ -151,8 +154,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (row == null || !mounted || row.status != 'draft') return;
     final project = await _database.getProjectById(row.projectId);
     if (project == null || project.archived || !mounted) {
-      _showSnack(
-          'The draft project is unavailable. Restore the project before resuming.');
+      _showSnack(ui(context,
+          'The draft project is unavailable. Restore the project before resuming.'));
       return;
     }
     if (_selectedProjectId != project.id) {
@@ -196,7 +199,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
       }
     });
 
-    _showSnack('Draft restored — continue, finish, or save it again');
+    _showSnack(
+        ui(context, 'Draft restored — continue, finish, or save it again'));
     _refreshDraftGeometry();
 
     if (_draftType == _DraftType.point) {
@@ -391,7 +395,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       _infoFeature = _InfoFeature(
         sessionId:
             sessionId is int ? sessionId : int.tryParse('$sessionId') ?? 0,
-        title: title ?? 'Feature $sessionId',
+        title: title ?? ui(context, 'Feature {v0}', [sessionId]),
         featureType: featureType ?? 'feature',
         studySite: data?['study_site'] == true,
       );
@@ -479,20 +483,21 @@ class _GisModeScreenState extends State<GisModeScreen> {
       responses: jsonEncode(responses),
     );
     if (!mounted) return;
-    _showSnack('Point moved');
+    _showSnack(ui(context, 'Point moved'));
   }
 
   Future<void> _deleteSelectedFeature() async {
     final info = _infoFeature;
     if (info == null) return;
     if (info.studySite) {
-      _showSnack('Edit or remove this site in Study Area mode');
+      _showSnack(ui(context, 'Edit or remove this site in Study Area mode'));
       return;
     }
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete feature',
-      message: 'Delete "${info.title}"? This cannot be undone.',
+      title: ui(context, 'Delete feature'),
+      message:
+          ui(context, 'Delete "{v0}"? This cannot be undone.', [info.title]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -522,7 +527,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       _infoFeature = null;
       _showInfoPanel = false;
     });
-    _showSnack('Feature deleted');
+    _showSnack(ui(context, 'Feature deleted'));
   }
 
   // ── survey feature annotations ───────────────────────────────
@@ -683,7 +688,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   void _startPointDraft() {
     if (_currentLocation == null) {
-      _showSnack('Waiting for a GPS fix to place the point');
+      _showSnack(ui(context, 'Waiting for a GPS fix to place the point'));
       return;
     }
     setState(() {
@@ -722,7 +727,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   void _startLineDraft() {
     if (_selectedProjectId == null) {
-      _showSnack('Select a project before drawing');
+      _showSnack(ui(context, 'Select a project before drawing'));
       return;
     }
     setState(() {
@@ -733,7 +738,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   void _startPolygonDraft() {
     if (_selectedProjectId == null) {
-      _showSnack('Select a project before drawing');
+      _showSnack(ui(context, 'Select a project before drawing'));
       return;
     }
     setState(() {
@@ -900,8 +905,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
       final minVertices = _draftType == _DraftType.line ? 2 : 3;
       if (vertices.length < minVertices) {
         _showSnack(
-          'Need at least $minVertices vertices to finish '
-          '(${vertices.length} collected)',
+          ui(context, 'Need at least {v0} vertices to finish ({v1} collected)',
+              [minVertices, vertices.length]),
         );
         return;
       }
@@ -932,7 +937,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }) async {
     final projectId = _selectedProjectId;
     if (projectId == null) {
-      _showSnack('No project selected');
+      _showSnack(ui(context, 'No project selected'));
       return false;
     }
 
@@ -1055,7 +1060,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       );
     }
     if (!mounted) return true;
-    _showSnack('$featureType saved');
+    _showSnack(ui(context, '{v0} saved', [featureType]));
     final controller = _controller;
     if (controller == null || !_styleReady) return true;
     try {
@@ -1123,7 +1128,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _saveDraft() async {
     final projectId = _selectedProjectId;
     if (projectId == null) {
-      _showSnack('No project selected');
+      _showSnack(ui(context, 'No project selected'));
       return;
     }
     if (!_canSaveDraft) return;
@@ -1140,7 +1145,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
     if (_draftType == _DraftType.point) {
       final fix = _draftPointFix;
       if (fix == null) {
-        _showSnack('Waiting for a GPS fix before saving the draft');
+        _showSnack(
+            ui(context, 'Waiting for a GPS fix before saving the draft'));
         return;
       }
       responses['latitude'] = fix.lat;
@@ -1183,7 +1189,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       );
     }
     if (!mounted) return;
-    _showSnack('Draft saved — resume it from History later');
+    _showSnack(ui(context, 'Draft saved — resume it from History later'));
   }
 
   // ── measurement tools ────────────────────────────────────────
@@ -1388,7 +1394,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _centerOnLocation() async {
     final location = _currentLocation;
     if (location == null) {
-      _showSnack('Waiting for a GPS fix');
+      _showSnack(ui(context, 'Waiting for a GPS fix'));
       return;
     }
     await _controller?.animateCamera(
@@ -1413,22 +1419,21 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Future<void> _showProjectPicker() async {
     final projects = _projects;
     if (projects.isEmpty) {
-      _showSnack(
-          'No projects yet — open Project Settings on Home to create one, '
-          'or use Import Project to import a .mbproj file');
+      _showSnack(ui(context,
+          'No projects yet — open Project Settings on Home to create one, or use Import Project to import a .mbproj file'));
       return;
     }
     final selected = await showDialog<Project>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Select project'),
+        title: Text(ui(context, 'Select project')),
         children: [
           for (final project in projects)
             RadioListTile<Project>(
               title: Text(project.name),
               subtitle: Text(
                 project.description.trim().isEmpty
-                    ? 'No description'
+                    ? ui(context, 'No description')
                     : project.description.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1445,9 +1450,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
               },
             ),
           if (projects.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(16),
-              child: Text('No projects yet'),
+              child: Text(ui(context, 'No projects yet')),
             ),
         ],
       ),
@@ -1475,10 +1480,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GIS Mode'),
-        bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(112),
-            child: _buildProjectBar()),
+        title: Text(ui(context, 'GIS Mode')),
         actions: [
           Tooltip(
             message: _locationStatus,
@@ -1497,67 +1499,72 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Basemap',
+            tooltip: ui(context, 'Basemap'),
             icon: const Icon(Icons.map_outlined),
             onPressed: _showBasemapDialog,
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          MapLibreMap(
-            initialCameraPosition: CameraPosition(
-              target: _currentLocation ?? const LatLng(23.8103, 90.4125),
-              zoom: 14,
+      body: Column(children: [
+        ScreenLayout.mapPanel(context, Column(children: [_buildProjectBar()])),
+        Expanded(
+            child: Stack(
+          children: [
+            MapLibreMap(
+              initialCameraPosition: CameraPosition(
+                target: _currentLocation ?? const LatLng(23.8103, 90.4125),
+                zoom: 14,
+              ),
+              onMapCreated: _onMapCreated,
+              onStyleLoadedCallback: _onStyleLoaded,
+              onMapClick: _onMapMeasureTap,
+              styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
+              myLocationEnabled: true,
+              myLocationRenderMode: MyLocationRenderMode.normal,
+              compassViewPosition: CompassViewPosition.bottomRight,
+              compassViewMargins: const Point(16, 56),
+              annotationConsumeTapEvents: const [
+                AnnotationType.circle,
+                AnnotationType.line,
+                AnnotationType.fill,
+              ],
             ),
-            onMapCreated: _onMapCreated,
-            onStyleLoadedCallback: _onStyleLoaded,
-            onMapClick: _onMapMeasureTap,
-            styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
-            myLocationEnabled: true,
-            myLocationRenderMode: MyLocationRenderMode.normal,
-            compassViewPosition: CompassViewPosition.bottomRight,
-            compassViewMargins: const Point(16, 56),
-            annotationConsumeTapEvents: const [
-              AnnotationType.circle,
-              AnnotationType.line,
-              AnnotationType.fill,
-            ],
-          ),
-          Positioned(
-              left: 8,
-              bottom: 8,
-              child: OfflineBasemapNotice(choice: _offlineBasemap)),
-          if (_currentLocation != null)
             Positioned(
-              top: 12,
-              right: 16,
-              child: _buildGpsCard(),
-            ),
-          if (_draftActive)
-            Positioned(
-              left: 16,
-              right: 16,
-              top: 60,
-              child: _buildDraftBanner(),
-            ),
-          if (_measureActive)
-            Positioned(
-              left: 16,
-              right: 16,
-              top: 60,
-              child: _buildMeasureBanner(),
-            ),
-          if (_showInfoPanel)
-            Positioned(
-              left: 16,
-              right: 72,
-              bottom: 96,
-              child: _buildInfoPanel(),
-            ),
-        ],
-      ),
-      bottomNavigationBar: _buildBottomToolbar(),
+                left: 8,
+                bottom: 8,
+                child: OfflineBasemapNotice(choice: _offlineBasemap)),
+            if (_currentLocation != null)
+              Positioned(
+                top: 12,
+                left: 16,
+                right: 16,
+                child: _buildGpsCard(),
+              ),
+            if (_draftActive)
+              Positioned(
+                left: 16,
+                right: 16,
+                top: 60,
+                child: ScreenLayout.mapPanel(context, _buildDraftBanner()),
+              ),
+            if (_measureActive)
+              Positioned(
+                left: 16,
+                right: 16,
+                top: 60,
+                child: ScreenLayout.mapPanel(context, _buildMeasureBanner()),
+              ),
+            if (_showInfoPanel)
+              Positioned(
+                left: 16,
+                right: 72,
+                bottom: 96,
+                child: ScreenLayout.mapPanel(context, _buildInfoPanel()),
+              ),
+          ],
+        ))
+      ]),
+      bottomNavigationBar: SafeArea(top: false, child: _buildBottomToolbar()),
     );
   }
 
@@ -1588,14 +1595,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
               size: 20,
             ),
             const SizedBox(width: 8),
-            Text(
+            Flexible(
+                child: Text(
               location != null
                   ? '${location.latitude.toStringAsFixed(5)}, '
                       '${location.longitude.toStringAsFixed(5)}'
                       '${accuracy != null ? '  ±${accuracy.toStringAsFixed(1)} m' : ''}'
-                  : 'GPS: Searching...',
+                  : ui(context, 'GPS: Searching...'),
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            ),
+            )),
           ],
         ),
       ),
@@ -1638,14 +1646,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Feature Info',
+                    ui(context, 'Feature Info'),
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Close',
+                  tooltip: ui(context, 'Close'),
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () {
@@ -1658,15 +1666,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
             ),
             const SizedBox(height: 4),
             if (info == null)
-              const Text(
-                'Tap a feature on the map to see its details',
+              Text(
+                ui(context, 'Tap a feature on the map to see its details'),
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               )
             else ...[
               TextButton.icon(
                   onPressed: _editSelectedAttributes,
                   icon: const Icon(Icons.assignment_outlined),
-                  label: const Text('View / edit information')),
+                  label: Text(ui(context, 'View / edit information'))),
               Text(
                 info.title,
                 style:
@@ -1674,13 +1682,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                '${info.featureType}  •  session #${info.sessionId}',
+                ui(context, '{v0}  •  session #{v1}',
+                    [info.featureType, info.sessionId]),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               if (info.featureType == 'point') ...[
                 const SizedBox(height: 6),
                 Text(
-                  'Drag the point on the map to move it.',
+                  ui(context, 'Drag the point on the map to move it.'),
                   style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
                 ),
               ],
@@ -1697,7 +1706,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
                       ),
                       onPressed: _deleteSelectedFeature,
                       icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete'),
+                      label: Text(ui(context, 'Delete')),
                     ),
                   ),
                 ],
@@ -1754,7 +1763,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
               child: TextButton.icon(
                 onPressed: _canSaveDraft ? _saveDraft : null,
                 icon: const Icon(Icons.edit_note, size: 18),
-                label: const Text('Save draft'),
+                label: Text(ui(context, 'Save draft')),
               ),
             ),
             const SizedBox(height: 4),
@@ -1789,7 +1798,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       final fix = _draftPointFix;
       return Text(
         fix == null
-            ? 'Positioning…'
+            ? ui(context, 'Positioning…')
             : '${fix.lat.toStringAsFixed(6)}, ${fix.lon.toStringAsFixed(6)}'
                 '${fix.accuracy > 0 ? '  ±${fix.accuracy.toStringAsFixed(1)} m' : ''}',
         style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
@@ -1797,7 +1806,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
     if (points.length < 2) {
       return Text(
-        'Walk along the boundary while recording',
+        ui(context, 'Walk along the boundary while recording'),
         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
       );
     }
@@ -1822,86 +1831,69 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     if (_draftType == _DraftType.point) {
       actions.addAll([
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _cancelDraft,
-            child: const Text('Cancel'),
-          ),
+        OutlinedButton(
+          onPressed: _cancelDraft,
+          child: Text(ui(context, 'Cancel')),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _finishDraft,
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Finish'),
-          ),
+        FilledButton.icon(
+          onPressed: _finishDraft,
+          icon: const Icon(Icons.check, size: 18),
+          label: Text(ui(context, 'Finish')),
         ),
       ]);
-      return Row(children: actions);
+      return ResponsiveGrid(minChildWidth: 125, children: actions);
     }
 
     if (!recording) {
       actions.addAll([
-        Expanded(
-          child: OutlinedButton(
-            onPressed: _cancelDraft,
-            child: const Text('Cancel'),
-          ),
+        OutlinedButton(
+          onPressed: _cancelDraft,
+          child: Text(ui(context, 'Cancel')),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: _beginRecording,
-            icon: const Icon(Icons.play_arrow, size: 18),
-            label: const Text('Start'),
-          ),
+        FilledButton.icon(
+          onPressed: _beginRecording,
+          icon: const Icon(Icons.play_arrow, size: 18),
+          label: Text(ui(context, 'Start')),
         ),
       ]);
-      return Row(children: actions);
+      return ResponsiveGrid(minChildWidth: 125, children: actions);
     }
 
     actions.addAll([
-      Expanded(
-        child: OutlinedButton.icon(
-          onPressed: () {
-            setState(() {
-              if (_recorder.paused) {
-                _recorder.resume();
-              } else {
-                _recorder.pause();
-              }
-            });
-          },
-          icon: Icon(
-            _recorder.paused ? Icons.play_arrow : Icons.pause,
-            size: 18,
-          ),
-          label: Text(_recorder.paused ? 'Resume' : 'Pause'),
+      OutlinedButton.icon(
+        onPressed: () {
+          setState(() {
+            if (_recorder.paused) {
+              _recorder.resume();
+            } else {
+              _recorder.pause();
+            }
+          });
+        },
+        icon: Icon(
+          _recorder.paused ? Icons.play_arrow : Icons.pause,
+          size: 18,
         ),
+        label: Text(
+            _recorder.paused ? ui(context, 'Resume') : ui(context, 'Pause')),
       ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: OutlinedButton.icon(
-          onPressed: _recorder.vertices.isEmpty
-              ? null
-              : () {
-                  _recorder.undo();
-                  _refreshDraftGeometry();
-                },
-          icon: const Icon(Icons.undo, size: 18),
-          label: const Text('Undo'),
-        ),
+      OutlinedButton.icon(
+        onPressed: _recorder.vertices.isEmpty
+            ? null
+            : () {
+                _recorder.undo();
+                _refreshDraftGeometry();
+              },
+        icon: const Icon(Icons.undo, size: 18),
+        label: Text(ui(context, 'Undo')),
       ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: FilledButton.icon(
-          onPressed: _finishDraft,
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Finish'),
-        ),
+      FilledButton.icon(
+        onPressed: _finishDraft,
+        icon: const Icon(Icons.check, size: 18),
+        label: Text(ui(context, 'Finish')),
       ),
     ]);
-    return Row(children: actions);
+    return ResponsiveGrid(minChildWidth: 125, children: actions);
   }
 
   Widget _buildMeasureBanner() {
@@ -1942,8 +1934,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                 Expanded(
                   child: Text(
                     isArea
-                        ? 'Measure area — tap points on the map'
-                        : 'Measure distance — tap points on the map',
+                        ? ui(context, 'Measure area — tap points on the map')
+                        : ui(context,
+                            'Measure distance — tap points on the map'),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1955,35 +1948,28 @@ class _GisModeScreenState extends State<GisModeScreen> {
             const SizedBox(height: 4),
             Text(
               points.isEmpty
-                  ? 'Tap the map to add the first point'
+                  ? ui(context, 'Tap the map to add the first point')
                   : metrics.join('  •  '),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 4),
-            Row(
+            ResponsiveGrid(
+              minChildWidth: 125,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: points.isEmpty ? null : _undoMeasurePoint,
-                    icon: const Icon(Icons.undo, size: 18),
-                    label: const Text('Undo'),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: points.isEmpty ? null : _undoMeasurePoint,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: Text(ui(context, 'Undo')),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: points.isEmpty ? null : () => _endMeasure(),
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    label: const Text('Clear'),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: points.isEmpty ? null : () => _endMeasure(),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: Text(ui(context, 'Clear')),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _endMeasure,
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Done'),
-                  ),
+                FilledButton.icon(
+                  onPressed: _endMeasure,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(ui(context, 'Done')),
                 ),
               ],
             ),
@@ -1994,99 +1980,106 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   Widget _buildBottomToolbar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade300),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          Tooltip(
-            message: 'Add Point',
-            child: IconButton(
-              icon: CircleAvatar(
-                radius: 14,
-                backgroundColor: _draftType == _DraftType.point
-                    ? Colors.red.shade50
-                    : Colors.transparent,
-                child: Icon(
-                  Icons.add_location_alt_outlined,
-                  size: 22,
-                  color: _editingActive ? Colors.grey : Colors.red.shade700,
-                ),
-              ),
-              onPressed: _editingActive ? null : _startPointDraft,
-            ),
-          ),
-          Tooltip(
-            message: 'Draw Line',
-            child: IconButton(
-              icon: Icon(
-                Icons.polyline_outlined,
-                size: 24,
-                color: _editingActive ? Colors.grey : Colors.blue.shade700,
-              ),
-              onPressed: _editingActive ? null : _startLineDraft,
-            ),
-          ),
-          Tooltip(
-            message: 'Draw Polygon',
-            child: IconButton(
-              icon: Icon(
-                Icons.pentagon_outlined,
-                size: 24,
-                color: _editingActive ? Colors.grey : Colors.blue.shade700,
-              ),
-              onPressed: _editingActive ? null : _startPolygonDraft,
-            ),
-          ),
-          Tooltip(
-            message: 'Measure Distance',
-            child: IconButton(
-              icon: Icon(
-                Icons.straighten,
-                size: 24,
-                color: _measureTool == _MeasureTool.distance
-                    ? const Color(0xFF00838F)
-                    : _draftActive
-                        ? Colors.grey
-                        : Colors.teal.shade700,
-              ),
-              onPressed: _draftActive
-                  ? null
-                  : () => _toggleMeasureTool(_MeasureTool.distance),
-            ),
-          ),
-          Tooltip(
-            message: 'Measure Area',
-            child: IconButton(
-              icon: Icon(
-                Icons.square_foot,
-                size: 24,
-                color: _measureTool == _MeasureTool.area
-                    ? const Color(0xFF00838F)
-                    : _draftActive
-                        ? Colors.grey
-                        : Colors.teal.shade700,
-              ),
-              onPressed: _draftActive
-                  ? null
-                  : () => _toggleMeasureTool(_MeasureTool.area),
-            ),
-          ),
-          Tooltip(
-            message: 'Center on GPS',
-            child: IconButton(
-              icon: const Icon(Icons.gps_fixed),
-              onPressed: _centerOnLocation,
-            ),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: MapControlSurface(
+          padding: const EdgeInsets.all(4),
+          child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      minWidth: MediaQuery.sizeOf(context).width - 24),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Tooltip(
+                        message: ui(context, 'Add Point'),
+                        child: IconButton(
+                          icon: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: _draftType == _DraftType.point
+                                ? Colors.red.shade50
+                                : Colors.transparent,
+                            child: Icon(
+                              Icons.add_location_alt_outlined,
+                              size: 22,
+                              color: _editingActive
+                                  ? Colors.grey
+                                  : Colors.red.shade700,
+                            ),
+                          ),
+                          onPressed: _editingActive ? null : _startPointDraft,
+                        ),
+                      ),
+                      Tooltip(
+                        message: ui(context, 'Draw Line'),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.polyline_outlined,
+                            size: 24,
+                            color: _editingActive
+                                ? Colors.grey
+                                : Colors.blue.shade700,
+                          ),
+                          onPressed: _editingActive ? null : _startLineDraft,
+                        ),
+                      ),
+                      Tooltip(
+                        message: ui(context, 'Draw Polygon'),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.pentagon_outlined,
+                            size: 24,
+                            color: _editingActive
+                                ? Colors.grey
+                                : Colors.blue.shade700,
+                          ),
+                          onPressed: _editingActive ? null : _startPolygonDraft,
+                        ),
+                      ),
+                      Tooltip(
+                        message: ui(context, 'Measure Distance'),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.straighten,
+                            size: 24,
+                            color: _measureTool == _MeasureTool.distance
+                                ? const Color(0xFF00838F)
+                                : _draftActive
+                                    ? Colors.grey
+                                    : Colors.teal.shade700,
+                          ),
+                          onPressed: _draftActive
+                              ? null
+                              : () => _toggleMeasureTool(_MeasureTool.distance),
+                        ),
+                      ),
+                      Tooltip(
+                        message: ui(context, 'Measure Area'),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.square_foot,
+                            size: 24,
+                            color: _measureTool == _MeasureTool.area
+                                ? const Color(0xFF00838F)
+                                : _draftActive
+                                    ? Colors.grey
+                                    : Colors.teal.shade700,
+                          ),
+                          onPressed: _draftActive
+                              ? null
+                              : () => _toggleMeasureTool(_MeasureTool.area),
+                        ),
+                      ),
+                      Tooltip(
+                        message: ui(context, 'Center on GPS'),
+                        child: IconButton(
+                          icon: const Icon(Icons.gps_fixed),
+                          onPressed: _centerOnLocation,
+                        ),
+                      ),
+                    ],
+                  )))),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -93,14 +95,15 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
     if (_saving) return;
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a form name')),
+        SnackBar(content: Text(ui(context, 'Please enter a form name'))),
       );
       return;
     }
 
     if (_questions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one question')),
+        SnackBar(
+            content: Text(ui(context, 'Please add at least one question'))),
       );
       return;
     }
@@ -122,7 +125,8 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
     for (final question in form.questions) {
       if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(question.name) ||
           !names.add(question.name)) {
-        _showSnack('Question names must be valid and unique: ${question.name}');
+        _showSnack(ui(context, 'Question names must be valid and unique: {v0}',
+            [question.name]));
         return;
       }
     }
@@ -131,7 +135,8 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
       await widget.onSave?.call(form);
       if (mounted) Navigator.pop(context, form);
     } catch (error) {
-      _showSnack('Could not save form: $error. Your form is still here.');
+      _showSnack(ui(context,
+          'Could not save form: {v0}. Your form is still here.', [error]));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -148,7 +153,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
     final file = result.files.single;
     final bytes = file.bytes;
     if (bytes == null) {
-      _showSnack('Could not read the selected file');
+      _showSnack(ui(context, 'Could not read the selected file'));
       return;
     }
 
@@ -162,16 +167,16 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
         final accepted = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-                  title: const Text('XLSForm import limitations'),
+                  title: Text(ui(context, 'XLSForm import limitations')),
                   content: SingleChildScrollView(
                       child: Text(form.importWarnings.join('\n\n'))),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
+                        child: Text(ui(context, 'Cancel'))),
                     FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Import')),
+                        child: Text(ui(context, 'Import'))),
                   ],
                 ));
         if (accepted != true || !mounted) return;
@@ -183,12 +188,13 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
         _questions = List.from(form.questions);
       });
       _showSnack(
-        'Imported "${form.name}" with ${form.questions.length} questions',
+        ui(context, 'Imported "{v0}" with {v1} questions',
+            [form.name, form.questions.length]),
       );
     } on XlsFormParseException catch (e) {
-      _showSnack('Import failed: ${e.message}');
+      _showSnack(ui(context, 'Import failed: {v0}', [e.message]));
     } catch (e) {
-      _showSnack('Import failed: $e');
+      _showSnack(ui(context, 'Import failed: {v0}', [e]));
     }
   }
 
@@ -203,10 +209,10 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Survey Form Builder'),
+        title: Text(ui(context, 'Survey Form Builder')),
         actions: [
           IconButton(
-            tooltip: 'Import from XLSForm (.xlsx)',
+            tooltip: ui(context, 'Import from XLSForm (.xlsx)'),
             icon: const Icon(Icons.upload_file_outlined),
             onPressed: _saving ? null : _importXlsForm,
           ),
@@ -216,7 +222,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
               child: FilledButton.icon(
                 onPressed: _saving ? null : _saveForm,
                 icon: const Icon(Icons.save_outlined, size: 18),
-                label: const Text('Save'),
+                label: Text(ui(context, 'Save')),
               ),
             ),
           ),
@@ -230,7 +236,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Form Details',
+                ui(context, 'Form Details'),
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -238,19 +244,19 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Form name',
-                  hintText: 'e.g., Riverbank Survey',
+                  labelText: ui(context, 'Form name'),
+                  hintText: ui(context, 'e.g., Riverbank Survey'),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Description',
-                  hintText: 'Brief description of this form',
+                  labelText: ui(context, 'Description'),
+                  hintText: ui(context, 'Brief description of this form'),
                 ),
                 maxLines: 3,
               ),
@@ -259,7 +265,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Questions (${_questions.length})',
+                    ui(context, 'Questions ({v0})', [_questions.length]),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -267,7 +273,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                   ElevatedButton.icon(
                     onPressed: _saving ? null : _addQuestion,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add'),
+                    label: Text(ui(context, 'Add')),
                   ),
                 ],
               ),
@@ -277,7 +283,7 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 32.0),
                     child: Text(
-                      'No questions yet. Add one to get started.',
+                      ui(context, 'No questions yet. Add one to get started.'),
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
                   ),
@@ -329,22 +335,22 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                       itemBuilder: (context) => [
                         PopupMenuItem(
                           onTap: () => _editQuestion(i),
-                          child: const Row(
+                          child: Row(
                             children: [
                               Icon(Icons.edit_outlined, size: 18),
                               SizedBox(width: 8),
-                              Text('Edit'),
+                              Text(ui(context, 'Edit')),
                             ],
                           ),
                         ),
                         PopupMenuItem(
                           onTap: () => _deleteQuestion(i),
-                          child: const Row(
+                          child: Row(
                             children: [
                               Icon(Icons.delete_outlined,
                                   size: 18, color: Colors.red),
                               SizedBox(width: 8),
-                              Text('Delete',
+                              Text(ui(context, 'Delete'),
                                   style: TextStyle(color: Colors.red)),
                             ],
                           ),
@@ -363,7 +369,8 @@ class _SurveyFormBuilderScreenState extends State<SurveyFormBuilderScreen> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      'Conditional: ${_questions[i].relevance}',
+                      ui(context, 'Conditional: {v0}',
+                          [_questions[i].relevance]),
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.orange.shade700,
@@ -448,7 +455,7 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
     if (_labelController.text.trim().isEmpty ||
         _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Label and name are required')),
+        SnackBar(content: Text(ui(context, 'Label and name are required'))),
       );
       return;
     }
@@ -458,8 +465,9 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
         _selectedType == QuestionType.dropdown;
     if (needsChoices && _choices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('This question type needs at least one option')),
+        SnackBar(
+            content: Text(
+                ui(context, 'This question type needs at least one option'))),
       );
       return;
     }
@@ -552,7 +560,7 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Add Question',
+                ui(context, 'Add Question'),
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -560,9 +568,9 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
               const SizedBox(height: 16),
               TextField(
                 controller: _labelController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Question label',
+                  labelText: ui(context, 'Question label'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -571,23 +579,26 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                 readOnly: widget.initialQuestion != null,
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  labelText: 'Field name (no spaces)',
+                  labelText: ui(context, 'Field name (no spaces)'),
                   helperText: widget.initialQuestion != null
-                      ? 'Field names stay fixed so existing answers and form rules remain linked.'
+                      ? ui(context,
+                          'Field names stay fixed so existing answers and form rules remain linked.')
                       : null,
-                  hintText: 'e.g., site_name',
+                  hintText: ui(context, 'e.g., site_name'),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _hintController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Hint text (optional)',
+                  labelText: ui(context, 'Hint text (optional)'),
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<QuestionType>(
+                itemHeight: null,
+                isExpanded: true,
                 value: _selectedType,
                 onChanged: (newType) {
                   if (newType != null) {
@@ -596,92 +607,100 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                     });
                   }
                 },
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Question type',
+                  labelText: ui(context, 'Question type'),
                 ),
                 items: [
                   DropdownMenuItem(
-                      value: QuestionType.text, child: const Text('Text')),
+                      value: QuestionType.text,
+                      child: Text(ui(context, 'Text'))),
                   DropdownMenuItem(
                       value: QuestionType.long_text,
-                      child: const Text('Long text')),
+                      child: Text(ui(context, 'Long text'))),
                   DropdownMenuItem(
                       value: QuestionType.integer,
-                      child: const Text('Integer')),
+                      child: Text(ui(context, 'Integer'))),
                   DropdownMenuItem(
                       value: QuestionType.decimal,
-                      child: const Text('Decimal')),
+                      child: Text(ui(context, 'Decimal'))),
                   DropdownMenuItem(
-                      value: QuestionType.yes_no, child: const Text('Yes/No')),
+                      value: QuestionType.yes_no,
+                      child: Text(ui(context, 'Yes/No'))),
                   DropdownMenuItem(
                       value: QuestionType.select_one,
-                      child: const Text('Select one')),
+                      child: Text(ui(context, 'Select one'))),
                   DropdownMenuItem(
                       value: QuestionType.select_multiple,
-                      child: const Text('Select multiple')),
+                      child: Text(ui(context, 'Select multiple'))),
                   DropdownMenuItem(
                       value: QuestionType.dropdown,
-                      child: const Text('Dropdown')),
+                      child: Text(ui(context, 'Dropdown'))),
                   DropdownMenuItem(
-                      value: QuestionType.date, child: const Text('Date')),
+                      value: QuestionType.date,
+                      child: Text(ui(context, 'Date'))),
                   DropdownMenuItem(
-                      value: QuestionType.time, child: const Text('Time')),
+                      value: QuestionType.time,
+                      child: Text(ui(context, 'Time'))),
                   DropdownMenuItem(
                       value: QuestionType.datetime,
-                      child: const Text('Date & time')),
+                      child: Text(ui(context, 'Date & time'))),
                   DropdownMenuItem(
                       value: QuestionType.geopoint,
-                      child: const Text('GPS Point')),
+                      child: Text(ui(context, 'GPS Point'))),
                   DropdownMenuItem(
                       value: QuestionType.gps_accuracy,
-                      child: const Text('GPS accuracy')),
+                      child: Text(ui(context, 'GPS accuracy'))),
                   DropdownMenuItem(
-                      value: QuestionType.image, child: const Text('Image')),
+                      value: QuestionType.image,
+                      child: Text(ui(context, 'Image'))),
                   DropdownMenuItem(
                       value: QuestionType.calculated,
-                      child: const Text('Calculated')),
+                      child: Text(ui(context, 'Calculated'))),
                   DropdownMenuItem(
-                      value: QuestionType.note, child: const Text('Note')),
+                      value: QuestionType.note,
+                      child: Text(ui(context, 'Note'))),
                   DropdownMenuItem(
-                      value: QuestionType.hidden, child: const Text('Hidden')),
+                      value: QuestionType.hidden,
+                      child: Text(ui(context, 'Hidden'))),
                 ],
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _relevanceController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Relevance (optional)',
-                  hintText: r'e.g., ${field_name} = "value"',
+                  labelText: ui(context, 'Relevance (optional)'),
+                  hintText: ui(context, 'e.g., \${field_name} = "value"'),
                 ),
               ),
               const SizedBox(height: 12),
               if (_selectedType == QuestionType.calculated)
                 TextField(
                   controller: _calculationController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    labelText: 'Calculation',
-                    hintText: r'e.g., ${width} * ${length}',
+                    labelText: ui(context, 'Calculation'),
+                    hintText: ui(context, 'e.g., \${width} * \${length}'),
                   ),
                 )
               else ...[
                 TextField(
                   controller: _constraintController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    labelText: 'Constraint (optional)',
-                    hintText: r'e.g., . > 0 and . < 150',
+                    labelText: ui(context, 'Constraint (optional)'),
+                    hintText: ui(context, 'e.g., . > 0 and . < 150'),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _constraintMessageController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    labelText: 'Constraint message (optional)',
-                    hintText: 'Shown when the constraint is violated',
+                    labelText: ui(context, 'Constraint message (optional)'),
+                    hintText:
+                        ui(context, 'Shown when the constraint is violated'),
                   ),
                 ),
               ],
@@ -693,13 +712,13 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Options (${_choices.length})',
+                      ui(context, 'Options ({v0})', [_choices.length]),
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
                     ),
                     IconButton(
-                      tooltip: 'Add option',
+                      tooltip: ui(context, 'Add option'),
                       icon: const Icon(Icons.add_circle_outline),
                       onPressed: _addChoice,
                     ),
@@ -709,7 +728,7 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
-                      'No options yet. Add at least one.',
+                      ui(context, 'No options yet. Add at least one.'),
                       style:
                           TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
@@ -738,14 +757,14 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
               ],
               TextField(
                 controller: _defaultController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Default value (optional)',
+                  labelText: ui(context, 'Default value (optional)'),
                 ),
               ),
               const SizedBox(height: 12),
               CheckboxListTile(
-                title: const Text('Required'),
+                title: Text(ui(context, 'Required')),
                 value: _isRequired,
                 onChanged: (value) {
                   setState(() {
@@ -755,18 +774,17 @@ class _AddQuestionDialogState extends State<_AddQuestionDialog> {
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              ResponsiveGrid(
+                minChildWidth: 150,
                 children: [
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
+                    child: Text(ui(context, 'Cancel')),
                   ),
-                  const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: _save,
                     icon: const Icon(Icons.check_outlined, size: 18),
-                    label: const Text('Save'),
+                    label: Text(ui(context, 'Save')),
                   ),
                 ],
               ),
@@ -816,7 +834,8 @@ class _ChoiceDialogState extends State<_ChoiceDialog> {
     final label = _labelController.text.trim();
     if (name.isEmpty || label.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Option name and label are required')),
+        SnackBar(
+            content: Text(ui(context, 'Option name and label are required'))),
       );
       return;
     }
@@ -834,7 +853,9 @@ class _ChoiceDialogState extends State<_ChoiceDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.initialName == null ? 'Add Option' : 'Edit Option',
+              widget.initialName == null
+                  ? ui(context, 'Add Option')
+                  : ui(context, 'Edit Option'),
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -842,34 +863,33 @@ class _ChoiceDialogState extends State<_ChoiceDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Value (no spaces)',
-                hintText: 'e.g., mild',
+                labelText: ui(context, 'Value (no spaces)'),
+                hintText: ui(context, 'e.g., mild'),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _labelController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Label',
-                hintText: 'e.g., Mild',
+                labelText: ui(context, 'Label'),
+                hintText: ui(context, 'e.g., Mild'),
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            ResponsiveGrid(
+              minChildWidth: 150,
               children: [
                 OutlinedButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text(ui(context, 'Cancel')),
                 ),
-                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: _save,
                   icon: const Icon(Icons.check_outlined, size: 18),
-                  label: const Text('Save'),
+                  label: Text(ui(context, 'Save')),
                 ),
               ],
             ),

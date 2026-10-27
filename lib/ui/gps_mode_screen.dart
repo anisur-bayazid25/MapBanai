@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 import 'package:mapbanai/services/compass_heading_filter.dart';
 import 'dart:math' as math;
@@ -242,7 +244,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
         '${position.longitude.toStringAsFixed(6)}';
     final dms = formatCoordinate(position.latitude, position.longitude);
     await Clipboard.setData(ClipboardData(text: '$decimal\n$dms'));
-    _showSnack('Coordinates copied to clipboard');
+    _showSnack(ui(context, 'Coordinates copied to clipboard'));
   }
 
   /// Captures the current fix once as a point with an optional note.
@@ -253,7 +255,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<void> _saveWaypoint() async {
     final position = _latest;
     if (position == null) {
-      _showSnack('Waiting for a GPS fix before saving a point');
+      _showSnack(ui(context, 'Waiting for a GPS fix before saving a point'));
       return;
     }
 
@@ -278,7 +280,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       notes: note,
     );
     await _loadLogs();
-    _showSnack('Point saved');
+    _showSnack(ui(context, 'Point saved'));
   }
 
   Future<int?> _pickWaypointLog() async {
@@ -290,7 +292,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     return showDialog<int>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('Save point to…'),
+        title: Text(ui(context, 'Save point to…')),
         children: [
           SimpleDialogOption(
             onPressed: () => _createPointLog().then((id) {
@@ -298,11 +300,11 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                 Navigator.pop(context, id);
               }
             }),
-            child: const Row(
+            child: Row(
               children: [
                 Icon(Icons.add_circle_outline, color: Colors.teal),
                 SizedBox(width: 12),
-                Text('New log (new CSV)…',
+                Text(ui(context, 'New log (new CSV)…'),
                     style: TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
@@ -325,7 +327,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<int?> _createPointLog() async {
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => const _LogNameDialog(title: 'New point log'),
+      builder: (context) => _LogNameDialog(title: ui(context, 'New point log')),
     );
     if (name == null) return null;
 
@@ -339,7 +341,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     await _store.createLogFile(logId);
     await _loadLogs();
     _showSnack(
-      '"${name.trim().isEmpty ? defaultName : name.trim()}" created',
+      ui(context, '"{v0}" created',
+          [name.trim().isEmpty ? defaultName : name.trim()]),
     );
     return logId;
   }
@@ -347,7 +350,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<void> _createLog() async {
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => const _LogNameDialog(title: 'Record track'),
+      builder: (context) => _LogNameDialog(title: ui(context, 'Record track')),
     );
     if (name == null) return;
 
@@ -363,7 +366,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     final log = (await _database.getGpsLogs()).firstWhere((l) => l.id == logId,
         orElse: () => _logs.firstWhere((l) => l.id == logId));
     _showSnack(
-      '"${name.trim().isEmpty ? defaultName : name.trim()}" created',
+      ui(context, '"{v0}" created',
+          [name.trim().isEmpty ? defaultName : name.trim()]),
     );
     await _startRecording(log);
   }
@@ -377,7 +381,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       surveyor: _surveyor,
     );
     if (!ok) {
-      _showSnack('Location permission not granted');
+      _showSnack(ui(context, 'Location permission not granted'));
       await _loadLogs();
       _startListening();
       return;
@@ -387,7 +391,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       _recordingLogId = log.id;
     });
     await _loadLogs();
-    _showSnack('Recording to "${log.name}"');
+    _showSnack(ui(context, 'Recording to "{v0}"', [log.name]));
   }
 
   Future<void> _toggleRecording(GpsLog log) async {
@@ -398,7 +402,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       setState(() {
         _recordingLogId = null;
       });
-      _showSnack('Recording stopped');
+      _showSnack(ui(context, 'Recording stopped'));
       await _loadLogs();
       _startListening();
       return;
@@ -409,8 +413,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Future<void> _renameLog(GpsLog log) async {
     final name = await showDialog<String>(
       context: context,
-      builder: (context) =>
-          _LogNameDialog(title: 'Rename log', initialName: log.name),
+      builder: (context) => _LogNameDialog(
+          title: ui(context, 'Rename log'), initialName: log.name),
     );
     if (name == null || name.trim().isEmpty) return;
     await _database.renameGpsLog(log.id, name.trim());
@@ -422,15 +426,15 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     try {
       await Share.shareXFiles([XFile(path)]);
     } catch (e) {
-      _showSnack('Could not share log: $e');
+      _showSnack(ui(context, 'Could not share log: {v0}', [e]));
     }
   }
 
   Future<void> _deleteLog(GpsLog log) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete log',
-      message: 'Delete "${log.name}" and its CSV file?',
+      title: ui(context, 'Delete log'),
+      message: ui(context, 'Delete "{v0}" and its CSV file?', [log.name]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -462,7 +466,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     final path = await _store.filePath(log.id);
     final readings = await GpsCsvService.parseFile(path);
     if (readings.isEmpty) {
-      _showSnack('No readings in "${log.name}" to project');
+      _showSnack(ui(context, 'No readings in "{v0}" to project', [log.name]));
       return;
     }
     if (!mounted) return;
@@ -484,7 +488,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pop();
-      _showSnack('WebMap failed: $e');
+      _showSnack(ui(context, 'WebMap failed: {v0}', [e]));
     }
   }
 
@@ -501,10 +505,10 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GPS Mode'),
+        title: Text(ui(context, 'GPS Mode')),
         actions: [
           IconButton(
-            tooltip: 'Refresh GPS',
+            tooltip: ui(context, 'Refresh GPS'),
             icon: const Icon(Icons.refresh),
             onPressed: () {
               _startListening();
@@ -512,7 +516,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             },
           ),
           IconButton(
-            tooltip: _streamPaused ? 'Resume GPS stream' : 'Pause GPS stream',
+            tooltip: _streamPaused
+                ? ui(context, 'Resume GPS stream')
+                : ui(context, 'Pause GPS stream'),
             icon: Icon(
               _streamPaused
                   ? Icons.play_circle_outline
@@ -591,7 +597,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           if (!_permissionGranted)
             TextButton(
               onPressed: _startListening,
-              child: const Text('Allow'),
+              child: Text(ui(context, 'Allow')),
             ),
         ],
       ),
@@ -616,13 +622,13 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Recording to "${log.name}"',
+              ui(context, 'Recording to "{v0}"', [log.name]),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
           TextButton(
             onPressed: () => _toggleRecording(log),
-            child: const Text('Stop'),
+            child: Text(ui(context, 'Stop')),
           ),
         ],
       ),
@@ -648,12 +654,12 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       ),
       child: ExpansionTile(
         leading: Icon(Icons.explore_outlined, color: Colors.teal.shade700),
-        title: const Text('Compass',
+        title: Text(ui(context, 'Compass'),
             style: TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(
           hasHeading
               ? '${deg.toStringAsFixed(0)}° ${_cardinalFromDegrees(deg)} ${_sensorCompass ? '(magnetic north)' : '(GPS travel bearing)'}'
-              : 'No heading yet',
+              : ui(context, 'No heading yet'),
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         initiallyExpanded: false,
@@ -697,9 +703,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                             Text(
                               hasHeading
                                   ? (_sensorCompass
-                                      ? 'magnetic north'
-                                      : 'travel direction')
-                                  : 'Waiting…',
+                                      ? ui(context, 'magnetic north')
+                                      : ui(context, 'travel direction'))
+                                  : ui(context, 'Waiting…'),
                               style: TextStyle(
                                   fontSize: 10, color: Colors.grey.shade600),
                             ),
@@ -714,10 +720,13 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                   hasHeading
                       ? (_sensorCompass
                           ? (_compassAccuracy <= 1
-                              ? 'Compass needs calibration: move the phone in a figure-eight, away from metal.'
-                              : 'Phone direction · magnetic north. Keep the phone reasonably flat.')
-                          : 'GPS direction of travel; this does not show where a stationary phone faces.')
-                      : 'Move with GPS to get a heading fix',
+                              ? ui(context,
+                                  'Compass needs calibration: move the phone in a figure-eight, away from metal.')
+                              : ui(context,
+                                  'Phone direction · magnetic north. Keep the phone reasonably flat.'))
+                          : ui(context,
+                              'GPS direction of travel; this does not show where a stationary phone faces.'))
+                      : ui(context, 'Move with GPS to get a heading fix'),
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   textAlign: TextAlign.center,
                 ),
@@ -748,25 +757,25 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
       child: Column(
         children: [
           _readoutRow(
-            label: 'Latitude',
+            label: ui(context, 'Latitude'),
             value:
                 position == null ? '—' : position.latitude.toStringAsFixed(7),
           ),
           const SizedBox(height: 12),
           _readoutRow(
-            label: 'Longitude',
+            label: ui(context, 'Longitude'),
             value:
                 position == null ? '—' : position.longitude.toStringAsFixed(7),
           ),
           if (position != null) ...[
             const SizedBox(height: 12),
             _readoutRow(
-              label: 'UTC time (GPS)',
+              label: ui(context, 'UTC time (GPS)'),
               value: _formatTimestamp(position.timestamp.toUtc()),
             ),
             const SizedBox(height: 12),
             _readoutRow(
-              label: 'Dhaka time (GMT+6)',
+              label: ui(context, 'Dhaka time (GMT+6)'),
               value: _formatTimestamp(
                 position.timestamp.toUtc().add(const Duration(hours: 6)),
               ),
@@ -777,52 +786,45 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
               position == null
-                  ? 'Waiting for position…'
+                  ? ui(context, 'Waiting for position…')
                   : formatCoordinate(position.latitude, position.longitude),
               style: TextStyle(fontSize: 13, color: Colors.teal.shade800),
               textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 12),
-          Row(
+          ResponsiveGrid(
+            minChildWidth: 110,
             children: [
-              Expanded(
-                child: _readoutCell(
-                  label: 'Accuracy',
-                  value: position == null
-                      ? '—'
-                      : '${position.accuracy.toStringAsFixed(1)} m',
-                  color: position == null
-                      ? Colors.grey
-                      : (position.accuracy <= 10
-                          ? Colors.green
-                          : position.accuracy <= 30
-                              ? Colors.orange
-                              : Colors.red),
-                ),
+              _readoutCell(
+                label: ui(context, 'Accuracy'),
+                value: position == null
+                    ? '—'
+                    : '${position.accuracy.toStringAsFixed(1)} m',
+                color: position == null
+                    ? Colors.grey
+                    : (position.accuracy <= 10
+                        ? Colors.green
+                        : position.accuracy <= 30
+                            ? Colors.orange
+                            : Colors.red),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _readoutCell(
-                  label: 'GNSS altitude',
-                  value: position == null
-                      ? '—'
-                      : position.altitude.isFinite &&
-                              position.altitudeAccuracy > 0
-                          ? '${position.altitude.toStringAsFixed(1)} m'
-                          : 'Unavailable',
-                ),
+              _readoutCell(
+                label: ui(context, 'GNSS altitude'),
+                value: position == null
+                    ? '—'
+                    : position.altitude.isFinite &&
+                            position.altitudeAccuracy > 0
+                        ? '${position.altitude.toStringAsFixed(1)} m'
+                        : 'Unavailable',
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _readoutCell(
-                  label: 'Speed',
-                  value: position == null
-                      ? '—'
-                      : position.speed <= 0
-                          ? '0.0 km/h'
-                          : '${(position.speed * 3.6).toStringAsFixed(1)} km/h',
-                ),
+              _readoutCell(
+                label: ui(context, 'Speed'),
+                value: position == null
+                    ? '—'
+                    : position.speed <= 0
+                        ? '0.0 km/h'
+                        : '${(position.speed * 3.6).toStringAsFixed(1)} km/h',
               ),
             ],
           ),
@@ -831,7 +833,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
             children: [
               Expanded(
                 child: _readoutCell(
-                  label: 'Satellites (in use / in view)',
+                  label: ui(context, 'Satellites (in use / in view)'),
                   value:
                       _gnss == null ? '—' : '${_gnss!.inUse}/${_gnss!.inView}',
                 ),
@@ -841,16 +843,21 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
           const SizedBox(height: 12),
           Text(
               position == null || position.altitudeAccuracy <= 0
-                  ? 'Vertical accuracy unavailable. GNSS altitude is not a reliable floor-height measurement indoors.'
-                  : 'Vertical uncertainty ±${position.altitudeAccuracy.toStringAsFixed(1)} m · WGS84 ellipsoid, not sea level or height above ground.',
+                  ? ui(context,
+                      'Vertical accuracy unavailable. GNSS altitude is not a reliable floor-height measurement indoors.')
+                  : ui(
+                      context,
+                      'Vertical uncertainty ±{v0} m · WGS84 ellipsoid, not sea level or height above ground.',
+                      [position.altitudeAccuracy.toStringAsFixed(1)]),
               style: TextStyle(fontSize: 11, color: Colors.teal.shade700),
               textAlign: TextAlign.center),
-          const Text(
-              'Indoor readings, including negative values, may be unreliable. Test outdoors before setting a ground reference.',
+          Text(
+              ui(context,
+                  'Indoor readings, including negative values, may be unreliable. Test outdoors before setting a ground reference.'),
               style: TextStyle(fontSize: 11)),
           if (_groundRefAltitude != null && position != null)
-            Text(
-                'Height change from your reference: ${_formatRelativeElevation(position.altitude)}'),
+            Text(ui(context, 'Height change from your reference: {v0}',
+                [_formatRelativeElevation(position.altitude)])),
           TextButton.icon(
               onPressed: position == null || position.altitudeAccuracy <= 0
                   ? null
@@ -858,31 +865,27 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                       setState(() => _groundRefAltitude = position.altitude);
                     },
               icon: const Icon(Icons.height),
-              label: const Text('Set relative height reference here')),
+              label: Text(ui(context, 'Set relative height reference here'))),
           const SizedBox(height: 16),
-          Row(
+          ResponsiveGrid(
+            minChildWidth: 180,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: position == null ? null : _copyCoordinates,
-                  icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('Copy coordinates'),
-                ),
+              OutlinedButton.icon(
+                onPressed: position == null ? null : _copyCoordinates,
+                icon: const Icon(Icons.copy_all_outlined),
+                label: Text(ui(context, 'Copy coordinates')),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: position == null ? null : _saveWaypoint,
-                  icon: const Icon(Icons.gps_not_fixed_outlined),
-                  label: const Text('Save Point'),
-                ),
+              FilledButton.icon(
+                onPressed: position == null ? null : _saveWaypoint,
+                icon: const Icon(Icons.gps_not_fixed_outlined),
+                label: Text(ui(context, 'Save Point')),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Point saves the current fix once with a note; '
-            'continuous recording below drives line/track logging.',
+            ui(context,
+                'Point saves the current fix once with a note; continuous recording below drives line/track logging.'),
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             textAlign: TextAlign.center,
           ),
@@ -892,8 +895,9 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   }
 
   Widget _readoutRow({required String label, required String value}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return ResponsiveGrid(
+      minChildWidth: 180,
+      maxColumns: 2,
       children: [
         Text(label, style: TextStyle(color: Colors.teal.shade700)),
         Text(
@@ -947,16 +951,16 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
   }
 
   Widget _buildLogsHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'GPS Logs (${_logs.length})',
+          ui(context, 'GPS Logs ({v0})', [_logs.length]),
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
         ),
-        Row(
+        ResponsiveGrid(
           children: [
             OutlinedButton.icon(
               onPressed: () {
@@ -965,13 +969,12 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                 );
               },
               icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('Viewer'),
+              label: Text(ui(context, 'Viewer')),
             ),
-            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: _createLog,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Record Track'),
+              label: Text(ui(context, 'Record Track')),
             ),
           ],
         ),
@@ -993,8 +996,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
               size: 40, color: Colors.grey.shade400),
           const SizedBox(height: 8),
           Text(
-            'No logs yet. Create one to record coordinates, time, elevation '
-            'and accuracy into a CSV file.',
+            ui(context,
+                'No logs yet. Create one to record coordinates, time, elevation and accuracy into a CSV file.'),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             textAlign: TextAlign.center,
           ),
@@ -1024,17 +1027,21 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
-              '${_counts[log.id] ?? 0} readings'
-              '${_lastReadings[log.id] == null ? '' : ' • last ${_formatTime(_lastReadings[log.id]!)}'}'
-              '${log.surveyor.trim().isEmpty ? '' : ' • ${log.surveyor.trim()}'}',
+              ui(context, '{v0} readings{v1}{v2}', [
+                _counts[log.id] ?? 0,
+                _lastReadings[log.id] == null
+                    ? ''
+                    : ' • last ${_formatTime(_lastReadings[log.id]!)}',
+                log.surveyor.trim().isEmpty ? '' : ' • ${log.surveyor.trim()}'
+              ]),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   tooltip: _recordingLogId == log.id
-                      ? 'Stop recording'
-                      : 'Record to this log',
+                      ? ui(context, 'Stop recording')
+                      : ui(context, 'Record to this log'),
                   icon: Icon(
                     _recordingLogId == log.id
                         ? Icons.stop_circle_outlined
@@ -1063,14 +1070,14 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                         break;
                     }
                   },
-                  itemBuilder: (context) => const [
+                  itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'view',
                       child: Row(
                         children: [
                           Icon(Icons.table_view_outlined, size: 18),
                           SizedBox(width: 8),
-                          Text('View CSV'),
+                          Text(ui(context, 'View CSV')),
                         ],
                       ),
                     ),
@@ -1080,7 +1087,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                         children: [
                           Icon(Icons.public_outlined, size: 18),
                           SizedBox(width: 8),
-                          Text('Project on WebMap'),
+                          Text(ui(context, 'Project on WebMap')),
                         ],
                       ),
                     ),
@@ -1090,7 +1097,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                         children: [
                           Icon(Icons.edit_outlined, size: 18),
                           SizedBox(width: 8),
-                          Text('Rename'),
+                          Text(ui(context, 'Rename')),
                         ],
                       ),
                     ),
@@ -1100,7 +1107,7 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                         children: [
                           Icon(Icons.ios_share_outlined, size: 18),
                           SizedBox(width: 8),
-                          Text('Export / share CSV'),
+                          Text(ui(context, 'Export / share CSV')),
                         ],
                       ),
                     ),
@@ -1111,7 +1118,8 @@ class _GpsModeScreenState extends State<GpsModeScreen> {
                           Icon(Icons.delete_outlined,
                               size: 18, color: Colors.red),
                           SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
+                          Text(ui(context, 'Delete'),
+                              style: TextStyle(color: Colors.red)),
                         ],
                       ),
                     ),
@@ -1317,7 +1325,7 @@ class _WaypointDialogState extends State<_WaypointDialog> {
         '${captured.day.toString().padLeft(2, '0')}';
 
     return AlertDialog(
-      title: const Text('Save Point'),
+      title: Text(ui(context, 'Save Point')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1342,10 +1350,10 @@ class _WaypointDialogState extends State<_WaypointDialog> {
             autofocus: true,
             maxLines: 3,
             minLines: 2,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               border: OutlineInputBorder(),
-              labelText: 'Note (optional)',
-              hintText: 'e.g., Standing water at footbridge',
+              labelText: ui(context, 'Note (optional)'),
+              hintText: ui(context, 'e.g., Standing water at footbridge'),
             ),
           ),
         ],
@@ -1353,11 +1361,11 @@ class _WaypointDialogState extends State<_WaypointDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _notes.text),
-          child: const Text('Save'),
+          child: Text(ui(context, 'Save')),
         ),
       ],
     );
@@ -1396,21 +1404,21 @@ class _LogNameDialogState extends State<_LogNameDialog> {
       content: TextField(
         controller: _controller,
         autofocus: true,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           border: OutlineInputBorder(),
-          labelText: 'Track name (optional)',
-          hintText: 'e.g., Site A boundary walk',
+          labelText: ui(context, 'Track name (optional)'),
+          hintText: ui(context, 'e.g., Site A boundary walk'),
         ),
         onSubmitted: (_) => Navigator.pop(context, _controller.text),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('Create'),
+          child: Text(ui(context, 'Create')),
         ),
       ],
     );

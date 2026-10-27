@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.7.0 — 2026-10-27
+
+- Study Area opens Field Verification, Recurring Collection and Study Area Visits. Project layers and questionnaires are assigned per workflow; Collection rounds preserve separate salinity/heat measurements and progress.
+- Visit sites use readable names, searchable selection, resumable drafts and green/red/yellow status markers. Create recurring point layers from selected numeric survey measurements without altering original responses.
+- Nearest unvisited sites sort by straight-line GPS distance. Without a recent location they sort by name; refresh GPS from the list. Completion and review status is specific to the selected collection round.
+- Project Settings > Workflow requirements configures required questionnaires and geotagged photos separately for each workflow. Requirements are checked before completion and carried in project packages; share an updated package after changing them. Questionnaire photos can satisfy the photo requirement.
+- Compact Google Maps shortcuts open the selected site or current map area externally. Draggable site sheets, shared map controls, a refreshed theme and incremental status updates make the map interface easier to use.
+- Responsive home/internal layouts, broader Bangla UI translations, and a new adaptive map-pin launcher icon, monochrome icon and matching Android splash screen.
+- In-app update downloads stream with backpressure, check resumed ranges/source URLs and provide a browser fallback. Mobile-carrier throughput still needs a real-network comparison; APK size and carrier/CDN routing can also affect download time.
+
 ## v2.6.10 — 2026-10-26
 
 - Added bulk survey-history cleanup by project, study layer, local recorded day, record type and sync status, with optional drafts and linked map-point removal. Deletion also clears the matching sync queue; unchanged map snapshots cannot recreate deleted history records.

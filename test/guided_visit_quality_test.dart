@@ -1,3 +1,6 @@
+import 'package:mapbanai/models/study_workflow.dart';
+import 'package:mapbanai/models/workflow_requirements.dart';
+import 'package:mapbanai/services/workflow_requirements_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -387,5 +390,29 @@ void main() {
           ]
         }),
         isFalse);
+  });
+
+  test('verification can finish without form or photo when project permits it',
+      () async {
+    await WorkflowRequirementsService(db).save(projectId, {
+      StudyWorkflow.verification:
+          const WorkflowRequirements(questionnaire: false, photo: false)
+    });
+    final draft = await service.start(projectId: projectId, site: baseline);
+    final edited = baseline.revised(
+        latitude: baseline.latitude,
+        longitude: baseline.longitude,
+        attributes: baseline.attributes,
+        status: StudyAreaStatus.verified);
+    final saved = await service
+        .finalize(await service.saveDraft(session: draft, revisedSite: edited));
+    expect(saved.session.status, 'saved');
+    expect(saved.mapApplied, true);
+    final issues = await FieldQualityService().inspect(
+        sessions: [saved.session],
+        forms: [],
+        sites: [],
+        accuracyThresholdM: 30);
+    expect(issues.where((issue) => issue.code == 'photo'), isEmpty);
   });
 }

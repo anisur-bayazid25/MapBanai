@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/common/basemap_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -50,7 +51,7 @@ class _GISMapScreenState extends State<GISMapScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location error: $e')),
+        SnackBar(content: Text(ui(context, 'Location error: {v0}', [e]))),
       );
     }
   }
@@ -111,26 +112,28 @@ class _GISMapScreenState extends State<GISMapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('GIS Mode - $projectName'),
+        title: Text(ui(context, 'GIS Mode - {v0}', [projectName])),
         actions: [
           IconButton(
-            tooltip: 'Basemap',
+            tooltip: ui(context, 'Basemap'),
             icon: const Icon(Icons.map_outlined),
             onPressed: _showBasemapDialog,
           ),
           IconButton(
-            tooltip: 'Layers',
+            tooltip: ui(context, 'Layers'),
             icon: const Icon(Icons.layers_outlined),
             onPressed: _showLayerDialog,
           ),
           IconButton(
-            tooltip: _followMe ? 'Stop following' : 'Follow me',
+            tooltip: _followMe
+                ? ui(context, 'Stop following')
+                : ui(context, 'Follow me'),
             icon: Icon(
                 _followMe ? Icons.my_location : Icons.my_location_outlined),
             onPressed: _toggleFollowMe,
           ),
           IconButton(
-            tooltip: 'Settings',
+            tooltip: ui(context, 'Settings'),
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {},
           ),
@@ -209,8 +212,11 @@ class _GISMapScreenState extends State<GISMapScreen> {
             const SizedBox(width: 8),
             Text(
               _currentLocation != null
-                  ? 'GPS: ${_currentLocation!.latitude.toStringAsFixed(5)}, ${_currentLocation!.longitude.toStringAsFixed(5)}'
-                  : 'GPS: Searching...',
+                  ? ui(context, 'GPS: {v0}, {v1}', [
+                      _currentLocation!.latitude.toStringAsFixed(5),
+                      _currentLocation!.longitude.toStringAsFixed(5)
+                    ])
+                  : ui(context, 'GPS: Searching...'),
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ],
@@ -229,14 +235,14 @@ class _GISMapScreenState extends State<GISMapScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Feature Info',
+              ui(context, 'Feature Info'),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Tap a feature on the map to see details',
+            Text(
+              ui(context, 'Tap a feature on the map to see details'),
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -264,7 +270,7 @@ class _GISMapScreenState extends State<GISMapScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => SimpleDialog(
-          title: const Text('Map Layers'),
+          title: Text(ui(context, 'Map Layers')),
           children: [
             for (final layer in [
               'survey_points',

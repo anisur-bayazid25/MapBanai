@@ -1,3 +1,5 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -100,7 +102,8 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
     try {
       final projectId = await _database.getProjectIdByName(widget.projectName);
       if (projectId == null) {
-        _showSnack('Project not found: ${widget.projectName}');
+        _showSnack(
+            ui(context, 'Project not found: {v0}', [widget.projectName]));
         return;
       }
 
@@ -135,9 +138,9 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      _showSnack('Line saved');
+      _showSnack(ui(context, 'Line saved'));
     } catch (e) {
-      _showSnack('Failed to save line: $e');
+      _showSnack(ui(context, 'Failed to save line: {v0}', [e]));
     } finally {
       if (mounted) {
         setState(() {
@@ -157,8 +160,8 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
   Future<void> _confirmCancel() async {
     final cancel = await showConfirmDialog(
       context,
-      title: 'Cancel recording?',
-      message: 'The collected vertices will be discarded.',
+      title: ui(context, 'Cancel recording?'),
+      message: ui(context, 'The collected vertices will be discarded.'),
       confirmText: 'Cancel',
       cancelText: 'Keep recording',
       destructive: true,
@@ -171,25 +174,26 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Record Line')),
-      body: Padding(
+      appBar: AppBar(title: Text(ui(context, 'Record Line'))),
+      body: SafeArea(
+          child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Project: ${widget.projectName}',
+              ui(context, 'Project: {v0}', [widget.projectName]),
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
             _buildStatusCard(),
             const SizedBox(height: 16),
             _buildStatsPanel(),
-            const Spacer(),
+            const SizedBox(height: 24),
             _buildControls(),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -236,7 +240,7 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
           if (!_permissionGranted)
             TextButton(
               onPressed: _startListening,
-              child: const Text('Allow'),
+              child: Text(ui(context, 'Allow')),
             ),
         ],
       ),
@@ -261,15 +265,16 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          ResponsiveGrid(
+            minChildWidth: 110,
             children: [
               _StatItem(
-                label: 'Distance',
+                label: ui(context, 'Distance'),
                 value: GeometryService.formatDistance(_recorder.totalDistanceM),
               ),
-              _StatItem(label: 'Vertices', value: '$vertices'),
-              _StatItem(label: 'Elapsed', value: _recorder.elapsedLabel),
+              _StatItem(label: ui(context, 'Vertices'), value: '$vertices'),
+              _StatItem(
+                  label: ui(context, 'Elapsed'), value: _recorder.elapsedLabel),
             ],
           ),
           const SizedBox(height: 12),
@@ -278,10 +283,12 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
             children: [
               Icon(Icons.gps_fixed, size: 16, color: accuracyColor),
               const SizedBox(width: 6),
-              Text(
-                'Accuracy: ${AccuracyFilter.format(accuracy)} (max 20 m)',
+              Flexible(
+                  child: Text(
+                ui(context, 'Accuracy: {v0} (max 20 m)',
+                    [AccuracyFilter.format(accuracy)]),
                 style: TextStyle(fontSize: 12, color: accuracyColor),
-              ),
+              )),
             ],
           ),
         ],
@@ -304,12 +311,12 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
                   }
                 : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Start recording'),
+            label: Text(ui(context, 'Start recording')),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
         ],
       );
@@ -318,60 +325,55 @@ class _LineRecordScreenState extends State<LineRecordScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        ResponsiveGrid(
+          minChildWidth: 150,
           children: [
-            Expanded(
-              child: _recorder.paused
-                  ? OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _recorder.resume();
-                          _restartTicker();
-                        });
-                      },
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Resume'),
-                    )
-                  : OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _recorder.pause();
-                        });
-                      },
-                      icon: const Icon(Icons.pause),
-                      label: const Text('Pause'),
-                    ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _recorder.vertices.isEmpty
-                    ? null
-                    : () {
-                        setState(() {
-                          _recorder.undo();
-                        });
-                      },
-                icon: const Icon(Icons.undo),
-                label: const Text('Undo'),
-              ),
+            _recorder.paused
+                ? OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _recorder.resume();
+                        _restartTicker();
+                      });
+                    },
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(ui(context, 'Resume')),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _recorder.pause();
+                      });
+                    },
+                    icon: const Icon(Icons.pause),
+                    label: Text(ui(context, 'Pause')),
+                  ),
+            OutlinedButton.icon(
+              onPressed: _recorder.vertices.isEmpty
+                  ? null
+                  : () {
+                      setState(() {
+                        _recorder.undo();
+                      });
+                    },
+              icon: const Icon(Icons.undo),
+              label: Text(ui(context, 'Undo')),
             ),
           ],
         ),
         const SizedBox(height: 8),
         FilledButton.icon(
-          onPressed:
-              _recorder.vertices.length >= 2 && !_saving ? _save : null,
+          onPressed: _recorder.vertices.length >= 2 && !_saving ? _save : null,
           icon: _saving
               ? const AppLoadingIndicator(dense: true)
               : const Icon(Icons.check),
-          label: const Text('Save line'),
+          label: Text(ui(context, 'Save line')),
         ),
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _saving ? null : _confirmCancel,
           icon: const Icon(Icons.close),
-          label: const Text('Cancel recording'),
+          label: Text(ui(context, 'Cancel recording')),
         ),
       ],
     );

@@ -1,3 +1,6 @@
+import 'package:mapbanai/ui/workflow_requirements_screen.dart';
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:mapbanai/ui/project_templates_screen.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:mapbanai/ui/help_screen.dart';
@@ -104,13 +107,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _editName() async {
     final current = _project?.name ?? '';
     final name = await _showEditDialog(
-      title: 'Project name',
+      title: ui(context, 'Project name'),
       initial: current,
       hint: 'e.g. Riverbank survey',
     );
     if (name == null || name.trim().isEmpty || name.trim() == current) return;
     if (await _database.projectExists(name.trim())) {
-      _showSnack('A project named "${name.trim()}" already exists');
+      _showSnack(
+          ui(context, 'A project named "{v0}" already exists', [name.trim()]));
       return;
     }
     await _database.updateProject(widget.projectId, name: name.trim());
@@ -124,7 +128,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _editDescription() async {
     final current = _project?.description ?? '';
     final description = await _showEditDialog(
-      title: 'Project description',
+      title: ui(context, 'Project description'),
       initial: current,
       hint: 'What is this project about?',
       maxLines: 3,
@@ -158,11 +162,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(ui(context, 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
+            child: Text(ui(context, 'Save')),
           ),
         ],
       ),
@@ -172,7 +176,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _setThreshold(double threshold) async {
     await _database.updateProject(widget.projectId, gpsThresholdM: threshold);
     await _load();
-    _showSnack('GPS accuracy threshold set to ${threshold.round()} m');
+    _showSnack(ui(
+        context, 'GPS accuracy threshold set to {v0} m', [threshold.round()]));
   }
 
   Future<void> _toggleArchived() async {
@@ -183,9 +188,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       context,
       title: action,
       message: project.archived
-          ? 'Restore "${project.name}"? It will appear in project setup again.'
-          : 'Archive "${project.name}"? It will be hidden from project setup. '
-              'Its data is kept and can be restored later.',
+          ? ui(
+              context,
+              'Restore "{v0}"? It will appear in project setup again.',
+              [project.name])
+          : ui(
+              context,
+              'Archive "{v0}"? It will be hidden from project setup. Its data is kept and can be restored later.',
+              [project.name]),
       confirmText: action,
       cancelText: 'Cancel',
     );
@@ -199,7 +209,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           .setSelectedProject(_project!.name, projectId: widget.projectId);
     }
     await _load();
-    _showSnack(wasArchived ? 'Project restored' : 'Project archived');
+    _showSnack(wasArchived
+        ? ui(context, 'Project restored')
+        : ui(context, 'Project archived'));
   }
 
   Future<void> _showExportOptions() async {
@@ -352,8 +364,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _deleteForm(StoredForm form) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete form',
-      message: 'Delete "${form.name}"?',
+      title: ui(context, 'Delete form'),
+      message: ui(context, 'Delete "{v0}"?', [form.name]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -361,7 +373,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     if (!confirmed) return;
     await _database.deleteStoredForm(form.id);
     await _load();
-    _showSnack('Form deleted');
+    _showSnack(ui(context, 'Form deleted'));
   }
 
   Future<void> _importXlsForm() async {
@@ -375,7 +387,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final file = result.files.single;
     final bytes = file.bytes;
     if (bytes == null) {
-      _showSnack('Could not read the selected file');
+      _showSnack(ui(context, 'Could not read the selected file'));
       return;
     }
 
@@ -386,16 +398,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         final proceed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('Review form import'),
+            title: Text(ui(context, 'Review form import')),
             content: SingleChildScrollView(
                 child: Text(form.importWarnings.join('\n\n'))),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('Cancel')),
+                  child: Text(ui(context, 'Cancel'))),
               FilledButton(
                   onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('Import form')),
+                  child: Text(ui(context, 'Import form'))),
             ],
           ),
         );
@@ -413,7 +425,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           json: jsonEncode(form.toJson()),
           version: existing.version + 1,
         );
-        _showSnack('Updated "${form.name}" from XLSForm');
+        _showSnack(ui(context, 'Updated "{v0}" from XLSForm', [form.name]));
       } else {
         await _database.insertStoredForm(
           StoredFormsCompanion(
@@ -425,15 +437,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         );
         _showSnack(
-          'Imported "${form.name}" with ${form.questions.length} questions',
+          ui(context, 'Imported "{v0}" with {v1} questions',
+              [form.name, form.questions.length]),
         );
       }
       await ProjectAssetService(_database)
           .add(widget.projectId, file.name, bytes);
     } on XlsFormParseException catch (e) {
-      _showSnack('Import failed: ${e.message}');
+      _showSnack(ui(context, 'Import failed: {v0}', [e.message]));
     } catch (e) {
-      _showSnack('Import failed: $e');
+      _showSnack(ui(context, 'Import failed: {v0}', [e]));
     }
     await _load();
   }
@@ -444,15 +457,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(project?.name ?? 'Project'),
+        title: Text(project?.name ?? ui(context, 'Project')),
         actions: [
           IconButton(
-              tooltip: 'Help & manager setup',
+              tooltip: ui(context, 'Help & manager setup'),
               icon: const Icon(Icons.help_outline),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => HelpScreen(projectId: project?.externalId)))),
           IconButton(
-              tooltip: 'Reusable templates',
+              tooltip: ui(context, 'Reusable templates'),
               icon: const Icon(Icons.bookmarks_outlined),
               onPressed: () async {
                 await Navigator.of(context).push(MaterialPageRoute(
@@ -461,7 +474,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 await _load();
               }),
           IconButton(
-              tooltip: 'Sync questionnaire',
+              tooltip: ui(context, 'Sync questionnaire'),
               icon: const Icon(Icons.cloud_download_outlined),
               onPressed: () async {
                 await Navigator.of(context).push(MaterialPageRoute(
@@ -473,7 +486,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             PopupMenuButton<String>(
               key: const ValueKey('project-share-menu'),
               icon: const Icon(Icons.ios_share_rounded),
-              tooltip: 'Share',
+              tooltip: ui(context, 'Share'),
               onSelected: (value) {
                 switch (value) {
                   case 'export':
@@ -483,20 +496,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'export',
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.save_alt_rounded),
-                    title: Text('Export / Share project'),
+                    title: Text(ui(context, 'Export / Share project')),
                   ),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'qr',
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.qr_code_2_rounded),
-                    title: Text('QR code'),
+                    title: Text(ui(context, 'QR code')),
                   ),
                 ),
               ],
@@ -506,7 +519,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             TextButton.icon(
               onPressed: _toggleArchived,
               icon: const Icon(Icons.restore_outlined, size: 18),
-              label: const Text('Restore'),
+              label: Text(ui(context, 'Restore')),
             ),
         ],
       ),
@@ -523,12 +536,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.orange.shade200),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(Icons.archive_outlined, color: Colors.orange),
                         SizedBox(width: 10),
                         Expanded(
-                          child: Text('Archived project',
+                          child: Text(ui(context, 'Archived project'),
                               style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ],
@@ -537,16 +550,28 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 const SizedBox(height: 16),
                 _infoTile(
                   icon: Icons.description_outlined,
-                  label: 'Description',
+                  label: ui(context, 'Description'),
                   value: project.description.isEmpty
                       ? 'No description'
                       : project.description,
                   onTap: _editDescription,
                 ),
                 const SizedBox(height: 12),
+                ListTile(
+                    leading: const Icon(Icons.rule_rounded),
+                    title: Text(ui(context, 'Workflow requirements')),
+                    subtitle: Text(ui(context,
+                        'Required questionnaires and photos for each workflow')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => WorkflowRequirementsScreen(
+                                database: _database, projectId: project.id)))),
+                const SizedBox(height: 12),
                 _infoTile(
                   icon: Icons.inbox_outlined,
-                  label: 'Survey and map history',
+                  label: ui(context, 'Survey and map history'),
                   value: '$_surveyCount surveys · $_featureCount map records',
                   onTap: () async {
                     await Navigator.of(context).push(
@@ -560,19 +585,19 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'GPS settings',
+                  ui(context, 'GPS settings'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Default max acceptable accuracy used when recording points '
-                  'in this project.',
+                  ui(context,
+                      'Default max acceptable accuracy used when recording points in this project.'),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 12),
-                SegmentedButton<double>(
+                ResponsiveChoice<double>(
                   segments: const [
                     ButtonSegment(value: 5, label: Text('5m')),
                     ButtonSegment(value: 10, label: Text('10m')),
@@ -586,28 +611,29 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 const SizedBox(height: 24),
                 ListTile(
                   leading: const Icon(Icons.drive_file_rename_outline),
-                  title: const Text('Edit project name'),
+                  title: Text(ui(context, 'Edit project name')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _editName,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Project files and map layers',
+                  ui(context, 'Project files and map layers'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Add study-area, facility and road layers. Source files travel with project exports.',
+                  ui(context,
+                      'Add study-area, facility and road layers. Source files travel with project exports.'),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.layers_outlined),
-                  title: const Text('Manage project files and layers'),
-                  subtitle: const Text(
-                      'Shapefile, CSV, Excel, GeoJSON and GeoPackage'),
+                  title: Text(ui(context, 'Manage project files and layers')),
+                  subtitle: Text(ui(context,
+                      'Shapefile, CSV, Excel, GeoJSON and GeoPackage')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     await Navigator.of(context).push(MaterialPageRoute(
@@ -618,16 +644,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Survey forms',
+                  ui(context, 'Survey forms'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'One questionnaire supplies Survey, GIS and Study Area questions. '
-                  'You can create a form, edit it, or import an XLSForm '
-                  '(.xlsx) file.',
+                  ui(context,
+                      'One questionnaire supplies Survey, GIS and Study Area questions. You can create a form, edit it, or import an XLSForm (.xlsx) file.'),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 8),
@@ -639,8 +664,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    child: const Text(
-                      'No forms yet. Add one or import an XLSForm file.',
+                    child: Text(
+                      ui(context,
+                          'No forms yet. Add one or import an XLSForm file.'),
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   )
@@ -666,12 +692,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Edit form',
+                            tooltip: ui(context, 'Edit form'),
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             onPressed: () => _editForm(form),
                           ),
                           IconButton(
-                            tooltip: 'Delete form',
+                            tooltip: ui(context, 'Delete form'),
                             icon: const Icon(
                               Icons.delete_outline,
                               size: 18,
@@ -686,36 +712,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     const Divider(height: 1),
                   ],
                 const SizedBox(height: 4),
-                Row(
+                ResponsiveGrid(
+                  minChildWidth: 180,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _addForm,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add form'),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: _addForm,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(ui(context, 'Add form')),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _importXlsForm,
-                        icon: const Icon(Icons.upload_file_outlined, size: 18),
-                        label: const Text('Import XLSForm'),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: _importXlsForm,
+                      icon: const Icon(Icons.upload_file_outlined, size: 18),
+                      label: Text(ui(context, 'Import XLSForm')),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Cloud Sync',
+                  ui(context, 'Cloud Sync'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Connect this project to a Google Apps Script Web App for '
-                  'background sync.',
+                  ui(context,
+                      'Connect this project to a Google Apps Script Web App for background sync.'),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 if (project.externalId != null)
@@ -725,9 +747,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 TextField(
                   controller: _syncUrlController,
                   keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    labelText: 'Apps Script Web App URL',
+                    labelText: ui(context, 'Apps Script Web App URL'),
                     hintText: 'https://script.google.com/macros/s/.../exec',
                     prefixIcon: Icon(Icons.cloud_outlined),
                   ),
@@ -739,8 +761,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   obscuringCharacter: '•',
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    labelText: 'API key',
-                    hintText: 'Shared secret token',
+                    labelText: ui(context, 'API key'),
+                    hintText: ui(context, 'Shared secret token'),
                     prefixIcon: const Icon(Icons.vpn_key_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -757,45 +779,42 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 if (_syncConfig?.lastSyncAt != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Last synced: ${_syncConfig!.lastSyncAt}',
+                    ui(context, 'Last synced: {v0}', [_syncConfig!.lastSyncAt]),
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ],
                 const SizedBox(height: 12),
-                Row(
+                ResponsiveGrid(
+                  minChildWidth: 180,
                   children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _savingSync ? null : _saveSyncConfig,
-                        icon: _savingSync
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.save_outlined, size: 18),
-                        label: Text(_savingSync ? 'Saving...' : 'Save'),
-                      ),
+                    FilledButton.icon(
+                      onPressed: _savingSync ? null : _saveSyncConfig,
+                      icon: _savingSync
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save_outlined, size: 18),
+                      label: Text(_savingSync
+                          ? ui(context, 'Saving...')
+                          : ui(context, 'Save')),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _testingSync ? null : _testSyncConnection,
-                        icon: _testingSync
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.wifi_tethering_outlined,
-                                size: 18),
-                        label: Text(
-                            _testingSync ? 'Testing...' : 'Test Connection'),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: _testingSync ? null : _testSyncConnection,
+                      icon: _testingSync
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.wifi_tethering_outlined, size: 18),
+                      label: Text(_testingSync
+                          ? ui(context, 'Testing...')
+                          : ui(context, 'Test Connection')),
                     ),
                   ],
                 ),
@@ -805,9 +824,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     Icons.archive_outlined,
                     color: Colors.orange,
                   ),
-                  title: const Text('Archive project'),
+                  title: Text(ui(context, 'Archive project')),
                   subtitle: Text(
-                    'Hide from project setup; data is kept',
+                    ui(context, 'Hide from project setup; data is kept'),
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   trailing: const Icon(Icons.chevron_right),

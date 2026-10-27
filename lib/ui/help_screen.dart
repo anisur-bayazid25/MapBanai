@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,25 +9,27 @@ class HelpScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Help & manager setup')),
+        appBar: AppBar(title: Text(ui(context, 'Help & manager setup'))),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          const Text('One project connects your questions, maps and fieldwork.',
+          Text(
+              ui(context,
+                  'One project connects your questions, maps and fieldwork.'),
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           if (projectId != null) ...[
-            SelectableText('This project ID: $projectId'),
+            SelectableText(ui(context, 'This project ID: {v0}', [projectId])),
             TextButton.icon(
                 onPressed: () => _copy(context, projectId!),
                 icon: const Icon(Icons.copy),
-                label: const Text('Copy project ID')),
+                label: Text(ui(context, 'Copy project ID'))),
           ],
           for (final section in _sections)
             Card(
                 child: ExpansionTile(
-                    title: Text(section.$1),
+                    title: Text(ui(context, section.$1)),
                     childrenPadding: const EdgeInsets.all(16),
                     expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                    children: [SelectableText(section.$2)])),
+                    children: [SelectableText(ui(context, section.$2))])),
           for (final file in [
             ('Code.gs', 'assets/help/manager_apps_script.gs'),
             ('Map.html', 'assets/help/Map.html'),
@@ -34,17 +37,22 @@ class HelpScreen extends StatelessWidget {
           ])
             Card(
                 child: ExpansionTile(
-              title: Text('${file.$1} — copy complete code'),
+              title: Text(ui(context, '{v0} — copy complete code', [file.$1])),
               childrenPadding: const EdgeInsets.all(16),
               children: [
                 Text(file.$1 == 'Code.gs'
-                    ? 'For a new project, paste into Code.gs and replace only projectId. Leave the other four placeholders unchanged; setupMapBanai creates your API key, photo folder and data tabs.'
-                    : 'In Apps Script, add an HTML file named ${file.$1.split('.').first}, then paste this code.'),
+                    ? ui(context,
+                        'For a new project, paste into Code.gs and replace only projectId. Leave the other four placeholders unchanged; setupMapBanai creates your API key, photo folder and data tabs.')
+                    : ui(
+                        context,
+                        'In Apps Script, add an HTML file named {v0}, then paste this code.',
+                        [file.$1.split('.').first])),
                 FutureBuilder<String>(
                   future: rootBundle.loadString(file.$2),
                   builder: (context, snapshot) {
                     if (snapshot.hasError)
-                      return const Text('Could not load code. Reopen Help.');
+                      return Text(
+                          ui(context, 'Could not load code. Reopen Help.'));
                     if (!snapshot.hasData)
                       return const CircularProgressIndicator();
                     final code = projectId == null
@@ -57,7 +65,7 @@ class HelpScreen extends StatelessWidget {
                           FilledButton.icon(
                               onPressed: () => _copy(context, code),
                               icon: const Icon(Icons.copy_all),
-                              label: Text('Copy ${file.$1}')),
+                              label: Text(ui(context, 'Copy {v0}', [file.$1]))),
                           const SizedBox(height: 12),
                           SizedBox(
                               height: 240,
@@ -78,8 +86,8 @@ class HelpScreen extends StatelessWidget {
   static Future<void> _copy(BuildContext context, String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ui(context, 'Copied to clipboard'))));
     }
   }
 }
@@ -123,7 +131,7 @@ const _sections = <(String, String)>[
   ),
   (
     'Study Area Mode: visits and repeated campaigns',
-    'Select the project and one of its study-area maps. Import from the top toolbar; GeoJSON and GeoPackage can be selected regardless of Android MIME filtering. ZIP shapefile companions together for attributes. Files opened externally offer an existing project, new project or view-only preview. Add new Layer is inside the study-layer selector; the plus button opens the questionnaire at a fresh GPS position. Edit feature requires a questionnaire for new/Updated features; other statuses have an optional Fill questionnaire checkbox. Skipping keeps previous answers. Categories & colors includes Verification status coloring and starts with a single color and lets you explicitly choose a column, category colors/visibility and point size.  Use separate named maps for salinity rounds, household verification or the full study area. Start/resume a field visit for that selected area. Verify existing sites, record new information or update attributes using the selected questionnaire. Visit history preserves the review trail. Assign old unassigned sites to a project explicitly. Export the updated area after fieldwork.'
+    'Open Study Area from Home and select Field Verification, Recurring Collection or Study Area Visits. Choose the project, site layer and questionnaire. Assign each uploaded layer to its workflows in Project layers. Field Verification updates baseline features; tap a site and its questionnaire button to start or resume a guided visit. Recurring Collection uses a Collection round with a name, optional period/season and date. Each round keeps independent collected, not collected and needs review states. To build recurring sites from first measurements, choose Create layer from responses, then the source questionnaire and numeric measurement. Original responses remain intact. Study Area Visits supports quick done, undone and review states with optional questionnaires. Open Google Maps from the selected site for external navigation. Timelines preserve previous observations. Uploaded site names and attributes remain as supplied; choose a bilingual XLSForm to translate questionnaire labels.'
   ),
   (
     'GPS Mode and geotagged photos',
@@ -143,7 +151,7 @@ const _sections = <(String, String)>[
   ),
   (
     'Sharing, backups and app updates',
-    'Project packages share project definitions, forms and study-layer configuration; they are not a backup of responses or photos. “Include sync connection” is optional and includes the URL and key. Preserve the same project identity across the team; duplicating a project creates a different identity that needs its own backend configuration.\n\nUse the app backup/export tools for collected data and keep copies outside the phone. Installing an update over the existing signed app preserves local storage; uninstalling or clearing app storage removes local information. Save cloud connection settings before exporting a package.'
+    'Project packages share definitions, questionnaires, layers and setup. Select Include collected responses and photos when those records should travel too; a setup-only package is not a backup of collected data. Include sync connection adds the URL and API key for trusted field teams. Keep the same project identity across the team. Creating a new copy gives it a separate identity and backend setup.\n\nKeep backups outside the phone. Installing an update over the same signed app preserves local storage; uninstalling or clearing app storage removes local data. Save cloud connection settings before exporting.'
   ),
   (
     'Troubleshooting cloud setup',

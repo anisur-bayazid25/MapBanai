@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/project_templates_screen.dart';
 import 'dart:convert';
 
@@ -43,11 +44,11 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
   Future<void> _createProject() async {
     final name = controller.text.trim();
     if (name.isEmpty) {
-      _showSnack('Please enter a project name');
+      _showSnack(ui(context, 'Please enter a project name'));
       return;
     }
     if (await database.projectExists(name)) {
-      _showSnack('A project named "$name" already exists');
+      _showSnack(ui(context, 'A project named "{v0}" already exists', [name]));
       return;
     }
 
@@ -58,7 +59,7 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
     if (!mounted) return;
     context.read<ProjectState>().setSelectedProject(name,
         projectId: projects.firstWhere((p) => p.name == name).id);
-    _showSnack('Project created: $name');
+    _showSnack(ui(context, 'Project created: {v0}', [name]));
   }
 
   void _showSnack(String message) {
@@ -86,7 +87,8 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
         ? await database.getProjectById(state.selectedProjectId!)
         : await database.getProjectByName(state.selectedProject);
     if (project == null || project.archived) {
-      _showSnack('Create or select a project before building a form');
+      _showSnack(
+          ui(context, 'Create or select a project before building a form'));
       return;
     }
     if (!mounted) return;
@@ -101,7 +103,8 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
                     json: drift.Value(jsonEncode(form.toJson())),
                     version: drift.Value(form.version),
                   ));
-                  _showSnack('Form "${form.name}" saved in ${project.name}');
+                  _showSnack(ui(context, 'Form "{v0}" saved in {v1}',
+                      [form.name, project.name]));
                 },
               )),
     );
@@ -131,10 +134,10 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Project setup'),
+        title: Text(ui(context, 'Project setup')),
         actions: [
           IconButton(
-              tooltip: 'Reusable templates',
+              tooltip: ui(context, 'Reusable templates'),
               icon: const Icon(Icons.bookmarks_outlined),
               onPressed: () async {
                 await Navigator.of(context).push(MaterialPageRoute(
@@ -143,7 +146,7 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
                 await _loadProjects();
               }),
           Tooltip(
-            message: 'Create custom survey form',
+            message: ui(context, 'Create custom survey form'),
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: IconButton(
@@ -159,36 +162,37 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Create or open a project',
+            Text(
+              ui(context, 'Create or open a project'),
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: controller,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Project name',
-                hintText: 'e.g. Riverbank survey',
+                labelText: ui(context, 'Project name'),
+                hintText: ui(context, 'e.g. Riverbank survey'),
               ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: _createProject,
               icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Create project'),
+              label: Text(ui(context, 'Create project')),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Saved projects',
+            Text(
+              ui(context, 'Saved projects'),
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             Expanded(
               child: projects.isEmpty && archivedProjects.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'No projects yet. Create one to start collecting data.',
+                        ui(context,
+                            'No projects yet. Create one to start collecting data.'),
                       ),
                     )
                   : ListView(
@@ -210,7 +214,7 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    tooltip: 'Project settings',
+                                    tooltip: ui(context, 'Project settings'),
                                     icon: const Icon(
                                       Icons.info_outline,
                                       size: 20,
@@ -225,7 +229,7 @@ class _ProjectSetupScreenState extends State<ProjectSetupScreen> {
                         if (archivedProjects.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           Text(
-                            'Archived',
+                            ui(context, 'Archived'),
                             style: Theme.of(context)
                                 .textTheme
                                 .titleSmall

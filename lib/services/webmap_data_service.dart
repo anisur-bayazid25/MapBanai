@@ -131,6 +131,20 @@ class WebMapDataService {
   Future<Map<String, dynamic>> buildFeatureCollection() =>
       buildFeatureCollectionForProject(null);
 
+  Future<Map<String, dynamic>?> featureForSession(SurveySession session,
+      {Set<String>? geopointFields}) {
+    if (geopointFields != null) {
+      final response = Map<String, dynamic>.from(jsonDecode(session.responses));
+      final answers = response['answers'] as Map? ?? {};
+      response['answers'] = {
+        for (final field in geopointFields)
+          if (answers.containsKey(field)) field: answers[field]
+      };
+      session = session.copyWith(responses: jsonEncode(response));
+    }
+    return _sessionToFeature(session);
+  }
+
   Future<Map<String, dynamic>?> _sessionToFeature(SurveySession s) async {
     Map<String, dynamic> resp;
     try {
@@ -138,6 +152,8 @@ class WebMapDataService {
     } catch (_) {
       return null;
     }
+
+    if (resp['record_kind'] == 'status') return null;
 
     if (resp['geometry'] is Map) {
       return {
@@ -436,7 +452,7 @@ class WebMapDataService {
         }
       } catch (_) {}
       // ODK style: "lat lon alt accuracy" space-separated
-      final parts = trimmed.split(RegExp(r'\s+'));
+      final parts = trimmed.split(RegExp(r'[\s,]+'));
       if (parts.length >= 2) {
         final lat = double.tryParse(parts[0]);
         final lon = double.tryParse(parts[1]);

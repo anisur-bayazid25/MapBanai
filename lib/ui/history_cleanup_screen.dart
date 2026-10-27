@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/history_cleanup_service.dart';
@@ -94,29 +95,51 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                title: const Text('Delete selected history?'),
+                title: Text(ui(context, 'Delete selected history?')),
                 content: SingleChildScrollView(
-                    child: Text('${preview.project.name}\n\n'
-                        '${preview.records.length} history records will be deleted, including '
-                        '${preview.pendingCount} waiting to sync.\n'
-                        '${preview.removePoints ? '${preview.points.length} linked Study Area points will also be removed.\n' : 'Study Area points will stay on the map.\n'}'
-                        '${preview.relatedCount > 0 ? '\nIncludes ${preview.relatedCount} other records linked to the same removed points.\n' : ''}'
-                        '\nThis cannot be undone. Copies already uploaded to the cloud remain there.')),
+                    child: Text(ui(
+                        context,
+                        '{v0}\n\n{v1} history records will be deleted, including {v2} waiting to sync.\n{v3}{v4}\nThis cannot be undone. Copies already uploaded to the cloud remain there.',
+                        [
+                      preview.project.name,
+                      preview.records.length,
+                      preview.pendingCount,
+                      preview.removePoints
+                          ? ui(
+                              context,
+                              '{v0} linked Study Area points will also be removed.\n',
+                              [
+                                  preview.points.length
+                                ])
+                          : ui(context,
+                              'Study Area points will stay on the map.\n'),
+                      preview.relatedCount > 0
+                          ? ui(
+                              context,
+                              '\nIncludes {v0} other records linked to the same removed points.\n',
+                              [preview.relatedCount])
+                          : ''
+                    ]))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: Text('Delete ${preview.records.length} records')),
+                      child: Text(ui(context, 'Delete {v0} records',
+                          [preview.records.length]))),
                 ],
               ));
       if (confirmed != true) return;
       final removed = await _service.delete(preview);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              'Deleted $removed history records${preview.removePoints ? ' and ${preview.points.length} map points' : ''}.')));
+          content: Text(ui(context, 'Deleted {v0} history records{v1}.', [
+        removed,
+        preview.removePoints
+            ? ui(context, ' and {v0} map points', [preview.points.length])
+            : ''
+      ]))));
       await _load();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -150,16 +173,18 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
     return PopScope(
         canPop: !_busy,
         child: Scaffold(
-          appBar: AppBar(title: const Text('Clean up history')),
+          appBar: AppBar(title: Text(ui(context, 'Clean up history'))),
           body: ListView(padding: const EdgeInsets.all(16), children: [
-            const Text(
-                'Choose a project, then narrow the records by layer or recorded day. Deleting history also removes those records from the sync queue.'),
+            Text(ui(context,
+                'Choose a project, then narrow the records by layer or recorded day. Deleting history also removes those records from the sync queue.')),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
+              itemHeight: null,
               value: _projectId,
               isExpanded: true,
-              decoration: const InputDecoration(
-                  labelText: 'Project', border: OutlineInputBorder()),
+              decoration: InputDecoration(
+                  labelText: ui(context, 'Project'),
+                  border: OutlineInputBorder()),
               items: [
                 for (final project in _projects)
                   DropdownMenuItem(
@@ -177,18 +202,21 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              itemHeight: null,
               value: _layerId ?? '*',
               isExpanded: true,
-              decoration: const InputDecoration(
-                  labelText: 'Layer', border: OutlineInputBorder()),
+              decoration: InputDecoration(
+                  labelText: ui(context, 'Layer'),
+                  border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(value: '*', child: Text('All layers')),
+                DropdownMenuItem(
+                    value: '*', child: Text(ui(context, 'All layers'))),
                 for (final id in layerIds)
                   DropdownMenuItem(
                       value: id,
                       child: Text(
                           id.isEmpty
-                              ? 'No layer recorded'
+                              ? ui(context, 'No layer recorded')
                               : _layerNames[_projectId]?[id] ?? id,
                           overflow: TextOverflow.ellipsis))
               ],
@@ -201,13 +229,15 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              itemHeight: null,
               value: _day ?? '*',
               isExpanded: true,
-              decoration: const InputDecoration(
-                  labelText: 'Recorded day (local time)',
+              decoration: InputDecoration(
+                  labelText: ui(context, 'Recorded day (local time)'),
                   border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(value: '*', child: Text('All days')),
+                DropdownMenuItem(
+                    value: '*', child: Text(ui(context, 'All days'))),
                 for (final day in days)
                   DropdownMenuItem(value: day, child: Text(day))
               ],
@@ -218,17 +248,25 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              itemHeight: null,
+              isExpanded: true,
               value: _kind ?? '*',
-              decoration: const InputDecoration(
-                  labelText: 'Record type', border: OutlineInputBorder()),
-              items: const [
-                DropdownMenuItem(value: '*', child: Text('All record types')),
+              decoration: InputDecoration(
+                  labelText: ui(context, 'Record type'),
+                  border: OutlineInputBorder()),
+              items: [
                 DropdownMenuItem(
-                    value: 'survey', child: Text('Survey responses')),
+                    value: '*', child: Text(ui(context, 'All record types'))),
                 DropdownMenuItem(
-                    value: 'study', child: Text('Study Area points / imports')),
-                DropdownMenuItem(value: 'gis', child: Text('GIS features')),
-                DropdownMenuItem(value: 'visit', child: Text('Site visits'))
+                    value: 'survey',
+                    child: Text(ui(context, 'Survey responses'))),
+                DropdownMenuItem(
+                    value: 'study',
+                    child: Text(ui(context, 'Study Area points / imports'))),
+                DropdownMenuItem(
+                    value: 'gis', child: Text(ui(context, 'GIS features'))),
+                DropdownMenuItem(
+                    value: 'visit', child: Text(ui(context, 'Site visits')))
               ],
               onChanged: _busy
                   ? null
@@ -237,31 +275,38 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              itemHeight: null,
+              isExpanded: true,
               value: _syncState,
-              decoration: const InputDecoration(
-                  labelText: 'Sync status', border: OutlineInputBorder()),
-              items: const [
+              decoration: InputDecoration(
+                  labelText: ui(context, 'Sync status'),
+                  border: OutlineInputBorder()),
+              items: [
                 DropdownMenuItem(
-                    value: 'all', child: Text('All sync statuses')),
+                    value: 'all',
+                    child: Text(ui(context, 'All sync statuses'))),
                 DropdownMenuItem(
-                    value: 'pending', child: Text('Waiting to sync')),
-                DropdownMenuItem(value: 'synced', child: Text('Already synced'))
+                    value: 'pending',
+                    child: Text(ui(context, 'Waiting to sync'))),
+                DropdownMenuItem(
+                    value: 'synced', child: Text(ui(context, 'Already synced')))
               ],
               onChanged:
                   _busy ? null : (value) => setState(() => _syncState = value!),
             ),
             SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Include unfinished drafts'),
+                title: Text(ui(context, 'Include unfinished drafts')),
                 value: _includeDrafts,
                 onChanged: _busy
                     ? null
                     : (value) => setState(() => _includeDrafts = value)),
             CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Also remove linked Study Area points'),
-                subtitle: const Text(
-                    'Includes other history records linked to those points. Imported source files and project settings are kept.'),
+                title:
+                    Text(ui(context, 'Also remove linked Study Area points')),
+                subtitle: Text(ui(context,
+                    'Includes other history records linked to those points. Imported source files and project settings are kept.')),
                 value: _removePoints,
                 onChanged: _busy
                     ? null
@@ -270,7 +315,11 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
                 child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
-                        '${matches.length} matching records\n${matches.where((record) => record.pending).length} waiting to sync',
+                        ui(context,
+                            '{v0} matching records\n{v1} waiting to sync', [
+                          matches.length,
+                          matches.where((record) => record.pending).length
+                        ]),
                         style: Theme.of(context).textTheme.titleMedium))),
             if (_busy) const LinearProgressIndicator(),
             if (_error != null)
@@ -283,7 +332,7 @@ class _HistoryCleanupScreenState extends State<HistoryCleanupScreen> {
             FilledButton.icon(
                 onPressed: _busy || matches.isEmpty ? null : _review,
                 icon: const Icon(Icons.delete_sweep_outlined),
-                label: const Text('Review deletion')),
+                label: Text(ui(context, 'Review deletion'))),
           ]),
         ));
   }

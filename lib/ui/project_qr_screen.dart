@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_exporter.dart';
@@ -79,7 +80,7 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Project QR code')),
+      appBar: AppBar(title: Text(ui(context, 'Project QR code'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -97,13 +98,13 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
                         textAlign: TextAlign.center,
                       ),
                       Text(
-                        'Version ${_versionLabel()}',
+                        ui(context, 'Version {v0}', [_versionLabel()]),
                         style: theme.textTheme.bodyMedium,
                       ),
                       CheckboxListTile(
-                        title: const Text('Include sync connection'),
-                        subtitle: const Text(
-                            'Share the URL and API key only with trusted enumerators.'),
+                        title: Text(ui(context, 'Include sync connection')),
+                        subtitle: Text(ui(context,
+                            'Share the URL and API key only with trusted enumerators.')),
                         value: _includeSyncConnection,
                         onChanged: (value) async {
                           setState(() {
@@ -129,25 +130,26 @@ class _ProjectQrScreenState extends State<ProjectQrScreen> {
                       const SizedBox(height: 16),
                       Text(
                         _inline
-                            ? 'Scan or paste this code on another phone to '
-                                'import this project.'
-                            : 'Project is too large for direct QR transfer.',
+                            ? ui(context,
+                                'Scan or paste this code on another phone to import this project.')
+                            : ui(context,
+                                'Project is too large for direct QR transfer.'),
                         style: theme.textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
                       if (!_inline) ...[
                         const SizedBox(height: 6),
                         Text(
-                          'Share the project file instead; this code lets the '
-                          'receiving phone confirm it got the right project.',
+                          ui(context,
+                              'Share the project file instead; this code lets the receiving phone confirm it got the right project.'),
                           style: theme.textTheme.bodySmall,
                           textAlign: TextAlign.center,
                         ),
                       ],
                       const SizedBox(height: 14),
                       Text(
-                        'Paste this code into MapBanai → Import → '
-                        'Paste project code:',
+                        ui(context,
+                            'Paste this code into MapBanai → Import → Paste project code:'),
                         style: theme.textTheme.bodySmall,
                       ),
                       const SizedBox(height: 6),

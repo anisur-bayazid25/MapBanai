@@ -1,3 +1,5 @@
+import 'package:mapbanai/services/workflow_requirements_service.dart';
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -7,18 +9,26 @@ import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/guided_visit_screen.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:mapbanai/models/study_workflow.dart';
+import 'package:mapbanai/ui/study_collection_form_screen.dart';
 
 class SiteTimelineScreen extends StatefulWidget {
   final AppDatabase database;
   final StudyAreaStore store;
   final int projectId;
   final StudyAreaSite site;
+  final StudyWorkflow workflow;
+  final CollectionRound? collectionRound;
+  final StoredForm? storedForm;
   const SiteTimelineScreen(
       {super.key,
       required this.database,
       required this.store,
       required this.projectId,
-      required this.site});
+      required this.site,
+      this.workflow = StudyWorkflow.verification,
+      this.collectionRound,
+      this.storedForm});
   @override
   State<SiteTimelineScreen> createState() => _SiteTimelineScreenState();
 }
@@ -59,11 +69,11 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
           File('${directory.path}/observations_${widget.site.featureUuid}.csv');
       await file.writeAsString(SiteObservationService.csv(widget.site, _rows!));
       await Share.shareXFiles([XFile(file.path)],
-          text: '${widget.site.displayName} — observations');
+          text: ui(context, '{v0} — observations', [widget.site.displayName]));
     } catch (error) {
       if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ui(context, 'Export failed: {v0}', [error]))));
     }
   }
 
@@ -84,24 +94,49 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
         .where((row) => field != null && row.number(field) != null)
         .toList();
     return Scaffold(
-        appBar: AppBar(title: const Text('Site timeline'), actions: [
+        appBar: AppBar(title: Text(ui(context, 'Site timeline')), actions: [
           IconButton(
-              tooltip: 'Export all observations as CSV',
+              tooltip: ui(context, 'Export all observations as CSV'),
               onPressed: _rows == null ? null : _export,
               icon: const Icon(Icons.ios_share))
         ]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           Text(widget.site.displayName,
               style: Theme.of(context).textTheme.titleLarge),
-          SelectableText('Feature UUID: ${widget.site.featureUuid}'),
+          SelectableText(
+              ui(context, 'Feature UUID: {v0}', [widget.site.featureUuid])),
           const SizedBox(height: 12),
-          const Text(
-              'Each completed visit is a separate observation. Earlier measurements stay in the timeline. Comparisons use the same questionnaire and question name; keep measurement units consistent across versions.'),
+          Text(ui(context,
+              'Each completed visit is a separate observation. Earlier measurements stay in the timeline. Comparisons use the same questionnaire and question name; keep measurement units consistent across versions.')),
           const SizedBox(height: 12),
           FilledButton.icon(
               icon: const Icon(Icons.add),
-              label: const Text('Add observation / start visit'),
+              label: Text(ui(context, 'Add observation / start visit')),
               onPressed: () async {
+                if (widget.workflow != StudyWorkflow.verification) {
+                  final requirements =
+                      await WorkflowRequirementsService(widget.database)
+                          .get(widget.projectId, widget.workflow);
+                  if (!context.mounted) return;
+                  if (widget.storedForm == null && requirements.questionnaire) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(ui(context,
+                            'Select a project questionnaire first.'))));
+                    return;
+                  }
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => StudyCollectionFormScreen(
+                              database: widget.database,
+                              projectId: widget.projectId,
+                              site: widget.site,
+                              workflow: widget.workflow,
+                              round: widget.collectionRound,
+                              form: widget.storedForm)));
+                  await _load();
+                  return;
+                }
                 await Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => GuidedVisitScreen(
                         projectId: widget.projectId,
@@ -110,19 +145,20 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
                         studyAreaStore: widget.store)));
                 await _load();
               }),
-          if (_error != null) Text(_error!),
+          if (_error != null) Text(ui(context, _error!)),
           if (_rows == null && _error == null) const LinearProgressIndicator(),
           if (_rows?.isEmpty == true)
-            const Padding(
+            Padding(
                 padding: EdgeInsets.all(20),
-                child: Text(
-                    'No completed observations yet. Add the first visit.')),
+                child: Text(ui(context,
+                    'No completed observations yet. Add the first visit.'))),
           if (forms.isNotEmpty)
             DropdownButtonFormField<String>(
+                itemHeight: null,
                 value: formId,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                    labelText: 'Questionnaire to compare'),
+                decoration: InputDecoration(
+                    labelText: ui(context, 'Questionnaire to compare')),
                 items: forms.entries
                     .map((e) =>
                         DropdownMenuItem(value: e.key, child: Text(e.value)))
@@ -133,10 +169,11 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
                     })),
           if (fields.isNotEmpty) ...[
             DropdownButtonFormField<String>(
+                itemHeight: null,
                 value: field,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                    labelText: 'Measurement (e.g. salinity)'),
+                decoration: InputDecoration(
+                    labelText: ui(context, 'Measurement (e.g. salinity)')),
                 items: fields.entries
                     .map((e) =>
                         DropdownMenuItem(value: e.key, child: Text(e.value)))
@@ -146,13 +183,19 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
-                      'First: ${measurements.first.number(field!)} • Latest: ${measurements.last.number(field)} • Change: ${(measurements.last.number(field)! - measurements.first.number(field)!).toStringAsFixed(3)}')),
+                      ui(context, 'First: {v0} • Latest: {v1} • Change: {v2}', [
+                    measurements.first.number(field!),
+                    measurements.last.number(field),
+                    (measurements.last.number(field)! -
+                            measurements.first.number(field)!)
+                        .toStringAsFixed(3)
+                  ]))),
             SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: DataTable(columns: const [
-                  DataColumn(label: Text('Visit date')),
-                  DataColumn(label: Text('Value')),
-                  DataColumn(label: Text('Change from previous'))
+                child: DataTable(columns: [
+                  DataColumn(label: Text(ui(context, 'Visit date'))),
+                  DataColumn(label: Text(ui(context, 'Value'))),
+                  DataColumn(label: Text(ui(context, 'Change from previous')))
                 ], rows: [
                   for (var i = 0; i < measurements.length; i++)
                     DataRow(cells: [
@@ -172,18 +215,24 @@ class _SiteTimelineScreenState extends State<SiteTimelineScreen> {
                 ])),
           ],
           const SizedBox(height: 16),
-          Text('All observations (${_rows?.length ?? 0})',
+          Text(ui(context, 'All observations ({v0})', [_rows?.length ?? 0]),
               style: Theme.of(context).textTheme.titleMedium),
           for (final row in (_rows ?? <SiteObservation>[]).reversed)
             Card(
                 child: ExpansionTile(
                     title: Text(
                         '${row.formName} — ${row.timestamp.toLocal().toString().split('.').first}'),
-                    subtitle: Text('${row.author} • ${row.outcome}'),
+                    subtitle: Text([
+                      row.roundName,
+                      row.period,
+                      row.author,
+                      ui(context, row.outcome)
+                    ].where((value) => value.isNotEmpty).join(' • ')),
                     childrenPadding: const EdgeInsets.all(16),
                     expandedCrossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  SelectableText('Observation UUID: ${row.id}'),
+                  SelectableText(
+                      ui(context, 'Observation UUID: {v0}', [row.id])),
                   if (row.note.isNotEmpty) Text(row.note),
                   for (final entry in row.answers.entries)
                     SelectableText('${entry.key}: ${entry.value}')

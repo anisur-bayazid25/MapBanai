@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/help_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -127,8 +128,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Set a user name in Settings first — it is required to confirm '
-            'a data reset.',
+            ui(context,
+                'Set a user name in Settings first — it is required to confirm a data reset.'),
           ),
         ),
       );
@@ -138,9 +139,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showTypeToConfirmDialog(
       context,
       title: l10n.resetDataConfirmTitle,
-      message: 'This permanently deletes all projects, survey responses, '
-          'stored forms and GPS logs. Type your user name exactly as shown '
-          'to confirm:',
+      message: ui(context,
+          'This permanently deletes all projects, survey responses, stored forms and GPS logs. Type your user name exactly as shown to confirm:'),
       typeToConfirm: userName.trim(),
       confirmText: l10n.resetData,
     );
@@ -156,7 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to reset data')),
+        SnackBar(content: Text(ui(context, 'Failed to reset data'))),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -189,7 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text(l10n?.settings ?? 'Settings'),
         actions: [
           IconButton(
-              tooltip: 'Help & manager setup',
+              tooltip: ui(context, 'Help & manager setup'),
               icon: const Icon(Icons.help_outline),
               onPressed: () => Navigator.of(context)
                   .push(MaterialPageRoute(builder: (_) => const HelpScreen()))),
@@ -216,6 +216,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  itemHeight: null,
+                  isExpanded: true,
                   value: _language,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
@@ -245,6 +247,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  itemHeight: null,
+                  isExpanded: true,
                   value: _themeMode,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
@@ -280,6 +284,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<DistanceUnit>(
+                  itemHeight: null,
+                  isExpanded: true,
                   value: _distanceUnit,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
@@ -289,7 +295,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     for (final unit in DistanceUnit.values)
                       DropdownMenuItem(
                         value: unit,
-                        child: Text(unit.label),
+                        child: Text(ui(context, unit.label)),
                       ),
                   ],
                   onChanged: (value) {
@@ -300,6 +306,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<AreaUnit>(
+                  itemHeight: null,
+                  isExpanded: true,
                   value: _areaUnit,
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
@@ -309,7 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     for (final unit in AreaUnit.values)
                       DropdownMenuItem(
                         value: unit,
-                        child: Text(unit.label),
+                        child: Text(ui(context, unit.label)),
                       ),
                   ],
                   onChanged: (value) {
@@ -373,7 +381,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Center(
                           child: Image.asset(
-                            'assets/logo/MapBanai_logo.png',
+                            'assets/logo/app_icon.png',
                             width: 220,
                           ),
                         ),
@@ -395,11 +403,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Acknowledgments',
+                        Text(ui(context, 'Acknowledgments'),
                             style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 6),
-                        const Text(
-                            'MapBanai gratefully acknowledges the contributions of the CARE project and BRAC James P Grant School of Public Health, BRAC University, to its development.'),
+                        Text(ui(context,
+                            'MapBanai gratefully acknowledges the contributions of the CARE project and BRAC James P Grant School of Public Health, BRAC University, to its development.')),
                         const SizedBox(height: 10),
                         const Divider(),
                         const ListTile(
@@ -416,7 +424,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           dense: true,
                           leading: const Icon(Icons.code, size: 20),
                           title: Text(
-                            'GitHub repository',
+                            ui(context, 'GitHub repository'),
                             style: const TextStyle(fontSize: 14),
                           ),
                           subtitle: Text(
@@ -433,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           dense: true,
                           leading: const Icon(Icons.mail_outline, size: 20),
                           title: Text(
-                            'Email',
+                            ui(context, 'Email'),
                             style: const TextStyle(fontSize: 14),
                           ),
                           subtitle: Text(
@@ -475,13 +483,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open link')),
+          SnackBar(content: Text(ui(context, 'Could not open link'))),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open link')),
+          SnackBar(content: Text(ui(context, 'Could not open link'))),
         );
       }
     }

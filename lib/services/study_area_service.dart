@@ -304,13 +304,39 @@ class StudyAreaSite {
         changeNote: changeNote);
   }
 
-  String get displayName =>
-      attributes['name'] ??
-      attributes['site_name'] ??
-      attributes['site_id'] ??
-      attributes['id'] ??
-      attributes['label'] ??
-      id;
+  String get displayName {
+    // Uploaded GIS files commonly use Name, NAME or padded field names.
+    // Keep the original fields/IDs intact; normalize only for presentation.
+    final fields = <String, String>{
+      for (final entry in {...?sourceProperties, ...attributes}.entries)
+        entry.key.trim().toLowerCase().replaceAll(RegExp(r'[\s-]+'), '_'):
+            '${entry.value ?? ''}'.trim()
+    };
+    for (final key in [
+      'name',
+      'site_name',
+      'station_name',
+      'facility_name',
+      'sts_name',
+      'label',
+      'title',
+      'নাম',
+      'সাইটের_নাম',
+      'site_id',
+      'id',
+      'fid'
+    ]) {
+      final value = fields[key];
+      if (value != null &&
+          value.isNotEmpty &&
+          value.toLowerCase() != 'null' &&
+          !RegExp(r'[0-9a-f]{8}-[0-9a-f]{4}-', caseSensitive: false)
+              .hasMatch(value)) {
+        return value;
+      }
+    }
+    return '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,

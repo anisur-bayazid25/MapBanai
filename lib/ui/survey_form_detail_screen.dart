@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
 
@@ -72,7 +73,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
       );
 
       if (!mounted) return;
-      _showSnack('Saved response for ${widget.projectName}');
+      _showSnack(ui(context, 'Saved response for {v0}', [widget.projectName]));
     } catch (e) {
       rethrow;
     }
@@ -107,7 +108,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
       );
 
       if (!mounted) return;
-      _showSnack('Draft saved — resume it from History later');
+      _showSnack(ui(context, 'Draft saved — resume it from History later'));
     } catch (e) {
       rethrow;
     }
@@ -142,7 +143,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
                 json: jsonEncode(form.toJson()),
               );
             });
-            _showSnack('Form "${form.name}" updated');
+            _showSnack(ui(context, 'Form "{v0}" updated', [form.name]));
           },
         ),
       ),
@@ -152,8 +153,8 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
   Future<void> _deleteForm() async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Delete form',
-      message: 'Delete "${_form.name}"?',
+      title: ui(context, 'Delete form'),
+      message: ui(context, 'Delete "{v0}"?', [_form.name]),
       confirmText: 'Delete',
       cancelText: 'Cancel',
       destructive: true,
@@ -173,10 +174,10 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Form details'),
+        title: Text(ui(context, 'Form details')),
         actions: [
           IconButton(
-            tooltip: 'Delete form',
+            tooltip: ui(context, 'Delete form'),
             icon: const Icon(Icons.delete_outline, color: Colors.red),
             onPressed: _deleteForm,
           ),
@@ -193,12 +194,14 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _form.description.isEmpty ? 'No description' : _form.description,
+            _form.description.isEmpty
+                ? ui(context, 'No description')
+                : _form.description,
             style: TextStyle(color: Colors.grey.shade700),
           ),
           const SizedBox(height: 8),
           Text(
-            '$_typeLabel • version ${_form.version}',
+            ui(context, '{v0} • version {v1}', [_typeLabel, _form.version]),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 16),
@@ -209,7 +212,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => Scaffold(
-                    appBar: AppBar(title: const Text('Survey Response')),
+                    appBar: AppBar(title: Text(ui(context, 'Survey Response'))),
                     body: SurveyFormRenderer(
                       form: _form,
                       initialUsername: username,
@@ -222,17 +225,17 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
               );
             },
             icon: const Icon(Icons.play_arrow_outlined),
-            label: const Text('Run survey'),
+            label: Text(ui(context, 'Run survey')),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: _editForm,
             icon: const Icon(Icons.edit_outlined),
-            label: const Text('Edit form'),
+            label: Text(ui(context, 'Edit form')),
           ),
           const SizedBox(height: 24),
           Text(
-            'Questions',
+            ui(context, 'Questions'),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -243,7 +246,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
-                  'This form has no questions yet.',
+                  ui(context, 'This form has no questions yet.'),
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
               ),
@@ -288,7 +291,7 @@ class _SurveyFormDetailScreenState extends State<SurveyFormDetailScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'required',
+                            ui(context, 'required'),
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.red.shade700,

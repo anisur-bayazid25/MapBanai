@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -75,7 +76,7 @@ Future<MapStyleChoice?> showBasemapPicker(BuildContext context,
   return showDialog<MapStyleChoice>(
       context: context,
       builder: (dialogContext) =>
-          SimpleDialog(title: const Text('Select basemap'), children: [
+          SimpleDialog(title: Text(ui(context, 'Select basemap')), children: [
             if (error != null)
               Padding(padding: const EdgeInsets.all(12), child: Text(error)),
             for (final choice in choices)
@@ -85,8 +86,12 @@ Future<MapStyleChoice?> showBasemapPicker(BuildContext context,
                       : Icons.radio_button_off),
                   title: Text(choice.name),
                   subtitle: Text(choice.offline
-                      ? 'Offline · zoom ${choice.minZoom!.round()}–${choice.maxZoom!.round()}\n${choice.attribution}'
-                      : 'Online · ${choice.attribution}'),
+                      ? ui(context, 'Offline · zoom {v0}–{v1}\n{v2}', [
+                          choice.minZoom!.round(),
+                          choice.maxZoom!.round(),
+                          choice.attribution
+                        ])
+                      : ui(context, 'Online · {v0}', [choice.attribution])),
                   onTap: () => Navigator.pop(dialogContext, choice)),
           ]));
 }
@@ -104,7 +109,12 @@ class OfflineBasemapNotice extends StatelessWidget {
             padding: const EdgeInsets.all(5),
             color: Colors.white.withOpacity(0.9),
             child: Text(
-                'Offline: ${selected.name} · zoom ${selected.minZoom!.round()}–${selected.maxZoom!.round()}\n${selected.attribution}',
+                ui(context, 'Offline: {v0} · zoom {v1}–{v2}\n{v3}', [
+                  selected.name,
+                  selected.minZoom!.round(),
+                  selected.maxZoom!.round(),
+                  selected.attribution
+                ]),
                 style: const TextStyle(fontSize: 10, color: Colors.black))));
   }
 }

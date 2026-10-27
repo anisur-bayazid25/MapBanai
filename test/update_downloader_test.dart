@@ -92,8 +92,103 @@ void main() {
     }
   });
 
-  test('follows an HTTP redirect and still completes byte-identical',
+  test('does not resume bytes belonging to an older release', () async {
+    final part = File('${tempDir.path}/mapbanai-update.apk.part');
+    await part.writeAsBytes(_makePayload(900));
+    await File('${part.path}.url').writeAsString('https://old.example/app.apk');
+    final payload = _makePayload(2400);
+    final ranges = <String?>[];
+    final server = await _serve(payload, dropAfter: null, log: ranges.add);
+    try {
+      final file = await UpdateDownloader.download(
+          'http://127.0.0.1:${server.port}/new.apk',
+          downloadDir: tempDir);
+      expect(ranges, [null]);
+      expect(await file.readAsBytes(), payload);
+      expect(await File('${part.path}.url').exists(), isFalse);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('discards invalid Content-Range and retries from zero', () async {
+    final payload = _makePayload(2400);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final url = 'http://127.0.0.1:${server.port}/app.apk';
+    final part = File('${tempDir.path}/mapbanai-update.apk.part');
+    await part.writeAsBytes(payload.sublist(0, 100));
+    await File('${part.path}.url').writeAsString(url);
+    final ranges = <String?>[];
+    server.listen((request) async {
+      ranges.add(request.headers.value('range'));
+      if (ranges.length == 1) {
+        request.response.statusCode = 206;
+        request.response.headers.set('Content-Range', 'bytes 200-2399/2400');
+        request.response.add(payload.sublist(200));
+      } else {
+        request.response.add(payload);
+      }
+      await request.response.close();
+    });
+    try {
+      final file = await UpdateDownloader.download(url, downloadDir: tempDir);
+      expect(ranges, ['bytes=100-', null]);
+      expect(await file.readAsBytes(), payload);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('restarts when the server ignores a saved range', () async {
+    final payload = _makePayload(2400);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final url = 'http://127.0.0.1:${server.port}/app.apk';
+    final part = File('${tempDir.path}/mapbanai-update.apk.part');
+    await part.writeAsBytes(payload.sublist(0, 100));
+    await File('${part.path}.url').writeAsString(url);
+    server.listen((request) {
+      request.response.add(payload);
+      request.response.close();
+    });
+    try {
+      final file = await UpdateDownloader.download(url, downloadDir: tempDir);
+      expect(await file.readAsBytes(), payload);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('throttles progress notifications while streaming many chunks',
       () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    const chunks = 200;
+    final payload = _makePayload(1024);
+    server.listen((request) async {
+      request.response.contentLength = payload.length * chunks;
+      for (var i = 0; i < chunks; i++) {
+        request.response.add(payload);
+        await request.response.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      await request.response.close();
+    });
+    try {
+      final progress = <double>[];
+      final elapsed = Stopwatch()..start();
+      final file = await UpdateDownloader.download(
+          'http://127.0.0.1:${server.port}/app.apk',
+          downloadDir: tempDir,
+          onProgress: progress.add);
+      expect(await file.length(), payload.length * chunks);
+      expect(progress.last, 1);
+      expect(progress.length,
+          lessThanOrEqualTo(elapsed.elapsedMilliseconds ~/ 200 + 3));
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('follows an HTTP redirect and still completes byte-identical', () async {
     // GitHub release URLs (github.com/.../download/...) 302-redirect to a
     // signed objects.githubusercontent.com asset. The client must follow the
     // redirect and then verify the final byte count, not the redirect URL.
@@ -163,6 +258,10 @@ Future<HttpServer> _serve(
       return;
     }
     req.response.statusCode = start == 0 ? 200 : 206;
+    if (start > 0) {
+      req.response.headers.set('Content-Range',
+          'bytes $start-${payload.length - 1}/${payload.length}');
+    }
     req.response.add(payload.sublist(start));
     req.response.close();
   });

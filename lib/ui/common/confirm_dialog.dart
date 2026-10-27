@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 
 /// Standard confirm dialog. Returns true when the user confirms.
@@ -13,23 +14,22 @@ Future<bool> showConfirmDialog(
   final result = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
+      title: Text(ui(context, title)),
+      content: Text(ui(context, message)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(cancelText),
+          child: Text(ui(context, cancelText)),
         ),
         FilledButton(
           style: destructive
               ? FilledButton.styleFrom(
                   backgroundColor: Theme.of(dialogContext).colorScheme.error,
-                  foregroundColor:
-                      Theme.of(dialogContext).colorScheme.onError,
+                  foregroundColor: Theme.of(dialogContext).colorScheme.onError,
                 )
               : null,
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(confirmText),
+          child: Text(ui(context, confirmText)),
         ),
       ],
     ),
@@ -54,19 +54,19 @@ Future<bool> showTypeToConfirmDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: Text(title),
+        title: Text(ui(context, title)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(message),
+            Text(ui(context, message)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                labelText: 'Type: $typeToConfirm',
+                labelText: ui(context, 'Type: {v0}', [typeToConfirm]),
               ),
               onChanged: (value) {
                 setDialogState(() => matches = value == typeToConfirm);
@@ -77,17 +77,16 @@ Future<bool> showTypeToConfirmDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(cancelText),
+            child: Text(ui(context, cancelText)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(dialogContext).colorScheme.error,
               foregroundColor: Theme.of(dialogContext).colorScheme.onError,
             ),
-            onPressed: matches
-                ? () => Navigator.pop(dialogContext, true)
-                : null,
-            child: Text(confirmText),
+            onPressed:
+                matches ? () => Navigator.pop(dialogContext, true) : null,
+            child: Text(ui(context, confirmText)),
           ),
         ],
       ),

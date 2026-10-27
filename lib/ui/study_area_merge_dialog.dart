@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -19,7 +20,7 @@ class _StudyAreaMergeReviewDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Review team import'),
+        title: Text(ui(context, 'Review team import')),
         content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
@@ -27,12 +28,18 @@ class _StudyAreaMergeReviewDialogState
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                    '${widget.preview.additions} new features, ${widget.preview.updates} incoming revisions, ${widget.preview.unchanged} unchanged or older versions.'),
+                Text(ui(
+                    context,
+                    '{v0} new features, {v1} incoming revisions, {v2} unchanged or older versions.',
+                    [
+                      widget.preview.additions,
+                      widget.preview.updates,
+                      widget.preview.unchanged
+                    ])),
                 const SizedBox(height: 12),
                 if (widget.preview.conflicts.isEmpty)
-                  const Text(
-                      'No conflicts. Imported revisions include their original data and change history.'),
+                  Text(ui(context,
+                      'No conflicts. Imported revisions include their original data and change history.')),
                 for (final conflict in widget.preview.conflicts)
                   Card(
                       child: Padding(
@@ -44,17 +51,27 @@ class _StudyAreaMergeReviewDialogState
                                     '${conflict.current.displayName} (${conflict.current.id})',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold)),
-                                Text(
-                                    'Local revision ${conflict.current.revision}; incoming revision ${conflict.incoming.revision}'),
+                                Text(ui(
+                                    context,
+                                    'Local revision {v0}; incoming revision {v1}',
+                                    [
+                                      conflict.current.revision,
+                                      conflict.incoming.revision
+                                    ])),
                                 if (conflict.incoming.history.isNotEmpty)
-                                  Text(
-                                      'Incoming: ${conflict.incoming.history.last.author}, ${conflict.incoming.history.last.timestamp.toLocal()}'),
+                                  Text(ui(context, 'Incoming: {v0}, {v1}', [
+                                    conflict.incoming.history.last.author,
+                                    conflict.incoming.history.last.timestamp
+                                        .toLocal()
+                                  ])),
                                 ExpansionTile(
-                                    title: const Text('Compare both versions'),
+                                    title: Text(
+                                        ui(context, 'Compare both versions')),
                                     children: [
-                                      const Align(
+                                      Align(
                                           alignment: Alignment.centerLeft,
-                                          child: Text('On this device',
+                                          child: Text(
+                                              ui(context, 'On this device'),
                                               style: TextStyle(
                                                   fontWeight:
                                                       FontWeight.bold))),
@@ -62,9 +79,10 @@ class _StudyAreaMergeReviewDialogState
                                           const JsonEncoder.withIndent('  ')
                                               .convert(conflict.current
                                                   .stateSnapshot())),
-                                      const Align(
+                                      Align(
                                           alignment: Alignment.centerLeft,
-                                          child: Text('Incoming file',
+                                          child: Text(
+                                              ui(context, 'Incoming file'),
                                               style: TextStyle(
                                                   fontWeight:
                                                       FontWeight.bold))),
@@ -74,22 +92,27 @@ class _StudyAreaMergeReviewDialogState
                                                   .stateSnapshot())),
                                     ]),
                                 DropdownButtonFormField<StudyAreaMergeChoice>(
+                                    itemHeight: null,
+                                    isExpanded: true,
                                     value: _choices[conflict.incoming.id],
-                                    decoration: const InputDecoration(
-                                        labelText: 'Choose a resolution'),
-                                    items: const [
+                                    decoration: InputDecoration(
+                                        labelText:
+                                            ui(context, 'Choose a resolution')),
+                                    items: [
                                       DropdownMenuItem(
                                           value: StudyAreaMergeChoice.keepLocal,
-                                          child: Text('Keep local version')),
+                                          child: Text(ui(
+                                              context, 'Keep local version'))),
                                       DropdownMenuItem(
                                           value:
                                               StudyAreaMergeChoice.useIncoming,
-                                          child: Text('Use incoming version')),
+                                          child: Text(ui(context,
+                                              'Use incoming version'))),
                                       DropdownMenuItem(
                                           value: StudyAreaMergeChoice
                                               .preserveAsNew,
-                                          child: Text(
-                                              'Keep both as separate features')),
+                                          child: Text(ui(context,
+                                              'Keep both as separate features'))),
                                     ],
                                     onChanged: (choice) {
                                       if (choice != null)
@@ -103,12 +126,12 @@ class _StudyAreaMergeReviewDialogState
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(ui(context, 'Cancel'))),
           FilledButton(
               onPressed: _choices.length == widget.preview.conflicts.length
                   ? () => Navigator.pop(context, _choices)
                   : null,
-              child: const Text('Apply import'))
+              child: Text(ui(context, 'Apply import')))
         ],
       );
 }

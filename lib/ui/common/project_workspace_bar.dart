@@ -1,6 +1,9 @@
+import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/common/responsive.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
+import 'package:mapbanai/models/study_workflow.dart';
 
 class ProjectWorkspaceBar extends StatelessWidget {
   final AppDatabase database;
@@ -8,12 +11,14 @@ class ProjectWorkspaceBar extends StatelessWidget {
   final Future<void> Function(ProjectWorkspace) onChanged;
   final bool enabled;
   final VoidCallback? onAddPoint;
+  final StudyWorkflow? workflow;
   const ProjectWorkspaceBar(
       {super.key,
       required this.database,
       required this.workspace,
       required this.onChanged,
       this.enabled = true,
+      this.workflow,
       this.onAddPoint});
   Future<void> _choose(BuildContext context) async {
     final projects = await database.getProjects();
@@ -21,18 +26,20 @@ class ProjectWorkspaceBar extends StatelessWidget {
     final id = await showDialog<int>(
         context: context,
         builder: (context) =>
-            SimpleDialog(title: const Text('Select project'), children: [
+            SimpleDialog(title: Text(ui(context, 'Select project')), children: [
               if (projects.isEmpty)
-                const Padding(
+                Padding(
                     padding: EdgeInsets.all(16),
-                    child: Text('Create a project from Home first.')),
+                    child:
+                        Text(ui(context, 'Create a project from Home first.'))),
               for (final project in projects)
                 SimpleDialogOption(
                     onPressed: () => Navigator.pop(context, project.id),
                     child: Text(project.name)),
             ]));
     if (id != null)
-      await onChanged(await ProjectWorkspaceService(database).load(id));
+      await onChanged(
+          await ProjectWorkspaceService(database).load(id, workflow: workflow));
   }
 
   Future<void> _addLayer(BuildContext context) async {
@@ -40,24 +47,24 @@ class ProjectWorkspaceBar extends StatelessWidget {
     final name = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-                title: const Text('New study layer'),
+                title: Text(ui(context, 'New study layer')),
                 content: TextField(
                     controller: controller,
-                    decoration: const InputDecoration(
-                        labelText: 'Name',
-                        hintText: 'e.g. Salinity — October')),
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Name'),
+                        hintText: ui(context, 'e.g. Salinity — October'))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel')),
+                      child: Text(ui(context, 'Cancel'))),
                   FilledButton(
                       onPressed: () =>
                           Navigator.pop(context, controller.text.trim()),
-                      child: const Text('Create'))
+                      child: Text(ui(context, 'Create')))
                 ]));
     if (name != null && name.isNotEmpty)
       await onChanged(await ProjectWorkspaceService(database)
-          .addLayer(workspace!.project.id, name));
+          .addLayer(workspace!.project.id, name, workflow: workflow));
   }
 
   @override
@@ -73,69 +80,71 @@ class ProjectWorkspaceBar extends StatelessWidget {
                       child: TextButton.icon(
                           onPressed: enabled ? () => _choose(context) : null,
                           icon: const Icon(Icons.folder_outlined),
-                          label: Text(
-                              workspace?.project.name ?? 'Select project')))),
+                          label: Text(workspace?.project.name ??
+                              ui(context, 'Select project'))))),
               if (workspace != null && onAddPoint != null)
                 IconButton(
-                    tooltip: 'Record survey at GPS',
+                    tooltip: ui(context, 'Record survey at GPS'),
                     onPressed: enabled ? onAddPoint : null,
                     icon: const Icon(Icons.add))
             ]),
             if (workspace != null)
-              Row(children: [
-                Expanded(
-                    child: DropdownButtonFormField<String>(
-                        value: workspace!.layerId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: 'Study layer', isDense: true),
-                        items: [
-                          ...workspace!.layers
-                              .map((layer) => DropdownMenuItem(
-                                  value: layer.id,
-                                  child: Text(layer.name,
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          const DropdownMenuItem(
-                              value: '__add_layer__',
-                              child: Text('Add new Layer')),
-                        ],
-                        onChanged: !enabled
-                            ? null
-                            : (id) async {
-                                if (id == '__add_layer__') {
-                                  await _addLayer(context);
-                                  return;
-                                }
-                                if (id != null)
-                                  await onChanged(
-                                      await ProjectWorkspaceService(database)
-                                          .select(workspace!.project.id,
-                                              layerId: id));
-                              })),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: DropdownButtonFormField<int>(
-                        value: workspace!.form?.id,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: 'Survey form', isDense: true),
-                        hint: const Text('Import a form'),
-                        items: workspace!.forms
-                            .map((form) => DropdownMenuItem(
-                                value: form.id,
-                                child: Text(form.name,
-                                    overflow: TextOverflow.ellipsis)))
-                            .toList(),
-                        onChanged: !enabled
-                            ? null
-                            : (id) async {
-                                if (id != null)
-                                  await onChanged(
-                                      await ProjectWorkspaceService(database)
-                                          .select(workspace!.project.id,
-                                              formId: id));
-                              })),
+              ResponsiveGrid(children: [
+                DropdownButtonFormField<String>(
+                    itemHeight: null,
+                    value: workspace!.layerId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Study layer'), isDense: true),
+                    items: [
+                      ...workspace!.layers
+                          .map((layer) => DropdownMenuItem(
+                              value: layer.id,
+                              child: Text(
+                                  layer.id == 'default'
+                                      ? ui(context, 'Main study area')
+                                      : layer.name,
+                                  overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      DropdownMenuItem(
+                          value: '__add_layer__',
+                          child: Text(ui(context, 'Add new Layer'))),
+                    ],
+                    onChanged: !enabled
+                        ? null
+                        : (id) async {
+                            if (id == '__add_layer__') {
+                              await _addLayer(context);
+                              return;
+                            }
+                            if (id != null)
+                              await onChanged(
+                                  await ProjectWorkspaceService(database)
+                                      .select(workspace!.project.id,
+                                          layerId: id, workflow: workflow));
+                          }),
+                DropdownButtonFormField<int>(
+                    itemHeight: null,
+                    value: workspace!.form?.id,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                        labelText: ui(context, 'Survey form'), isDense: true),
+                    hint: Text(ui(context, 'Import a form')),
+                    items: workspace!.forms
+                        .map((form) => DropdownMenuItem(
+                            value: form.id,
+                            child: Text(form.name,
+                                overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: !enabled
+                        ? null
+                        : (id) async {
+                            if (id != null)
+                              await onChanged(
+                                  await ProjectWorkspaceService(database)
+                                      .select(workspace!.project.id,
+                                          formId: id, workflow: workflow));
+                          }),
               ]),
           ])));
 }

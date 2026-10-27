@@ -395,6 +395,13 @@ function upsert_(sheet, rows) {
   const readable = [
     'response_revision',
     'form_version',
+    'study_workflow',
+    'record_kind',
+    'site_id',
+    'round_id',
+    'collection_round',
+    'outcome',
+    'observed_at',
     'project_name',
     'surveyor',
     'form_name',

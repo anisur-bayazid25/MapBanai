@@ -1,3 +1,4 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/help_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/data/app_database.dart';
@@ -60,24 +61,24 @@ class _QuestionnaireSyncScreenState extends State<QuestionnaireSyncScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Sync questionnaire'), actions: [
+      appBar: AppBar(title: Text(ui(context, 'Sync questionnaire')), actions: [
         IconButton(
-            tooltip: 'Help & manager setup',
+            tooltip: ui(context, 'Help & manager setup'),
             icon: const Icon(Icons.help_outline),
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => const HelpScreen())))
       ]),
       body: ListView(padding: const EdgeInsets.all(20), children: [
-        const Text(
-            'Fetch the latest XLSForm from your project’s Google Sheet using its Apps Script connection.'),
+        Text(ui(context,
+            'Fetch the latest XLSForm from your project’s Google Sheet using its Apps Script connection.')),
         const SizedBox(height: 12),
-        const Text(
-            'Review and apply changes when connected. New surveys use the new version; saved records and drafts keep their original questions.'),
+        Text(ui(context,
+            'Review and apply changes when connected. New surveys use the new version; saved records and drafts keep their original questions.')),
         const SizedBox(height: 16),
         FilledButton.icon(
             onPressed: _busy ? null : _check,
             icon: const Icon(Icons.sync),
-            label: const Text('Check Google Sheet')),
+            label: Text(ui(context, 'Check Google Sheet'))),
         if (_busy)
           const Padding(
               padding: EdgeInsets.all(20), child: LinearProgressIndicator()),
@@ -88,15 +89,16 @@ class _QuestionnaireSyncScreenState extends State<QuestionnaireSyncScreen> {
         if (_update?.changed == true) ...[
           Text('${_update!.form.name} · v${_update!.form.version}',
               style: Theme.of(context).textTheme.titleLarge),
-          Text('${_update!.form.questions.length} questions'),
+          Text(ui(context, '{v0} questions', [_update!.form.questions.length])),
           for (final warning in _update!.form.importWarnings) Text(warning),
           const SizedBox(height: 12),
           FilledButton(
               onPressed: _busy ? null : _apply,
-              child: const Text('Apply questionnaire update')),
+              child: Text(ui(context, 'Apply questionnaire update'))),
           for (final question in _update!.form.questions)
             ListTile(
-                title: Text(question.label),
+                title: Text(question
+                    .labelFor(Localizations.localeOf(context).languageCode)),
                 subtitle: Text(
                     '${question.type.name}${question.required ? ' · Required' : ''}'))
         ]

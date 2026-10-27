@@ -1,6 +1,8 @@
+import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:flutter/material.dart';
 import 'package:mapbanai/services/update_checker.dart';
 import 'package:mapbanai/services/update_downloader.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Shows the "update available" dialog with release notes and a
 /// Download & Install button wired to [UpdateDownloader]. The dialog stays
@@ -19,12 +21,12 @@ Future<void> showUpToDateDialog(BuildContext context) {
     context: context,
     builder: (context) => AlertDialog(
       icon: const Icon(Icons.check_circle_outline, color: Colors.green),
-      title: const Text("You're up to date"),
-      content: const Text('No newer version is available.'),
+      title: Text(ui(context, 'You\'re up to date')),
+      content: Text(ui(context, 'No newer version is available.')),
       actions: [
         FilledButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
+          child: Text(ui(context, 'OK')),
         ),
       ],
     ),
@@ -76,11 +78,27 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     }
   }
 
+  Future<void> _openInBrowser() async {
+    try {
+      final opened = await launchUrl(Uri.parse(widget.update.downloadUrl),
+          mode: LaunchMode.externalApplication);
+      if (opened || !mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+    }
+    setState(() {
+      _failed = true;
+      _error = 'Could not open the browser. Try Download & Install again.';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text('Version ${widget.update.version} is available'),
+      scrollable: true,
+      title: Text(
+          ui(context, 'Version {v0} is available', [widget.update.version])),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -88,41 +106,43 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'New version: ${widget.update.version}',
+              ui(context, 'New version: {v0}', [widget.update.version]),
               style: theme.textTheme.bodySmall,
             ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: SingleChildScrollView(
-                child: widget.update.releaseNotes.trim().isEmpty
-                    ? Text(
-                        'No release notes were provided.',
-                        style: theme.textTheme.bodySmall,
-                      )
-                    : Text(widget.update.releaseNotes.trim()),
-              ),
+            const SizedBox(height: 8),
+            Text(
+              ui(context,
+                  'Slow on mobile data? Open in browser to use your phone’s browser download, then open the downloaded APK to install.'),
             ),
+            const SizedBox(height: 12),
+            widget.update.releaseNotes.trim().isEmpty
+                ? Text(
+                    ui(context, 'No release notes were provided.'),
+                    style: theme.textTheme.bodySmall,
+                  )
+                : Text(widget.update.releaseNotes.trim()),
             const SizedBox(height: 16),
             if (_downloading) ...[
               LinearProgressIndicator(value: _progress),
               const SizedBox(height: 8),
               Text(
-                'Downloading... ${(_progress * 100).toStringAsFixed(0)}%',
+                ui(context, 'Downloading... {v0}%',
+                    [(_progress * 100).toStringAsFixed(0)]),
                 style: theme.textTheme.bodySmall,
               ),
             ] else if (_failed) ...[
               Text(
                 _error.trim().isEmpty
-                    ? 'Download failed. Please check your connection and '
-                        'try again.'
-                    : 'Download failed. $_error',
+                    ? ui(context,
+                        'Download failed. Please check your connection and try again.')
+                    : ui(context, 'Download failed. {v0}', [_error]),
                 style: TextStyle(color: Colors.red.shade800),
               ),
               if (_needsInstallPermission) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Open the device settings and enable "Allow from this '
-                  'source", then tap Download & Install again.',
+                  ui(context,
+                      'Open the device settings and enable "Allow from this source", then tap Download & Install again.'),
                   style: theme.textTheme.bodySmall,
                 ),
               ],
@@ -131,9 +151,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         ),
       ),
       actions: [
+        TextButton.icon(
+          onPressed: _downloading ? null : _openInBrowser,
+          icon: const Icon(Icons.open_in_browser_outlined, size: 18),
+          label: Text(ui(context, 'Open in browser')),
+        ),
         TextButton(
           onPressed: _downloading ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(ui(context, 'Cancel')),
         ),
         if (_needsInstallPermission)
           FilledButton.icon(
@@ -141,12 +166,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 ? null
                 : () => UpdateDownloader.requestInstallPermission(),
             icon: const Icon(Icons.settings_outlined, size: 18),
-            label: const Text('Allow installation'),
+            label: Text(ui(context, 'Allow installation')),
           ),
         FilledButton.icon(
           onPressed: _downloading ? null : _downloadAndInstall,
           icon: const Icon(Icons.download_outlined, size: 18),
-          label: const Text('Download & Install'),
+          label: Text(ui(context, 'Download & Install')),
         ),
       ],
     );
