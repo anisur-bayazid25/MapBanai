@@ -1,4 +1,6 @@
 import 'package:mapbanai/l10n/ui_text.dart';
+import 'package:mapbanai/ui/response_layer_screen.dart';
+import 'package:mapbanai/ui/common/project_workspace_bar.dart';
 import 'package:mapbanai/ui/questionnaire_sync_screen.dart';
 import 'package:mapbanai/services/project_workspace_service.dart';
 import 'dart:convert';
@@ -32,6 +34,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
   late String _projectName = widget.projectName;
   late int? _projectId = widget.projectId;
   List<StoredForm> _storedForms = [];
+  ProjectWorkspace? _workspace;
   bool _loading = true;
 
   @override
@@ -47,13 +50,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Future<void> _loadStoredForms() async {
     final project = await _resolveProject();
     final projectId = project?.id;
-    final rows = projectId == null
-        ? <StoredForm>[]
-        : (await ProjectWorkspaceService(_database).load(projectId)).forms;
+    final workspace = projectId == null
+        ? null
+        : await ProjectWorkspaceService(_database).load(projectId);
+    final rows = workspace?.forms ?? <StoredForm>[];
     if (!mounted) return;
     setState(() {
       _projectId = projectId;
       _storedForms = rows;
+      _workspace = workspace;
       _loading = false;
     });
   }
@@ -268,8 +273,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: ListView(
           children: [
             Text(
               ui(context, 'Select a survey form'),
@@ -292,35 +296,61 @@ class _SurveyScreenState extends State<SurveyScreen> {
                                 database: _database, projectId: _projectId!)));
                         await _loadStoredForms();
                       }),
+            ProjectWorkspaceBar(
+                database: _database,
+                workspace: _workspace,
+                onChanged: (workspace) async {
+                  context.read<ProjectState>().setSelectedProject(
+                      workspace.project.name,
+                      projectId: workspace.project.id);
+                  setState(() {
+                    _workspace = workspace;
+                    _projectId = workspace.project.id;
+                    _projectName = workspace.project.name;
+                    _storedForms = workspace.forms;
+                  });
+                }),
+            OutlinedButton.icon(
+                icon: const Icon(Icons.layers_outlined),
+                label: Text(ui(context, 'Create layer from responses')),
+                onPressed: _projectId == null
+                    ? null
+                    : () async {
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => ResponseLayerScreen(
+                                    database: _database,
+                                    projectId: _projectId!)));
+                        await _loadStoredForms();
+                      }),
             const SizedBox(height: 16),
-            Expanded(
-              child: _loading
-                  ? const AppLoadingIndicator()
-                  : _storedForms.isEmpty
-                      ? _buildEmptyForms(context)
-                      : ListView(
-                          children: [
-                            Text(
-                              ui(context, 'My forms'),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade700,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            for (final row in _storedForms) ...[
-                              _StoredFormCard(
-                                row: row,
-                                onTap: () => _openStoredFormDetail(row),
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                          ],
+            if (_loading)
+              const AppLoadingIndicator()
+            else if (_storedForms.isEmpty)
+              _buildEmptyForms(context)
+            else
+              ListView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  Text(
+                    ui(context, 'My forms'),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade700,
                         ),
-            ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final row in _storedForms) ...[
+                    _StoredFormCard(
+                      row: row,
+                      onTap: () => _openStoredFormDetail(row),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              ),
           ],
         ),
       ),

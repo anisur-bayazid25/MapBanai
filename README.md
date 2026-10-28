@@ -8,10 +8,10 @@ capture, geotagged photos and CSV/GeoJSON exports — all without an internet
 connection. Projects can be packaged into `.mbproj` files and shared with
 other phones.
 
-**Latest release: [v2.6.10](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.6.10)**
+**Latest release: [v2.8.0](https://github.com/anisur-bayazid25/MapBanai/releases/tag/v2.8.0)**
 (API 23+ / Android 6.0+, recommended Android 8.0+)
 
-**Version: 2.6.10+33.** Clean history and pending sync records by project, layer or day; use imported project files as selectable Study Area layers; share .mbproj projects with or without responses/photos. The native map is reused during point selection and GPS updates. See [Field workflow](FIELD_WORKFLOW.md) for shared project/forms across Survey, GIS and Study Area. Photo GPS accuracy remains advisory.
+**Version: 2.8.0+37.** GIS supports opt-in hand drawing alongside walking capture, with manual drafts, compact controls, geometry filters and an opacity slider. Save captured layers as project layers and assign any of the three Study Area workflows. Project Settings can create survey layers by form, question, selected answer values and one or more GPS questions. See [Project field workflow](PROJECT_FIELD_WORKFLOW.md) for step-by-step instructions.
 
 ---
 
@@ -43,6 +43,11 @@ No account, no registration, no internet needed.
   **danger zone** (reset data requires typing your name to confirm).
 
 ## Survey mode
+
+See [boundaries, survey layers and recurring measurements](PROJECT_FIELD_WORKFLOW.md)
+for the project workflow. Survey supports selecting/creating named study layers
+and creating project-layer snapshots from saved Survey/GIS responses. Polygon
+snapshots can be kept as visible reference boundaries in Study Area.
 
 - Open a project → **Survey**.
 - Import an **XLSForm (.xlsx)** template, or build a form with the form

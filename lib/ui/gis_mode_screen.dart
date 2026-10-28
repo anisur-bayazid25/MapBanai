@@ -1,4 +1,7 @@
 import 'package:mapbanai/services/study_area_outbox_service.dart';
+import 'package:mapbanai/ui/response_layer_screen.dart';
+import 'package:mapbanai/ui/project_vector_layers_screen.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/ui/common/map_chrome.dart';
 import 'package:mapbanai/l10n/ui_text.dart';
 import 'package:mapbanai/ui/common/responsive.dart';
@@ -97,6 +100,19 @@ class _GisModeScreenState extends State<GisModeScreen> {
   int? _resumeDraftSessionId;
 
   _DraftType _draftType = _DraftType.none;
+  bool _manualMode = false;
+  final List<LatLng> _manualVertices = [];
+  final List<Circle> _manualMarkers = [];
+  Future<void> _manualRenderQueue = Future.value();
+  int _manualRevision = 0;
+  double _layerOpacity = 1;
+  String _geometryFilter = 'all';
+  List<({double lat, double lon})> get _draftVertices => _manualMode
+      ? [for (final p in _manualVertices) (lat: p.latitude, lon: p.longitude)]
+      : [
+          for (final p in _recorder.vertices)
+            (lat: p.latitude, lon: p.longitude)
+        ];
   Circle? _draftPoint;
   Circle? _draftPlaceholder;
   Line? _draftLine;
@@ -181,6 +197,13 @@ class _GisModeScreenState extends State<GisModeScreen> {
     _resumeDraftSessionId = row.id;
 
     setState(() {
+      _manualMode = responses['capture_method'] == 'manual';
+      if (_manualMode) {
+        for (final p in responses['manual_vertices'] as List? ?? []) {
+          _manualVertices
+              .add(LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble()));
+        }
+      }
       if (featureType == 'point') {
         _draftType = _DraftType.point;
         final lat = responses['latitude'];
@@ -252,7 +275,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     try {
       context.read<ProjectState>().setSelectedProject(name, projectId: id);
     } catch (_) {}
-    _clearSurveyAnnotations();
+    await _clearSurveyAnnotations();
     await _addSurveyAnnotations();
   }
 
@@ -314,12 +337,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
           _currentAccuracy = position.accuracy;
         });
         _centerOnInitialLocation();
-        if (_draftType == _DraftType.point &&
+        if (!_manualMode &&
+            _draftType == _DraftType.point &&
             _draftPoint == null &&
             _draftPointFix == null) {
           _placePointAtCurrentFix();
         }
-        if (_draftType == _DraftType.line || _draftType == _DraftType.polygon) {
+        if (!_manualMode &&
+            (_draftType == _DraftType.line ||
+                _draftType == _DraftType.polygon)) {
           if (!_recorder.running && _currentLocation != null) {
             if (_draftPlaceholder == null) {
               _placeDraftPlaceholder();
@@ -412,7 +438,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     String layerId,
     Annotation? annotation,
   ) {
-    if (_measureTool != _MeasureTool.none) return;
+    if (_measureTool != _MeasureTool.none || _draftActive) return;
     final data = _annotationData(annotation);
     final sessionId = data?['session_id'];
     final title = data?['title'] as String?;
@@ -564,6 +590,23 @@ class _GisModeScreenState extends State<GisModeScreen> {
     final controller = _controller;
     final projectId = _selectedProjectId;
     if (!_styleReady || controller == null || projectId == null) return;
+    for (final layer
+        in await ProjectVectorLayerService(_database).load(projectId)) {
+      if (layer['visible'] == false ||
+          (ProjectVectorLayerService.studyLayerId(layer) !=
+                  _workspace?.layerId &&
+              layer['role'] != 'reference')) continue;
+      for (final raw in layer['features'] as List? ?? []) {
+        if (raw is! Map || raw['geometry'] is! Map) continue;
+        await _addGeometry(
+            controller, Map<String, dynamic>.from(raw['geometry']), {
+          'read_only_geometry': true,
+          'reference': layer['role'] == 'reference',
+          'color': layer['color'],
+          'opacity': layer['opacity'],
+        });
+      }
+    }
 
     final sessions = (await _database.getSurveySessions())
         .where((s) => s.projectId == projectId)
@@ -633,6 +676,15 @@ class _GisModeScreenState extends State<GisModeScreen> {
           controller,
           {
             'feature_type': type == 'Polygon' ? 'polygon' : 'line',
+            if (type == 'Polygon')
+              'polygon_rings': <List<LatLng>>[
+                for (final ring in coordinates)
+                  [
+                    for (final point in ring)
+                      LatLng((point[1] as num).toDouble(),
+                          (point[0] as num).toDouble())
+                  ]
+              ],
             'vertices': [
               for (final point in points)
                 if (point is List && point.length >= 2)
@@ -656,6 +708,11 @@ class _GisModeScreenState extends State<GisModeScreen> {
     Map<String, dynamic> data,
   ) async {
     final type = responses['feature_type'];
+    if (data['reference'] != true &&
+        _geometryFilter != 'all' &&
+        _geometryFilter != type) return;
+    final opacity =
+        ((data['opacity'] as num?)?.toDouble() ?? 1) * _layerOpacity;
     if (type == 'point') {
       final lat = responses['latitude'];
       final lon = responses['longitude'];
@@ -664,9 +721,11 @@ class _GisModeScreenState extends State<GisModeScreen> {
           CircleOptions(
             geometry: LatLng(lat.toDouble(), lon.toDouble()),
             circleRadius: 7,
-            circleColor: '#E53935',
+            circleColor: data['color'] as String? ?? '#E53935',
+            circleOpacity: opacity,
             circleStrokeWidth: 2,
             circleStrokeColor: '#FFFFFF',
+            circleStrokeOpacity: opacity,
             draggable: data['read_only_geometry'] != true,
           ),
           data,
@@ -687,19 +746,20 @@ class _GisModeScreenState extends State<GisModeScreen> {
           await controller.addLine(
             LineOptions(
               geometry: vertices,
-              lineColor: '#1565C0',
+              lineColor: data['color'] as String? ?? '#1565C0',
               lineWidth: 4.0,
-              lineOpacity: 0.9,
+              lineOpacity: 0.9 * opacity,
             ),
             data,
           );
         } else if (vertices.length >= 3) {
           await controller.addFill(
             FillOptions(
-              geometry: [vertices],
-              fillColor: '#2E7D32',
-              fillOpacity: 0.35,
-              fillOutlineColor: '#1B5E20',
+              geometry: responses['polygon_rings'] as List<List<LatLng>>? ??
+                  [vertices],
+              fillColor: data['color'] as String? ?? '#2E7D32',
+              fillOpacity: 0.35 * opacity,
+              fillOutlineColor: data['color'] as String? ?? '#1B5E20',
             ),
             data,
           );
@@ -739,6 +799,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   Future<void> _placePointAtCurrentFix() async {
+    if (_manualMode) return;
     final controller = _controller;
     final location = _currentLocation;
     if (!_styleReady || controller == null || location == null) return;
@@ -774,7 +835,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     setState(() {
       _draftType = _DraftType.line;
     });
-    _placeDraftPlaceholder();
+    if (!_manualMode) _placeDraftPlaceholder();
   }
 
   void _startPolygonDraft() {
@@ -785,13 +846,14 @@ class _GisModeScreenState extends State<GisModeScreen> {
     setState(() {
       _draftType = _DraftType.polygon;
     });
-    _placeDraftPlaceholder();
+    if (!_manualMode) _placeDraftPlaceholder();
   }
 
   /// Shows a placeholder marker at the current GPS fix while a line/polygon
   /// draft is active but no vertices have been recorded yet, so the user can
   /// see where the sketch will start.
   Future<void> _placeDraftPlaceholder() async {
+    if (_manualMode) return;
     final controller = _controller;
     final location = _currentLocation;
     if (!_styleReady || controller == null || location == null) return;
@@ -859,7 +921,108 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   void _refreshDraftGeometry() {
     if (!mounted || _controller == null || !_styleReady) return;
-    _updateDraftAnnotations();
+    if (_manualMode) {
+      _manualRenderQueue = _manualRenderQueue
+          .then((_) => _renderManual())
+          .catchError((Object error) {
+        if (mounted)
+          _showSnack(
+              ui(context, 'Could not update drawing. Tap Undo and try again.'));
+      });
+    } else {
+      _updateDraftAnnotations();
+    }
+  }
+
+  Future<void> _renderManual() async {
+    final controller = _controller;
+    if (!mounted || controller == null || !_styleReady || !_manualMode) return;
+    final revision = _manualRevision;
+    final oldMarkers = List<Circle>.from(_manualMarkers);
+    _manualMarkers.clear();
+    for (final marker in oldMarkers) {
+      await controller.removeCircle(marker);
+    }
+    _manualMarkers.clear();
+    if (_draftLine != null) {
+      await controller.removeLine(_draftLine!);
+      _draftLine = null;
+    }
+    if (_draftFill != null) {
+      await controller.removeFill(_draftFill!);
+      _draftFill = null;
+    }
+    if (!_draftActive || _draftType == _DraftType.point) return;
+    final points = List<LatLng>.from(_manualVertices);
+    for (final p in points) {
+      final marker = await controller.addCircle(CircleOptions(
+          geometry: p,
+          circleRadius: 5,
+          circleColor: '#f4511e',
+          circleStrokeColor: '#ffffff',
+          circleStrokeWidth: 2));
+      if (revision != _manualRevision || !mounted || !_draftActive) {
+        await controller.removeCircle(marker);
+        return;
+      }
+      _manualMarkers.add(marker);
+    }
+    if (points.length >= 2) {
+      _draftLine = await controller.addLine(LineOptions(geometry: [
+        ...points,
+        if (_draftType == _DraftType.polygon && points.length >= 3) points.first
+      ], lineColor: '#f4511e', lineWidth: 3));
+      if (revision != _manualRevision || !mounted || !_draftActive) {
+        if (_draftLine != null) await controller.removeLine(_draftLine!);
+        _draftLine = null;
+        return;
+      }
+    }
+    if (_draftType == _DraftType.polygon && points.length >= 3) {
+      _draftFill = await controller.addFill(FillOptions(
+          geometry: [points], fillColor: '#f4511e', fillOpacity: 0.25));
+      if (revision != _manualRevision || !mounted || !_draftActive) {
+        if (_draftFill != null) await controller.removeFill(_draftFill!);
+        _draftFill = null;
+      }
+    }
+  }
+
+  void _toggleManualMode() {
+    if (_draftActive || _measureActive) {
+      _showSnack(ui(context,
+          'Finish or cancel the current drawing before changing capture mode.'));
+      return;
+    }
+    setState(() => _manualMode = !_manualMode);
+  }
+
+  void _startCapture(_DraftType type) {
+    if (!_manualMode) {
+      switch (type) {
+        case _DraftType.point:
+          _startPointDraft();
+          break;
+        case _DraftType.line:
+          _startLineDraft();
+          break;
+        case _DraftType.polygon:
+          _startPolygonDraft();
+          break;
+        case _DraftType.none:
+          break;
+      }
+      return;
+    }
+    if (_selectedProjectId == null) {
+      _showSnack(ui(context, 'Select a project before drawing'));
+      return;
+    }
+    setState(() {
+      _centeredOnInitialLocation = true;
+      _draftType = type;
+      _manualVertices.clear();
+    });
   }
 
   Future<void> _updateDraftAnnotations() async {
@@ -923,7 +1086,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
         featureType: 'point',
         latitude: fix.lat,
         longitude: fix.lon,
-        accuracyM: fix.accuracy,
+        accuracyM: _manualMode ? null : fix.accuracy,
         fields: fields,
       );
       if (result != null) {
@@ -932,7 +1095,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
           result: result,
           latitude: fix.lat,
           longitude: fix.lon,
-          accuracyM: fix.accuracy,
+          accuracyM: _manualMode ? null : fix.accuracy,
         );
         if (saved && mounted) _cancelDraft();
       }
@@ -940,15 +1103,23 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
 
     if (_draftType == _DraftType.line || _draftType == _DraftType.polygon) {
-      final vertices = [
-        for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
-      ];
+      final vertices = _draftVertices;
       final minVertices = _draftType == _DraftType.line ? 2 : 3;
       if (vertices.length < minVertices) {
         _showSnack(
           ui(context, 'Need at least {v0} vertices to finish ({v1} collected)',
               [minVertices, vertices.length]),
         );
+        return;
+      }
+      if (vertices.toSet().length < minVertices) {
+        _showSnack(
+            ui(context, 'Add at least {v0} distinct vertices.', [minVertices]));
+        return;
+      }
+      if (_draftType == _DraftType.polygon &&
+          GeometryService.polygonAreaM2(vertices) < 0.001) {
+        _showSnack(ui(context, 'Polygon vertices must enclose an area.'));
         return;
       }
       final result = await showFeatureDetailSheet(
@@ -1029,6 +1200,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
     }
     final responses = <String, dynamic>{
       'layer_id': _workspace?.layerId ?? 'default',
+      'capture_method': _manualMode ? 'manual' : 'gps',
       if (schema != null) 'form_id': schema.id,
       if (schema != null) 'form_name': schema.name,
       if (schema != null) 'form_snapshot': schema.toJson(),
@@ -1127,6 +1299,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
             _recorder.running;
     _resumeDraftSessionId = null;
     _recorder.reset();
+    _manualRevision++;
+    _manualVertices.clear();
+    for (final marker in _manualMarkers) {
+      _controller?.removeCircle(marker);
+    }
+    _manualMarkers.clear();
     _ticker?.cancel();
     _removeDraftAnnotations();
     if (mounted) {
@@ -1161,7 +1339,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
   bool get _canSaveDraft {
     if (!_draftActive) return false;
     if (_draftType == _DraftType.point) return _draftPointFix != null;
-    return _recorder.vertices.isNotEmpty;
+    return _draftVertices.isNotEmpty;
   }
 
   /// Stores the in-progress feature as a draft session so it can be resumed
@@ -1176,6 +1354,11 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
     final responses = <String, dynamic>{
       'draft': true,
+      'capture_method': _manualMode ? 'manual' : 'gps',
+      if (_manualMode)
+        'manual_vertices': [
+          for (final p in _manualVertices) [p.longitude, p.latitude]
+        ],
       'layer_id': _workspace?.layerId ?? 'default',
       'feature_type': _draftTypeName,
       'user_name': await _database.getSetting('user_name'),
@@ -1196,9 +1379,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       title = 'Draft point';
     } else {
       responses['recorder'] = _recorder.serialize();
-      final pts = [
-        for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
-      ];
+      final pts = _draftVertices;
       title = _draftType == _DraftType.line ? 'Draft line' : 'Draft polygon';
       if (pts.length >= 1) {
         title = '$title • ${pts.length} pts';
@@ -1258,6 +1439,20 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   void _onMapMeasureTap(Point<double> point, LatLng coordinates) {
+    if (_manualMode && _draftActive) {
+      if (_draftType == _DraftType.point) {
+        setState(() => _draftPointFix = (
+              lat: coordinates.latitude,
+              lon: coordinates.longitude,
+              accuracy: 0
+            ));
+        _restorePointDraftMarker();
+      } else {
+        setState(() => _manualVertices.add(coordinates));
+        _refreshDraftGeometry();
+      }
+      return;
+    }
     if (_measureTool == _MeasureTool.none) return;
     _addMeasurePoint(coordinates);
   }
@@ -1512,6 +1707,94 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   // ── build ────────────────────────────────────────────────────
 
+  Future<void> _workspaceSheet() async {
+    await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+            child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * .8),
+                child: SingleChildScrollView(child: _buildProjectBar()))));
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _saveProjectLayer() async {
+    if (_selectedProjectId == null || _editingActive) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ResponseLayerScreen(
+                database: _database,
+                projectId: _selectedProjectId!,
+                initialLayerId: _workspace?.layerId)));
+  }
+
+  Future<void> _projectLayers() async {
+    if (_selectedProjectId == null || _editingActive) return;
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ProjectVectorLayersScreen(
+                database: _database, projectId: _selectedProjectId!)));
+    if (!mounted) return;
+    _workspace =
+        await ProjectWorkspaceService(_database).load(_selectedProjectId!);
+    await _clearSurveyAnnotations();
+    await _addSurveyAnnotations();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _filtersSheet() async {
+    if (_editingActive) return;
+    await showModalBottomSheet(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => SafeArea(
+                child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(context).height * .75),
+                    child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(ui(context, 'Map filters'),
+                              style: Theme.of(context).textTheme.titleLarge),
+                          Wrap(spacing: 8, runSpacing: 4, children: [
+                            for (final entry in {
+                              'all': 'All',
+                              'point': 'Points',
+                              'line': 'Lines',
+                              'polygon': 'Polygons'
+                            }.entries)
+                              ChoiceChip(
+                                  label: Text(ui(context, entry.value)),
+                                  selected: _geometryFilter == entry.key,
+                                  onSelected: (_) {
+                                    update(() => _geometryFilter = entry.key);
+                                    setState(() {});
+                                  }),
+                          ]),
+                          Text(ui(context, 'Layer opacity')),
+                          Slider(
+                              value: _layerOpacity,
+                              label: '${(_layerOpacity * 100).round()}%',
+                              onChanged: (value) {
+                                update(() => _layerOpacity = value);
+                                setState(() {});
+                              }),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text(ui(context, 'Apply'))),
+                        ]))))));
+    if (!mounted) return;
+    await _clearSurveyAnnotations();
+    await _addSurveyAnnotations();
+  }
+
   @override
   Widget build(BuildContext context) {
     final basemap = Basemap.defaults.firstWhere(
@@ -1520,22 +1803,35 @@ class _GisModeScreenState extends State<GisModeScreen> {
     );
 
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
-        title: Text(ui(context, 'GIS Mode')),
+        title: Text(ui(context, 'GIS Mode'),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+              tooltip: ui(context,
+                  _manualMode ? 'Hand drawing on' : 'Hand drawing off'),
+              isSelected: _manualMode,
+              icon: const Icon(Icons.draw_outlined),
+              selectedIcon: const Icon(Icons.draw),
+              onPressed: _toggleManualMode),
           Tooltip(
             message: _locationStatus,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Center(
-                child: Icon(
-                  _locationStatus.contains('ready')
-                      ? Icons.location_on
-                      : Icons.location_off,
-                  color: _locationStatus.contains('ready')
-                      ? Colors.green
-                      : Colors.orange,
-                ),
+            child: IconButton(
+              onPressed: () => showModalBottomSheet(
+                  context: context,
+                  showDragHandle: true,
+                  builder: (_) => SafeArea(
+                      child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: _buildGpsCard()))),
+              icon: Icon(
+                _locationStatus.contains('ready')
+                    ? Icons.location_on
+                    : Icons.location_off,
+                color: _locationStatus.contains('ready')
+                    ? Colors.green
+                    : Colors.orange,
               ),
             ),
           ),
@@ -1546,65 +1842,114 @@ class _GisModeScreenState extends State<GisModeScreen> {
           ),
         ],
       ),
-      body: Column(children: [
-        ScreenLayout.mapPanel(context, Column(children: [_buildProjectBar()])),
-        Expanded(
-            child: Stack(
-          children: [
-            MapLibreMap(
-              initialCameraPosition: CameraPosition(
-                target: _currentLocation ?? const LatLng(0, 0),
-                zoom: _currentLocation == null ? 2 : 16,
-              ),
-              onMapCreated: _onMapCreated,
-              onStyleLoadedCallback: _onStyleLoaded,
-              onMapClick: _onMapMeasureTap,
-              styleString: _offlineBasemap?.style ?? _buildStyleString(basemap),
-              myLocationEnabled: true,
-              myLocationRenderMode: MyLocationRenderMode.normal,
-              compassViewPosition: CompassViewPosition.bottomRight,
-              compassViewMargins: const Point(16, 56),
-              annotationConsumeTapEvents: const [
-                AnnotationType.circle,
-                AnnotationType.line,
-                AnnotationType.fill,
-              ],
-            ),
-            Positioned(
-                left: 8,
-                bottom: 8,
-                child: OfflineBasemapNotice(choice: _offlineBasemap)),
-            if (_currentLocation != null)
-              Positioned(
-                top: 12,
-                left: 16,
-                right: 16,
-                child: _buildGpsCard(),
-              ),
-            if (_draftActive)
-              Positioned(
-                left: 16,
-                right: 16,
-                top: 60,
-                child: ScreenLayout.mapPanel(context, _buildDraftBanner()),
-              ),
-            if (_measureActive)
-              Positioned(
-                left: 16,
-                right: 16,
-                top: 60,
-                child: ScreenLayout.mapPanel(context, _buildMeasureBanner()),
-              ),
-            if (_showInfoPanel)
-              Positioned(
-                left: 16,
-                right: 72,
-                bottom: 96,
-                child: ScreenLayout.mapPanel(context, _buildInfoPanel()),
-              ),
-          ],
-        ))
-      ]),
+      body: LayoutBuilder(
+          builder: (context, bounds) => Stack(
+                children: [
+                  MapLibreMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _currentLocation ?? const LatLng(0, 0),
+                      zoom: _currentLocation == null ? 2 : 16,
+                    ),
+                    onMapCreated: _onMapCreated,
+                    onStyleLoadedCallback: _onStyleLoaded,
+                    onMapClick: _onMapMeasureTap,
+                    styleString:
+                        _offlineBasemap?.style ?? _buildStyleString(basemap),
+                    myLocationEnabled: true,
+                    myLocationRenderMode: MyLocationRenderMode.normal,
+                    compassViewPosition: CompassViewPosition.bottomRight,
+                    compassViewMargins: const Point(16, 56),
+                    annotationConsumeTapEvents: const [
+                      AnnotationType.circle,
+                      AnnotationType.line,
+                      AnnotationType.fill,
+                    ],
+                  ),
+                  Positioned(
+                      left: 8,
+                      bottom: 8,
+                      child: OfflineBasemapNotice(choice: _offlineBasemap)),
+                  Positioned(
+                      top: 8,
+                      left: 8,
+                      right: 8,
+                      child: MapControlSurface(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Row(children: [
+                            Expanded(
+                                child: TextButton.icon(
+                                    onPressed:
+                                        _editingActive ? null : _workspaceSheet,
+                                    icon: const Icon(Icons.layers_outlined),
+                                    label: Text(
+                                        _workspace == null
+                                            ? ui(context, 'Select project')
+                                            : '${_workspace!.project.name} · ${_workspace!.layer.name}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis))),
+                            IconButton(
+                                tooltip: ui(context, 'Map filters'),
+                                onPressed:
+                                    _editingActive ? null : _filtersSheet,
+                                icon: const Icon(Icons.tune)),
+                            PopupMenuButton<String>(
+                                enabled: !_editingActive,
+                                tooltip: ui(context, 'Layer options'),
+                                onSelected: (value) {
+                                  if (value == 'save')
+                                    _saveProjectLayer();
+                                  else
+                                    _projectLayers();
+                                },
+                                itemBuilder: (_) => [
+                                      PopupMenuItem(
+                                          value: 'save',
+                                          child: Text(ui(context,
+                                              'Save as project layer'))),
+                                      PopupMenuItem(
+                                          value: 'layers',
+                                          child: Text(
+                                              ui(context, 'Project layers'))),
+                                    ]),
+                          ]))),
+                  if (_draftActive)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: 64,
+                      child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxHeight: bounds.maxHeight * .48),
+                          child: SingleChildScrollView(
+                              child: ScreenLayout.mapPanel(
+                                  context, _buildDraftBanner()))),
+                    ),
+                  if (_measureActive)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: 60,
+                      child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxHeight: bounds.maxHeight * .48),
+                          child: SingleChildScrollView(
+                              child: ScreenLayout.mapPanel(
+                                  context, _buildMeasureBanner()))),
+                    ),
+                  if (_showInfoPanel)
+                    Positioned(
+                      left: 16,
+                      right: 72,
+                      bottom: 96,
+                      child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(maxHeight: bounds.maxHeight * .48),
+                          child: SingleChildScrollView(
+                              child: ScreenLayout.mapPanel(
+                                  context, _buildInfoPanel()))),
+                    ),
+                ],
+              )),
       bottomNavigationBar: SafeArea(top: false, child: _buildBottomToolbar()),
     );
   }
@@ -1618,6 +1963,7 @@ class _GisModeScreenState extends State<GisModeScreen> {
       enabled: !_draftActive,
       onChanged: (workspace) async {
         await _selectProject(workspace.project.id, workspace.project.name);
+        if (mounted) Navigator.pop(context);
       });
 
   Widget _buildGpsCard() {
@@ -1763,10 +2109,8 @@ class _GisModeScreenState extends State<GisModeScreen> {
 
   Widget _buildDraftBanner() {
     final recording = _recorder.running;
-    final vertices = _recorder.vertices.length;
-    final points = [
-      for (final p in _recorder.vertices) (lat: p.latitude, lon: p.longitude),
-    ];
+    final points = _draftVertices;
+    final vertices = points.length;
 
     return Card(
       elevation: 6,
@@ -1818,6 +2162,12 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   String _buildDraftTitle(int vertices) {
+    if (_manualMode)
+      return ui(context, 'Hand drawing • {v0} vertices', [
+        _draftType == _DraftType.point
+            ? (_draftPointFix == null ? 0 : 1)
+            : vertices
+      ]);
     switch (_draftType) {
       case _DraftType.point:
         return 'Drag the marker to set the point, then Finish';
@@ -1837,6 +2187,11 @@ class _GisModeScreenState extends State<GisModeScreen> {
   Widget _buildDraftMetrics(
     List<({double lat, double lon})> points,
   ) {
+    if (_manualMode)
+      return Text(
+          ui(context,
+              'Tap the map to place vertices. Undo removes the last vertex.'),
+          style: const TextStyle(fontSize: 12));
     if (_draftType == _DraftType.point) {
       final fix = _draftPointFix;
       return Text(
@@ -1875,6 +2230,28 @@ class _GisModeScreenState extends State<GisModeScreen> {
   }
 
   Widget _buildDraftActions(bool recording) {
+    if (_manualMode) {
+      final enough = _draftType == _DraftType.point
+          ? _draftPointFix != null
+          : _manualVertices.length >= (_draftType == _DraftType.line ? 2 : 3);
+      return Wrap(spacing: 8, children: [
+        TextButton(onPressed: _cancelDraft, child: Text(ui(context, 'Cancel'))),
+        if (_draftType != _DraftType.point)
+          TextButton.icon(
+              onPressed: _manualVertices.isEmpty
+                  ? null
+                  : () {
+                      setState(() => _manualVertices.removeLast());
+                      _refreshDraftGeometry();
+                    },
+              icon: const Icon(Icons.undo),
+              label: Text(ui(context, 'Undo'))),
+        FilledButton.icon(
+            onPressed: enough ? _finishDraft : null,
+            icon: const Icon(Icons.check),
+            label: Text(ui(context, 'Finish'))),
+      ]);
+    }
     final List<Widget> actions = [];
 
     if (_draftType == _DraftType.point) {
@@ -2058,7 +2435,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                                   : Colors.red.shade700,
                             ),
                           ),
-                          onPressed: _editingActive ? null : _startPointDraft,
+                          onPressed: _editingActive
+                              ? null
+                              : () => _startCapture(_DraftType.point),
                         ),
                       ),
                       Tooltip(
@@ -2071,7 +2450,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                                 ? Colors.grey
                                 : Colors.blue.shade700,
                           ),
-                          onPressed: _editingActive ? null : _startLineDraft,
+                          onPressed: _editingActive
+                              ? null
+                              : () => _startCapture(_DraftType.line),
                         ),
                       ),
                       Tooltip(
@@ -2084,7 +2465,9 @@ class _GisModeScreenState extends State<GisModeScreen> {
                                 ? Colors.grey
                                 : Colors.blue.shade700,
                           ),
-                          onPressed: _editingActive ? null : _startPolygonDraft,
+                          onPressed: _editingActive
+                              ? null
+                              : () => _startCapture(_DraftType.polygon),
                         ),
                       ),
                       Tooltip(

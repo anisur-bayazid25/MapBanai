@@ -1289,6 +1289,30 @@ String ui(BuildContext context, String message, [List<Object?> args = const []])
     case 'Delete from device': return l10n.uiaaaaecf77fe9;
     case '{v0}: {v1} map points and {v2} history records will be removed from this device. Cloud copies remain unchanged.': return l10n.ui44b817558a93(value(0), value(1), value(2));
     case '{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.': return l10n.ui3f3efb1d5de2(value(0), value(1));
+    case 'All questionnaires': return l10n.uib1e93f43d084;
+    case 'Boundary / reference layer': return l10n.ui4613ff8fd2a1;
+    case 'Polygons only; visible behind other study layers.': return l10n.ui1e43d5b4106a;
+    case 'Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact.': return l10n.uie4e684225d91;
+    case 'No saved responses with locations match this selection.': return l10n.ui7197bfca6dc5;
+    case 'A boundary layer must contain only polygons.': return l10n.ui8cc5e6ef4700;
+    case 'Filter question': return l10n.ui79dc7e8a7656;
+    case 'All answers': return l10n.ui87ab90037e03;
+    case 'Include any selected answer': return l10n.ui7f97c1f68c43;
+    case 'No saved answer values for this selection.': return l10n.uib3086d3b13b9;
+    case 'GPS questions to map': return l10n.ui2272ed4a3b9b;
+    case 'Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point.': return l10n.ui9808b038e381;
+    case 'Select a question and at least one answer value.': return l10n.ui3dacd7904dd3;
+    case 'Select GPS questions from this questionnaire.': return l10n.ui6fadab3a34a9;
+    case 'Could not update drawing. Tap Undo and try again.': return l10n.uiac3638917f2b;
+    case 'Finish or cancel the current drawing before changing capture mode.': return l10n.ui7d4492501405;
+    case 'Hand drawing on': return l10n.ui5033a58d7518;
+    case 'Hand drawing off': return l10n.ui985a9c8c74ca;
+    case 'Hand drawing • {v0} vertices': return l10n.ui2a16d9333a8c(value(0));
+    case 'Tap the map to place vertices. Undo removes the last vertex.': return l10n.uia2892f9fe233;
+    case 'Save as project layer': return l10n.ui665ac54fe58e;
+    case 'Layer options': return l10n.ui382ab2535689;
+    case 'Layer opacity': return l10n.ui4620f01d4795;
+    case 'Polygons': return l10n.ui733b829430db;
     default:
       for (final prefix in ['Bad state: ', 'FormatException: ']) {
         if (message.startsWith(prefix)) return ui(context, message.substring(prefix.length));

@@ -1,3 +1,14 @@
+# MapBanai v2.8.0 (build 37)
+
+- GIS has a separate hand-drawing toggle beside the GPS indicator. Place points, lines and polygons by tapping the map, with Undo, geometry checks, attribute forms, manual drafts and resume. Walking capture remains available; drawing starts only after choosing a tool.
+- Save an entire captured study layer through GIS → Layer options → Save as project layer. The original records remain available for existing exports. Project Settings assigns saved layers to Field Verification, Recurring Collection and/or Study Area Visits, just like imported GIS files.
+- Project Settings → Project layers → Create layer from responses selects a questionnaire, an optional question and one or more answer values. Multi-select answers match any selected choice. Choose one or more GPS questions; each valid selected GPS answer becomes a separate point with source response/question metadata. Review the matching count before creating a layer.
+- GIS uses a full map with a compact project/layer selector, scrollable panels, geometry filters and an opacity slider. GPS details open on demand. Reference boundaries remain visible behind other study layers. Layout checks cover narrow phones, landscape and large text.
+- Saved project layers are snapshots. Later responses do not automatically change them. For repeated observations, keep the same site layer and create a new recurring round; old measurements remain intact.
+- Added English/Bangla controls and a universal project workflow guide. No device camera/GNSS field test is claimed by the automated checks.
+
+Install app-release.apk over the existing installation to retain local data.
+
 # MapBanai v2.7.2 (build 36)
 
 - Fixed dark-mode contrast, clipped field captions, overlapping map controls and invisible Needs review markers. Visit and verification status actions have readable labels.

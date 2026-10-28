@@ -417,6 +417,7 @@ class WebMapDataService {
           resp['user_name']?.toString() ?? resp['surveyor']?.toString() ?? '',
       'submitted_at': s.createdAt.toIso8601String(),
       'form_name': resp['form_name']?.toString() ?? '',
+      'form_id': resp['form_id'],
       'geometry_type': geometryType,
       'name': gisName,
       'notes': gisNotes,

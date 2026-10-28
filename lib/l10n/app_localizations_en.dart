@@ -4735,4 +4735,86 @@ class AppLocalizationsEn extends AppLocalizations {
   String ui3f3efb1d5de2(String v0, String v1) {
     return '$v0 history records and $v1 linked map points will be removed from this device. Cloud copies remain unchanged.';
   }
+
+  @override
+  String get uib1e93f43d084 => 'All questionnaires';
+
+  @override
+  String get ui4613ff8fd2a1 => 'Boundary / reference layer';
+
+  @override
+  String get ui1e43d5b4106a =>
+      'Polygons only; visible behind other study layers.';
+
+  @override
+  String get uie4e684225d91 =>
+      'Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact.';
+
+  @override
+  String get ui7197bfca6dc5 =>
+      'No saved responses with locations match this selection.';
+
+  @override
+  String get ui8cc5e6ef4700 => 'A boundary layer must contain only polygons.';
+
+  @override
+  String get ui79dc7e8a7656 => 'Filter question';
+
+  @override
+  String get ui87ab90037e03 => 'All answers';
+
+  @override
+  String get ui7f97c1f68c43 => 'Include any selected answer';
+
+  @override
+  String get uib3086d3b13b9 => 'No saved answer values for this selection.';
+
+  @override
+  String get ui2272ed4a3b9b => 'GPS questions to map';
+
+  @override
+  String get ui9808b038e381 =>
+      'Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point.';
+
+  @override
+  String get ui3dacd7904dd3 =>
+      'Select a question and at least one answer value.';
+
+  @override
+  String get ui6fadab3a34a9 => 'Select GPS questions from this questionnaire.';
+
+  @override
+  String get uiac3638917f2b =>
+      'Could not update drawing. Tap Undo and try again.';
+
+  @override
+  String get ui7d4492501405 =>
+      'Finish or cancel the current drawing before changing capture mode.';
+
+  @override
+  String get ui5033a58d7518 => 'Hand drawing on';
+
+  @override
+  String get ui985a9c8c74ca => 'Hand drawing off';
+
+  @override
+  String ui2a16d9333a8c(String v0) {
+    return 'Hand drawing • $v0 vertices';
+  }
+
+  @override
+  String get uia2892f9fe233 =>
+      'Tap the map to place vertices. Undo removes the last vertex.';
+
+  @override
+  String get ui665ac54fe58e => 'Save as project layer';
+
+  @override
+  String get ui382ab2535689 => 'Layer options';
+
+  @override
+  String get ui4620f01d4795 => 'Layer opacity';
+
+  @override
+  String get ui733b829430db => 'Polygons';
 }

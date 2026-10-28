@@ -6442,5 +6442,106 @@
         "type": "String"
       }
     }
+  },
+  "uib1e93f43d084": "All questionnaires",
+  "@uib1e93f43d084": {
+    "description": "All questionnaires"
+  },
+  "ui4613ff8fd2a1": "Boundary / reference layer",
+  "@ui4613ff8fd2a1": {
+    "description": "Boundary / reference layer"
+  },
+  "ui1e43d5b4106a": "Polygons only; visible behind other study layers.",
+  "@ui1e43d5b4106a": {
+    "description": "Polygons only; visible behind other study layers."
+  },
+  "uie4e684225d91": "Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact.",
+  "@uie4e684225d91": {
+    "description": "Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact."
+  },
+  "ui7197bfca6dc5": "No saved responses with locations match this selection.",
+  "@ui7197bfca6dc5": {
+    "description": "No saved responses with locations match this selection."
+  },
+  "ui8cc5e6ef4700": "A boundary layer must contain only polygons.",
+  "@ui8cc5e6ef4700": {
+    "description": "A boundary layer must contain only polygons."
+  },
+  "ui79dc7e8a7656": "Filter question",
+  "@ui79dc7e8a7656": {
+    "description": "Filter question"
+  },
+  "ui87ab90037e03": "All answers",
+  "@ui87ab90037e03": {
+    "description": "All answers"
+  },
+  "ui7f97c1f68c43": "Include any selected answer",
+  "@ui7f97c1f68c43": {
+    "description": "Include any selected answer"
+  },
+  "uib3086d3b13b9": "No saved answer values for this selection.",
+  "@uib3086d3b13b9": {
+    "description": "No saved answer values for this selection."
+  },
+  "ui2272ed4a3b9b": "GPS questions to map",
+  "@ui2272ed4a3b9b": {
+    "description": "GPS questions to map"
+  },
+  "ui9808b038e381": "Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point.",
+  "@ui9808b038e381": {
+    "description": "Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point."
+  },
+  "ui3dacd7904dd3": "Select a question and at least one answer value.",
+  "@ui3dacd7904dd3": {
+    "description": "Select a question and at least one answer value."
+  },
+  "ui6fadab3a34a9": "Select GPS questions from this questionnaire.",
+  "@ui6fadab3a34a9": {
+    "description": "Select GPS questions from this questionnaire."
+  },
+  "uiac3638917f2b": "Could not update drawing. Tap Undo and try again.",
+  "@uiac3638917f2b": {
+    "description": "Could not update drawing. Tap Undo and try again."
+  },
+  "ui7d4492501405": "Finish or cancel the current drawing before changing capture mode.",
+  "@ui7d4492501405": {
+    "description": "Finish or cancel the current drawing before changing capture mode."
+  },
+  "ui5033a58d7518": "Hand drawing on",
+  "@ui5033a58d7518": {
+    "description": "Hand drawing on"
+  },
+  "ui985a9c8c74ca": "Hand drawing off",
+  "@ui985a9c8c74ca": {
+    "description": "Hand drawing off"
+  },
+  "ui2a16d9333a8c": "Hand drawing • {v0} vertices",
+  "@ui2a16d9333a8c": {
+    "description": "Hand drawing • {v0} vertices",
+    "placeholders": {
+      "v0": {
+        "type": "String"
+      }
+    }
+  },
+  "uia2892f9fe233": "Tap the map to place vertices. Undo removes the last vertex.",
+  "@uia2892f9fe233": {
+    "description": "Tap the map to place vertices. Undo removes the last vertex."
+  },
+  "ui665ac54fe58e": "Save as project layer",
+  "@ui665ac54fe58e": {
+    "description": "Save as project layer"
+  },
+  "ui382ab2535689": "Layer options",
+  "@ui382ab2535689": {
+    "description": "Layer options"
+  },
+  "ui4620f01d4795": "Layer opacity",
+  "@ui4620f01d4795": {
+    "description": "Layer opacity"
+  },
+  "ui733b829430db": "Polygons",
+  "@ui733b829430db": {
+    "description": "Polygons"
   }
 }

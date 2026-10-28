@@ -1068,11 +1068,13 @@ class _StudyAreaModeScreenState extends State<StudyAreaModeScreen> {
         .toList();
     for (final layer
         in _referenceLayers.where((item) => item['visible'] != false)) {
-      // Non-road files are selectable study layers. Drawing their source
-      // geometry as well would duplicate all editable markers and hit targets.
-      if (layer['role'] != 'road') continue;
+      final modes = layer['workflows'] as List?;
+      if (modes != null && !modes.contains(widget.workflow.name)) continue;
+      // Reference boundaries remain visible while collecting another layer.
+      // The active layer already has editable annotations.
+      if (!['road', 'reference'].contains(layer['role'])) continue;
       final batchId = layer['import_batch_id']?.toString();
-      if (batchId != null ||
+      if ((batchId != null && layer['role'] == 'road') ||
           ProjectVectorLayerService.studyLayerId(layer) == _workspace?.layerId)
         continue;
       final color = (layer['color'] ?? '#467ca1').toString();

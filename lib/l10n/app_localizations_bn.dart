@@ -4420,7 +4420,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get ui304ceba28849 => 'মানচিত্রের বিস্তার';
 
   @override
-  String get uidb1a9c33957d => 'মানচিত্রের বাছাই';
+  String get uidb1a9c33957d => 'মানচিত্রের ফিল্টার';
 
   @override
   String get uifdee43176a62 => 'মানচিত্রের লেয়ার';
@@ -4733,4 +4733,85 @@ class AppLocalizationsBn extends AppLocalizations {
   String ui3f3efb1d5de2(String v0, String v1) {
     return 'এই ডিভাইস থেকে $v0টি ইতিহাসের রেকর্ড ও সংযুক্ত $v1টি ম্যাপ পয়েন্ট মুছে যাবে। ক্লাউডের কপি অপরিবর্তিত থাকবে।';
   }
+
+  @override
+  String get uib1e93f43d084 => 'সব প্রশ্নমালা';
+
+  @override
+  String get ui4613ff8fd2a1 => 'সীমানা / সহায়ক স্তর';
+
+  @override
+  String get ui1e43d5b4106a =>
+      'শুধু বহুভুজ; অন্য স্টাডি স্তরের পেছনে দেখা যাবে।';
+
+  @override
+  String get uie4e684225d91 =>
+      'সংরক্ষিত জরিপ বা GIS রেকর্ড থেকে নাম দিয়ে প্রকল্প স্তর তৈরি করুন। সুবিধা, সীমানা বা পরিমাপের স্থান আলাদা করতে উৎস স্তর ও প্রশ্নমালা বেছে নিন। এটি একটি নির্দিষ্ট সময়ের অনুলিপি; মূল উত্তর অক্ষত থাকবে।';
+
+  @override
+  String get ui7197bfca6dc5 =>
+      'এই নির্বাচনে অবস্থানসহ কোনো সংরক্ষিত উত্তর নেই।';
+
+  @override
+  String get ui8cc5e6ef4700 => 'সীমানা স্তরে শুধু বহুভুজ থাকতে হবে।';
+
+  @override
+  String get ui79dc7e8a7656 => 'উত্তর বাছাইয়ের প্রশ্ন';
+
+  @override
+  String get ui87ab90037e03 => 'সব উত্তর';
+
+  @override
+  String get ui7f97c1f68c43 => 'নির্বাচিত যেকোনো উত্তর অন্তর্ভুক্ত করুন';
+
+  @override
+  String get uib3086d3b13b9 => 'এই নির্বাচনের জন্য সংরক্ষিত কোনো উত্তর নেই।';
+
+  @override
+  String get ui2272ed4a3b9b => 'মানচিত্রে দেখানোর GPS প্রশ্ন';
+
+  @override
+  String get ui9808b038e381 =>
+      'এক বা একাধিক GPS প্রশ্ন বেছে নিন, অথবা সংরক্ষিত জ্যামিতি রাখুন। প্রতিটি নির্বাচিত GPS উত্তর আলাদা বিন্দু হবে।';
+
+  @override
+  String get ui3dacd7904dd3 => 'একটি প্রশ্ন ও অন্তত একটি উত্তর বেছে নিন।';
+
+  @override
+  String get ui6fadab3a34a9 => 'এই প্রশ্নমালা থেকে GPS প্রশ্ন বেছে নিন।';
+
+  @override
+  String get uiac3638917f2b =>
+      'অঙ্কন হালনাগাদ করা যায়নি। পূর্বাবস্থায় ফিরে আবার চেষ্টা করুন।';
+
+  @override
+  String get ui7d4492501405 =>
+      'সংগ্রহের পদ্ধতি বদলানোর আগে বর্তমান অঙ্কন শেষ করুন বা বাতিল করুন।';
+
+  @override
+  String get ui5033a58d7518 => 'হাতে আঁকা চালু';
+
+  @override
+  String get ui985a9c8c74ca => 'হাতে আঁকা বন্ধ';
+
+  @override
+  String ui2a16d9333a8c(String v0) {
+    return 'হাতে আঁকা • $v0 শীর্ষবিন্দু';
+  }
+
+  @override
+  String get uia2892f9fe233 =>
+      'শীর্ষবিন্দু বসাতে মানচিত্রে ট্যাপ করুন। পূর্বাবস্থায় ফিরলে শেষ শীর্ষবিন্দু মুছে যাবে।';
+
+  @override
+  String get ui665ac54fe58e => 'প্রকল্পের স্তর হিসেবে সংরক্ষণ করুন';
+
+  @override
+  String get ui382ab2535689 => 'স্তরের বিকল্প';
+
+  @override
+  String get ui4620f01d4795 => 'স্তরের অস্বচ্ছতা';
+
+  @override
+  String get ui733b829430db => 'বহুভুজ';
 }

@@ -18,6 +18,8 @@ import 'package:mapbanai/services/project_workspace_service.dart';
 import 'package:mapbanai/services/study_area_service.dart';
 import 'package:mapbanai/services/study_collection_service.dart';
 import 'package:mapbanai/ui/study_area_hub_screen.dart';
+import 'package:mapbanai/ui/response_layer_screen.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:mapbanai/ui/study_area_mode_screen.dart';
 import 'package:mapbanai/ui/study_collection_form_screen.dart';
 import 'package:mapbanai/ui/study_workflow_setup_screen.dart';
@@ -130,6 +132,119 @@ void main() {
         home: screen));
     await fakes.pumpFrames(tester, 20);
   }
+
+  testWidgets('reference boundary remains drawn behind recurring stations',
+      (tester) async {
+    await ProjectVectorLayerService(db).save(projectId, [
+      {
+        'id': 'boundary',
+        'name': 'Study boundary',
+        'role': 'reference',
+        'visible': true,
+        'color': '#d97706',
+        'opacity': 0.5,
+        'features': [
+          {
+            'type': 'Feature',
+            'properties': {},
+            'geometry': {
+              'type': 'Polygon',
+              'coordinates': [
+                [
+                  [90.0, 23.0],
+                  [91.0, 23.0],
+                  [91.0, 24.0],
+                  [90.0, 23.0]
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    ]);
+    await pump(
+        tester,
+        StudyAreaModeScreen(
+            database: db,
+            store: store,
+            projectId: projectId,
+            workflow: StudyWorkflow.recurring,
+            collectionRound: round,
+            compactControls: true));
+    map.onMapStyleLoadedPlatform.call(null);
+    await fakes.pumpFrames(tester, 20);
+    expect(
+        map.sources.values.any((source) => (source['features'] as List? ?? [])
+            .any((feature) => feature['geometry']?['type'] == 'Polygon')),
+        isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('response layer filters and controls fit a narrow screen',
+      (tester) async {
+    await pump(tester, ResponseLayerScreen(database: db, projectId: projectId),
+        size: const Size(320, 568), scale: 1.5, language: 'bn');
+    final scrollable = find
+        .descendant(
+            of: find.byType(ListView), matching: find.byType(Scrollable))
+        .first;
+    await tester.scrollUntilVisible(find.byType(TextField), 150,
+        scrollable: scrollable);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.scrollUntilVisible(find.byIcon(Icons.layers_outlined), 150,
+        scrollable: scrollable);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('reference boundaries respect their assigned study workflows',
+      (tester) async {
+    await ProjectVectorLayerService(db).save(projectId, [
+      {
+        'id': 'verification-boundary',
+        'name': 'Verification boundary',
+        'role': 'reference',
+        'workflows': ['verification'],
+        'visible': true,
+        'color': '#d97706',
+        'opacity': .5,
+        'features': [
+          {
+            'type': 'Feature',
+            'properties': {},
+            'geometry': {
+              'type': 'Polygon',
+              'coordinates': [
+                [
+                  [90.0, 23.0],
+                  [91.0, 23.0],
+                  [91.0, 24.0],
+                  [90.0, 23.0]
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    ]);
+    await pump(
+        tester,
+        StudyAreaModeScreen(
+            database: db,
+            store: store,
+            projectId: projectId,
+            workflow: StudyWorkflow.recurring,
+            collectionRound: round,
+            compactControls: true));
+    map.onMapStyleLoadedPlatform.call(null);
+    await fakes.pumpFrames(tester, 20);
+    expect(
+        map.sources.values.any((source) => (source['features'] as List? ?? [])
+            .any((feature) => feature['geometry']?['type'] == 'Polygon')),
+        isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   for (final workflow in StudyWorkflow.values) {
     testWidgets('${workflow.name} has GPS add point and a simplified menu',

@@ -8512,6 +8512,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{v0} history records and {v1} linked map points will be removed from this device. Cloud copies remain unchanged.'**
   String ui3f3efb1d5de2(String v0, String v1);
+
+  /// All questionnaires
+  ///
+  /// In en, this message translates to:
+  /// **'All questionnaires'**
+  String get uib1e93f43d084;
+
+  /// Boundary / reference layer
+  ///
+  /// In en, this message translates to:
+  /// **'Boundary / reference layer'**
+  String get ui4613ff8fd2a1;
+
+  /// Polygons only; visible behind other study layers.
+  ///
+  /// In en, this message translates to:
+  /// **'Polygons only; visible behind other study layers.'**
+  String get ui1e43d5b4106a;
+
+  /// Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy saved survey or GIS records into a named project layer. Select a source layer and questionnaire to separate facilities, boundaries or measurement sites. This is a snapshot; original responses stay intact.'**
+  String get uie4e684225d91;
+
+  /// No saved responses with locations match this selection.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved responses with locations match this selection.'**
+  String get ui7197bfca6dc5;
+
+  /// A boundary layer must contain only polygons.
+  ///
+  /// In en, this message translates to:
+  /// **'A boundary layer must contain only polygons.'**
+  String get ui8cc5e6ef4700;
+
+  /// Filter question
+  ///
+  /// In en, this message translates to:
+  /// **'Filter question'**
+  String get ui79dc7e8a7656;
+
+  /// All answers
+  ///
+  /// In en, this message translates to:
+  /// **'All answers'**
+  String get ui87ab90037e03;
+
+  /// Include any selected answer
+  ///
+  /// In en, this message translates to:
+  /// **'Include any selected answer'**
+  String get ui7f97c1f68c43;
+
+  /// No saved answer values for this selection.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved answer values for this selection.'**
+  String get uib3086d3b13b9;
+
+  /// GPS questions to map
+  ///
+  /// In en, this message translates to:
+  /// **'GPS questions to map'**
+  String get ui2272ed4a3b9b;
+
+  /// Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose one or more GPS questions, or keep the saved geometry. Each chosen GPS answer becomes a separate point.'**
+  String get ui9808b038e381;
+
+  /// Select a question and at least one answer value.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a question and at least one answer value.'**
+  String get ui3dacd7904dd3;
+
+  /// Select GPS questions from this questionnaire.
+  ///
+  /// In en, this message translates to:
+  /// **'Select GPS questions from this questionnaire.'**
+  String get ui6fadab3a34a9;
+
+  /// Could not update drawing. Tap Undo and try again.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update drawing. Tap Undo and try again.'**
+  String get uiac3638917f2b;
+
+  /// Finish or cancel the current drawing before changing capture mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish or cancel the current drawing before changing capture mode.'**
+  String get ui7d4492501405;
+
+  /// Hand drawing on
+  ///
+  /// In en, this message translates to:
+  /// **'Hand drawing on'**
+  String get ui5033a58d7518;
+
+  /// Hand drawing off
+  ///
+  /// In en, this message translates to:
+  /// **'Hand drawing off'**
+  String get ui985a9c8c74ca;
+
+  /// Hand drawing • {v0} vertices
+  ///
+  /// In en, this message translates to:
+  /// **'Hand drawing • {v0} vertices'**
+  String ui2a16d9333a8c(String v0);
+
+  /// Tap the map to place vertices. Undo removes the last vertex.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the map to place vertices. Undo removes the last vertex.'**
+  String get uia2892f9fe233;
+
+  /// Save as project layer
+  ///
+  /// In en, this message translates to:
+  /// **'Save as project layer'**
+  String get ui665ac54fe58e;
+
+  /// Layer options
+  ///
+  /// In en, this message translates to:
+  /// **'Layer options'**
+  String get ui382ab2535689;
+
+  /// Layer opacity
+  ///
+  /// In en, this message translates to:
+  /// **'Layer opacity'**
+  String get ui4620f01d4795;
+
+  /// Polygons
+  ///
+  /// In en, this message translates to:
+  /// **'Polygons'**
+  String get ui733b829430db;
 }
 
 class _AppLocalizationsDelegate

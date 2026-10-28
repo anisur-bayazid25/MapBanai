@@ -14,6 +14,7 @@ import 'package:geolocator_platform_interface/geolocator_platform_interface.dart
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mapbanai/data/app_database.dart';
 import 'package:mapbanai/ui/gis_mode_screen.dart';
+import 'package:mapbanai/services/project_vector_layer_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 
@@ -465,6 +466,196 @@ void main() {
     fake.onMapClickPlatform.call({
       'point': Point(lat.toDouble(), lon.toDouble()),
       'latLng': LatLng(lat, lon),
+    });
+  }
+
+  for (final shape in ['point', 'line', 'polygon']) {
+    testWidgets('manual $shape saves without a GPS fix and stays opt-in',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+          const MaterialApp(home: GisModeScreen(projectName: 'Test Project')));
+      await pumpFrames(tester, 12);
+      fake.onMapStyleLoadedPlatform.call(null);
+      await pumpFrames(tester);
+      expect(find.byTooltip('Hand drawing off'), findsOneWidget);
+      callMapClick(fake, 22, 89);
+      final db = AppDatabase();
+      expect(await db.getSurveySessions(), isEmpty);
+      await tester.tap(find.byTooltip('Hand drawing off'));
+      await pumpFrames(tester);
+      await tester.tap(find.byTooltip(shape == 'point'
+          ? 'Add Point'
+          : shape == 'line'
+              ? 'Draw Line'
+              : 'Draw Polygon'));
+      await pumpFrames(tester);
+      callMapClick(fake, 22, 89);
+      if (shape != 'point') callMapClick(fake, 22.01, 89.01);
+      if (shape == 'polygon') {
+        callMapClick(fake, 22.02, 89);
+        await pumpFrames(tester);
+        await tester.tap(find.text('Undo'));
+        await pumpFrames(tester);
+        callMapClick(fake, 22.02, 89.02);
+        callMapClick(fake, 22, 89.02);
+      }
+      await pumpFrames(tester, 12);
+      await tester.tap(find.text('Finish'));
+      await pumpFrames(tester);
+      final save = tester.widget<FilledButton>(find.ancestor(
+          of: find.text('Save feature'),
+          matching: find.byWidgetPredicate((w) => w is FilledButton)));
+      save.onPressed!.call();
+      await pumpFrames(tester, 12);
+      final row = (await db.getSurveySessions()).single;
+      final payload = jsonDecode(row.responses) as Map;
+      expect(payload['capture_method'], 'manual');
+      expect(payload['feature_type'], shape);
+      expect(payload['layer_id'], 'default');
+      if (shape == 'point') {
+        expect(payload['latitude'], 22);
+      } else {
+        expect(payload['vertices'], hasLength(shape == 'line' ? 2 : 4));
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpFrames(tester);
+      await db.close();
+    });
+  }
+
+  testWidgets('manual polygon draft resumes and promotes the same saved record',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase();
+    final project = (await db.getProjects()).single;
+    final id = await db.insertSurveySession(SurveySessionsCompanion(
+        projectId: drift.Value(project.id),
+        title: const drift.Value('Manual draft'),
+        status: const drift.Value('draft'),
+        responses: drift.Value(jsonEncode({
+          'capture_method': 'manual',
+          'feature_type': 'polygon',
+          'layer_id': 'default',
+          'manual_vertices': [
+            [89.0, 22.0],
+            [89.01, 22.01],
+            [89.02, 22.0]
+          ]
+        }))));
+    await tester.pumpWidget(MaterialApp(
+        home: GisModeScreen(
+            projectName: project.name,
+            projectId: project.id,
+            resumeDraftId: id)));
+    await pumpFrames(tester, 12);
+    fake.onMapStyleLoadedPlatform.call(null);
+    await pumpFrames(tester);
+    expect(find.byTooltip('Hand drawing on'), findsOneWidget);
+    await tester.tap(find.text('Finish'));
+    await pumpFrames(tester);
+    tester
+        .widget<FilledButton>(find.ancestor(
+            of: find.text('Save feature'),
+            matching: find.byWidgetPredicate((w) => w is FilledButton)))
+        .onPressed!
+        .call();
+    await pumpFrames(tester, 12);
+    final rows = await db.getSurveySessions();
+    expect(rows, hasLength(1));
+    expect(rows.single.id, id);
+    expect(rows.single.status, 'saved');
+    expect(
+        (jsonDecode(rows.single.responses) as Map)['vertices'], hasLength(3));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpFrames(tester);
+    await db.close();
+  });
+
+  testWidgets('GIS reference boundary keeps polygon holes', (tester) async {
+    final db = AppDatabase();
+    final project = (await db.getProjects()).single;
+    await ProjectVectorLayerService(db).save(project.id, [
+      {
+        'id': 'boundary',
+        'name': 'Boundary',
+        'role': 'reference',
+        'visible': true,
+        'color': '#d97706',
+        'opacity': .5,
+        'features': [
+          {
+            'type': 'Feature',
+            'properties': {},
+            'geometry': {
+              'type': 'Polygon',
+              'coordinates': [
+                [
+                  [89.0, 22.0],
+                  [89.2, 22.0],
+                  [89.2, 22.2],
+                  [89.0, 22.0]
+                ],
+                [
+                  [89.01, 22.01],
+                  [89.02, 22.02],
+                  [89.02, 22.01],
+                  [89.01, 22.01]
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    ]);
+    await tester.pumpWidget(
+        const MaterialApp(home: GisModeScreen(projectName: 'Test Project')));
+    await pumpFrames(tester, 12);
+    fake.onMapStyleLoadedPlatform.call(null);
+    await pumpFrames(tester);
+    expect(
+        fake.sources.values.any((source) => (source['features'] as List? ?? [])
+            .any((feature) =>
+                feature['geometry']?['type'] == 'Polygon' &&
+                (feature['geometry']['coordinates'] as List).length == 2)),
+        isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpFrames(tester);
+    await db.close();
+  });
+
+  for (final size in [const Size(320, 568), const Size(640, 360)]) {
+    testWidgets('GIS preserves map area and exposes filters at $size',
+        (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(MaterialApp(
+          builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(1.8)),
+              child: child!),
+          home: const GisModeScreen(projectName: 'Test Project')));
+      await pumpFrames(tester, 12);
+      fake.onMapStyleLoadedPlatform.call(null);
+      await pumpFrames(tester);
+      expect(tester.getSize(find.byType(MapLibreMap)).height,
+          greaterThanOrEqualTo(size.height - 60));
+      await tester.tap(find.byTooltip('Map filters'));
+      await pumpFrames(tester);
+      expect(find.byType(Slider), findsOneWidget);
+      expect(find.text('Polygons'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpFrames(tester);
     });
   }
 

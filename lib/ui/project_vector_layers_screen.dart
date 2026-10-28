@@ -11,6 +11,7 @@ import 'package:mapbanai/services/study_area_service.dart';
 import 'package:mapbanai/services/study_area_store.dart';
 import 'package:mapbanai/ui/common/shapefile_companions.dart';
 import 'package:mapbanai/models/study_workflow.dart';
+import 'package:mapbanai/ui/response_layer_screen.dart';
 
 class ProjectVectorLayersScreen extends StatefulWidget {
   final AppDatabase database;
@@ -257,6 +258,20 @@ class _ProjectVectorLayersScreenState extends State<ProjectVectorLayersScreen> {
                 onPressed: busy ? null : _import,
                 icon: const Icon(Icons.add),
                 label: Text(ui(context, 'Add vector layers'))),
+            OutlinedButton.icon(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => ResponseLayerScreen(
+                                    database: widget.database,
+                                    projectId: widget.projectId)));
+                        await _load();
+                      },
+                icon: const Icon(Icons.playlist_add),
+                label: Text(ui(context, 'Create layer from responses'))),
             if (busy) const LinearProgressIndicator(),
             if (error != null)
               Padding(
